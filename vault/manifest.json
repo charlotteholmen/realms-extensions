@@ -33,5 +33,19 @@
     "kybra==0.7.*",
     "kybra-simple-db>=0.4.0",
     "kybra-simple-logging==0.2.*"
+  ],
+  "entity_method_overrides": [
+    {
+      "entity": "Transfer",
+      "method": "execute",
+      "implementation": "methods.execute_transfer",
+      "description": "Execute external blockchain transfer via vault"
+    },
+    {
+      "entity": "Balance",
+      "method": "refresh",
+      "implementation": "methods.refresh_balance",
+      "description": "Sync balance with vault state"
+    }
   ]
 }
