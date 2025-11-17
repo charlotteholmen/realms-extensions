@@ -47,19 +47,23 @@ def get_dashboard_summary(args: str) -> Async[str]:
         # Get data from database
         all_services = Service.instances()
         all_tax_records = TaxRecord.instances()
-        
+
         # Filter by user if provided
         if user_id and user_id != "anonymous":
             user_services = [s for s in all_services if s.user and s.user.id == user_id]
-            user_tax_records = [t for t in all_tax_records if t.user and t.user.id == user_id]
+            user_tax_records = [
+                t for t in all_tax_records if t.user and t.user.id == user_id
+            ]
         else:
             user_services = list(all_services)
             user_tax_records = list(all_tax_records)
-        
+
         # Calculate summary
-        services_approaching = len([s for s in user_services if s.status == "Approaching"])
+        services_approaching = len(
+            [s for s in user_services if s.status == "Approaching"]
+        )
         tax_overdue = len([t for t in user_tax_records if t.status == "Overdue"])
-        
+
         summary_data = {
             "user_name": user_id,
             "services_count": len(user_services),
@@ -98,13 +102,13 @@ def get_public_services(args: str) -> Async[str]:
 
         # Get services from database
         all_services = Service.instances()
-        
+
         # Filter by user if user_id provided
         if user_id and user_id != "anonymous":
             services = [s for s in all_services if s.user and s.user.id == user_id]
         else:
             services = list(all_services)
-        
+
         # Convert to dict format
         services_list = [_service_to_dict(s) for s in services]
 
@@ -116,7 +120,9 @@ def get_public_services(args: str) -> Async[str]:
         logger.info(f"get_public_services successful for user: {user_id}")
         return json.dumps(response)
     except Exception as e:
-        logger.error(f"Error in get_public_services: {str(e)}\n{traceback.format_exc()}")
+        logger.error(
+            f"Error in get_public_services: {str(e)}\n{traceback.format_exc()}"
+        )
         return json.dumps({"success": False, "error": str(e)})
 
 
@@ -137,25 +143,33 @@ def get_tax_information(args: str) -> str:
 
         # Get tax records from database
         all_tax_records = TaxRecord.instances()
-        
+
         # Filter by user if user_id provided
         if user_id and user_id != "anonymous":
-            tax_records = [t for t in all_tax_records if t.user and t.user.id == user_id]
+            tax_records = [
+                t for t in all_tax_records if t.user and t.user.id == user_id
+            ]
         else:
             tax_records = list(all_tax_records)
-        
+
         # Convert to dict format
         tax_records_list = [_tax_record_to_dict(t) for t in tax_records]
 
         # Calculate summary
         total_paid = sum(
-            record["amount"] for record in tax_records_list if record["status"] == "Paid"
+            record["amount"]
+            for record in tax_records_list
+            if record["status"] == "Paid"
         )
         total_pending = sum(
-            record["amount"] for record in tax_records_list if record["status"] == "Pending"
+            record["amount"]
+            for record in tax_records_list
+            if record["status"] == "Pending"
         )
         total_overdue = sum(
-            record["amount"] for record in tax_records_list if record["status"] == "Overdue"
+            record["amount"]
+            for record in tax_records_list
+            if record["status"] == "Overdue"
         )
 
         summary = {
@@ -201,7 +215,7 @@ def get_personal_data(args: str) -> str:
             if u.id == user_id:
                 user = u
                 break
-        
+
         if not user:
             return json.dumps({"success": False, "error": "User not found"})
 
@@ -209,8 +223,16 @@ def get_personal_data(args: str) -> str:
             "name": user.name or "",
             "id_number": user.id or "",
             "date_of_birth": "",
-            "citizenship_status": "Full Citizenship" if user.profiles and "member" in user.profiles else "Pending",
-            "registration_date": str(user.timestamp_created) if hasattr(user, 'timestamp_created') else "",
+            "citizenship_status": (
+                "Full Citizenship"
+                if user.profiles and "member" in user.profiles
+                else "Pending"
+            ),
+            "registration_date": (
+                str(user.timestamp_created)
+                if hasattr(user, "timestamp_created")
+                else ""
+            ),
             "address": "",
             "email": user.email or "",
             "phone": "",

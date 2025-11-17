@@ -26,7 +26,9 @@ def _proposal_to_dict(proposal: Proposal) -> Dict[str, Any]:
         "proposer": proposal.proposer.id if proposal.proposer else "unknown",
         "status": proposal.status,
         "created_at": proposal.timestamp_created,
-        "voting_deadline": proposal.voting_deadline if proposal.voting_deadline else None,
+        "voting_deadline": (
+            proposal.voting_deadline if proposal.voting_deadline else None
+        ),
         "votes": {
             "yes": int(proposal.votes_yes),
             "no": int(proposal.votes_no),
@@ -40,7 +42,7 @@ def _proposal_to_dict(proposal: Proposal) -> Dict[str, Any]:
 def get_proposals(args: str) -> Dict[str, Any]:
     """Get all proposals with optional filtering"""
     logger.info(f"get_proposals called with args: {args}")
-    
+
     try:
         # Parse JSON string to dictionary
         if isinstance(args, str):
@@ -49,10 +51,10 @@ def get_proposals(args: str) -> Dict[str, Any]:
             args_dict = args
 
         status_filter = args_dict.get("status", None)
-        
+
         # Load proposals from database
         all_proposals = Proposal.instances()
-        
+
         # Filter by status if requested
         if status_filter:
             filtered_proposals = [p for p in all_proposals if p.status == status_filter]
@@ -73,7 +75,7 @@ def get_proposals(args: str) -> Dict[str, Any]:
 def get_proposal(args: str) -> Dict[str, Any]:
     """Get a specific proposal by ID"""
     logger.info(f"get_proposal called with args: {args}")
-    
+
     try:
         # Parse JSON string to dictionary
         if isinstance(args, str):
@@ -87,8 +89,10 @@ def get_proposal(args: str) -> Dict[str, Any]:
 
         # Find proposal in database
         all_proposals = Proposal.instances()
-        proposal = next((p for p in all_proposals if p.proposal_id == proposal_id), None)
-        
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
+
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
 
@@ -101,7 +105,7 @@ def get_proposal(args: str) -> Dict[str, Any]:
 def submit_proposal(args: str) -> Dict[str, Any]:
     """Submit a new proposal"""
     logger.info(f"submit_proposal called with args: {args}")
-    
+
     try:
         # Parse JSON string to dictionary
         if isinstance(args, str):
@@ -118,9 +122,11 @@ def submit_proposal(args: str) -> Dict[str, Any]:
         proposer_id = args_dict["proposer"]
         all_users = User.instances()
         proposer = next((u for u in all_users if u.id == proposer_id), None)
-        
+
         if not proposer:
-            return json.dumps({"success": False, "error": f"User {proposer_id} not found"})
+            return json.dumps(
+                {"success": False, "error": f"User {proposer_id} not found"}
+            )
 
         # Generate checksum
         code_checksum = f"sha256:{hashlib.sha256(args_dict['code_url'].encode()).hexdigest()[:16]}..."
@@ -157,7 +163,7 @@ def submit_proposal(args: str) -> Dict[str, Any]:
 def cast_vote(args: str) -> Dict[str, Any]:
     """Cast a vote on a proposal"""
     logger.info(f"cast_vote called with args: {args}")
-    
+
     try:
         # Parse JSON string to dictionary
         if isinstance(args, str):
@@ -181,25 +187,31 @@ def cast_vote(args: str) -> Dict[str, Any]:
 
         # Find proposal
         all_proposals = Proposal.instances()
-        proposal = next((p for p in all_proposals if p.proposal_id == proposal_id), None)
-        
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
+
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
 
         # Find voter
         all_users = User.instances()
         voter = next((u for u in all_users if u.id == voter_id), None)
-        
+
         if not voter:
             return json.dumps({"success": False, "error": f"User {voter_id} not found"})
 
         # Check if user already voted
         all_votes = Vote.instances()
         existing_vote = next(
-            (v for v in all_votes if v.proposal.id == proposal.id and v.voter.id == voter.id),
-            None
+            (
+                v
+                for v in all_votes
+                if v.proposal.id == proposal.id and v.voter.id == voter.id
+            ),
+            None,
         )
-        
+
         if existing_vote:
             # Update existing vote counts
             if existing_vote.vote_choice == "yes":
@@ -208,16 +220,13 @@ def cast_vote(args: str) -> Dict[str, Any]:
                 proposal.votes_no -= 1
             elif existing_vote.vote_choice == "abstain":
                 proposal.votes_abstain -= 1
-            
+
             # Update vote choice
             existing_vote.vote_choice = vote_choice
         else:
             # Create new vote
             new_vote = Vote(
-                proposal=proposal,
-                voter=voter,
-                vote_choice=vote_choice,
-                metadata="{}"
+                proposal=proposal, voter=voter, vote_choice=vote_choice, metadata="{}"
             )
             proposal.total_voters += 1
 

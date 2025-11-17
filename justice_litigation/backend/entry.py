@@ -18,14 +18,14 @@ def _dispute_to_dict(dispute: Dispute) -> Dict[str, Any]:
     """Convert Dispute entity to dictionary format"""
     # Parse actions_taken JSON string to list
     actions_taken = json.loads(dispute.actions_taken) if dispute.actions_taken else []
-    
+
     # Handle timestamp - it could be string or datetime object
     timestamp = dispute.timestamp_created
-    if hasattr(timestamp, 'strftime'):
+    if hasattr(timestamp, "strftime"):
         timestamp_str = timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     else:
         timestamp_str = str(timestamp) if timestamp else ""
-    
+
     return {
         "id": dispute.dispute_id,
         "requester_principal": dispute.requester.id if dispute.requester else "unknown",
@@ -339,17 +339,19 @@ def get_litigations(args: str) -> str:
 
         # Get all disputes from database
         all_disputes = Dispute.instances()
-        
+
         # Convert to dict format
         filtered_litigations = [_dispute_to_dict(d) for d in all_disputes]
-        
+
         # For non-admin users, could filter by user_principal here
         # For now, showing all disputes to all users for demo purposes
         if user_profile != "admin":
             # Filter to show only disputes where user is involved
             filtered_litigations = [
-                d for d in filtered_litigations
-                if d["requester_principal"] == user_principal or d["defendant_principal"] == user_principal
+                d
+                for d in filtered_litigations
+                if d["requester_principal"] == user_principal
+                or d["defendant_principal"] == user_principal
             ]
 
         return json.dumps(
@@ -399,11 +401,11 @@ def create_litigation(args: str) -> str:
                 requester_user = u
             if u.id == defendant_principal:
                 defendant_user = u
-        
+
         # Generate dispute ID
         existing_disputes = Dispute.instances()
         dispute_id = f"lit_{len(existing_disputes) + 1:03d}"
-        
+
         # Create Dispute entity
         new_dispute = Dispute(
             dispute_id=dispute_id,
@@ -414,9 +416,9 @@ def create_litigation(args: str) -> str:
             status="pending",
             verdict="",
             actions_taken="[]",  # Empty JSON array
-            metadata="{}"
+            metadata="{}",
         )
-        
+
         new_litigation = _dispute_to_dict(new_dispute)
 
         return json.dumps(
@@ -505,12 +507,12 @@ def execute_verdict(args: str) -> str:
 def load_demo_litigations(args: str) -> str:
     """
     DEPRECATED: Load demo litigation data - no longer needed
-    
+
     Litigation data is now automatically loaded from extensions/justice_litigation/data/*.json
     during realm deployment via the automatic extension data loading feature.
     """
     logger.info(f"justice_litigation.load_demo_litigations called (DEPRECATED)")
-    
+
     # Get current count from database
     disputes_count = len(Dispute.instances())
 
