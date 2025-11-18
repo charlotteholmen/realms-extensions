@@ -44,8 +44,9 @@
     {
       "entity": "Balance",
       "method": "refresh",
+      "type": "classmethod",
       "implementation": "methods.refresh_balance",
-      "description": "Sync balance with vault state"
+      "description": "Sync all balances with vault state"
     }
   ]
 }

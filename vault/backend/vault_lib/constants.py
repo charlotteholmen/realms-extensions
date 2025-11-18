@@ -17,3 +17,6 @@ MAX_RESULTS = 20
 # Maximum number of iterations for operations that process data in batches
 # Prevents infinite loops and excessive resource consumption
 MAX_ITERATION_COUNT = 5
+
+# Refresh cooldown: prevent refresh if last one was less than X seconds ago
+REFRESH_COOLDOWN = 30

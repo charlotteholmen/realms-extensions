@@ -13,8 +13,10 @@ from ggg import Balance, Transfer
 from kybra import Async, Principal, ic
 from kybra_simple_logging import get_logger
 
-from .vault_lib.constants import CANISTER_PRINCIPALS, MAX_ITERATION_COUNT, MAX_RESULTS
+from .vault_lib.constants import CANISTER_PRINCIPALS, MAX_ITERATION_COUNT, MAX_RESULTS, REFRESH_COOLDOWN
 from .vault_lib.entities import Canisters, app_data
+from .vault_lib.candid_types import Account, ICRCLedger, TransferArg
+
 
 logger = get_logger("extensions.vault")
 
@@ -217,8 +219,6 @@ def get_balance(args: str) -> str:
     logger.info(f"vault.get_balance called with args: {args}")
 
     try:
-        from .vault_lib.entities import Balance
-
         # Parse args
         params = json.loads(args) if isinstance(args, str) else args
         principal_id = params.get("principal_id")
@@ -256,8 +256,6 @@ def get_status(args: str) -> str:
     logger.info("vault.get_status called")
 
     try:
-        from .vault_lib.entities import ApplicationData, Balance, Canisters, app_data
-
         # Gather stats
         app = app_data()
         balances = [
@@ -303,8 +301,6 @@ def get_transactions(args: str) -> str:
     logger.info(f"vault.get_transactions called with args: {args}")
 
     try:
-        from .vault_lib.entities import VaultTransaction
-
         # Parse args
         params = json.loads(args) if isinstance(args, str) else args
         principal_id = params.get("principal_id")
@@ -313,7 +309,7 @@ def get_transactions(args: str) -> str:
             return json.dumps({"success": False, "error": "principal_id is required"})
 
         # Get transactions involving this principal
-        all_txs = VaultTransaction.instances()
+        all_txs = Transfer.instances()
         relevant_txs = [
             tx
             for tx in all_txs
@@ -342,44 +338,33 @@ def get_transactions(args: str) -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 
-def transfer(args: str) -> Async[str]:
-    """
-    Transfer tokens to a principal (admin only).
+    
 
-    Args:
-        args: JSON string with {"to_principal": "xxx", "amount": 100}
-
-    Returns:
-        JSON string with transaction ID
-    """
-    logger.info(f"vault.transfer called with args: {args}")
+def _transfer(to_principal: str, amount: int) -> Async[dict]:
 
     try:
-        from .vault_lib.candid_types import Account, ICRCLedger, TransferArg
-        from .vault_lib.entities import Canisters, app_data
-
-        # Parse args
-        params = json.loads(args) if isinstance(args, str) else args
-        to_principal = params.get("to_principal")
-        amount = params.get("amount")
-
         if not to_principal or amount is None:
-            return json.dumps(
-                {"success": False, "error": "to_principal and amount are required"}
-            )
+            return {
+                "success": False,
+                "error": "to_principal and amount are required"
+            }
 
         # Check admin
         app = app_data()
         caller = ic.caller().to_str()
         if app.admin_principal and caller != app.admin_principal:
-            return json.dumps({"success": False, "error": "Only admin can transfer"})
+            return {
+                "success": False,
+                "error": "Only admin can transfer"
+            }
 
         # Get ledger canister
         ledger_canister = Canisters["ckBTC ledger"]
         if not ledger_canister:
-            return json.dumps(
-                {"success": False, "error": "ckBTC ledger not configured"}
-            )
+            return {
+                "success": False,
+                "error": "ckBTC ledger not configured"
+            }
 
         # Perform ICRC transfer
         ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
@@ -419,18 +404,19 @@ def transfer(args: str) -> Async[str]:
                 logger.info(
                     f"Successfully transferred {amount} to {to_principal}, tx_id: {tx_id}"
                 )
-                return json.dumps(
-                    {
-                        "success": True,
-                        "data": {"TransactionId": {"transaction_id": int(tx_id)}},
-                    }
-                )
+                return {
+                    "success": True,
+                    "data": {"TransactionId": {"transaction_id": int(tx_id)}},
+                }
             elif isinstance(transfer_result, dict) and "Err" in transfer_result:
                 # Transfer failed with ICRC error
                 error = transfer_result["Err"]
                 logger.error(f"Transfer failed: {error}")
                 user_friendly_error = format_transfer_error(error)
-                return json.dumps({"success": False, "error": user_friendly_error})
+                return {
+                    "success": False,
+                    "error": user_friendly_error
+                }
             else:
                 # Unexpected format - treat as tx_id for backwards compatibility
                 tx_id = str(transfer_result)
@@ -447,24 +433,56 @@ def transfer(args: str) -> Async[str]:
                 logger.info(
                     f"Successfully transferred {amount} to {to_principal}, tx_id: {tx_id}"
                 )
-                return json.dumps(
-                    {
-                        "success": True,
-                        "data": {"TransactionId": {"transaction_id": int(tx_id)}},
-                    }
-                )
+                return {
+                    "success": True,
+                    "data": {"TransactionId": {"transaction_id": int(tx_id)}},
+                }
         else:
             # Inter-canister call failed
             error = result.Err if hasattr(result, "Err") else "Unknown error"
             logger.error(f"Transfer call failed: {error}")
-            return json.dumps({"success": False, "error": str(error)})
+            return {
+                "success": False,
+                "error": str(error),
+                "traceback": traceback.format_exc()
+            }
 
     except Exception as e:
         logger.error(f"Error in transfer: {str(e)}\n{traceback.format_exc()}")
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
+def transfer(args: str) -> Async[str]:
+    """
+    Transfer tokens to a principal (admin only).
+
+    Args:
+        args: JSON string with {"to_principal": "xxx", "amount": 100}
+
+    Returns:
+        JSON string with transaction ID
+    """
+    logger.info(f"vault.transfer called with args: {args}")
+
+    try:
+        # Parse args
+        params = json.loads(args) if isinstance(args, str) else args
+        to_principal = params.get("to_principal")
+        amount = params.get("amount")
+
+        result = yield _transfer(to_principal, amount)
+        return json.dumps(result)
+
+    except Exception as e:
+        logger.error(f"Error in transfer: {str(e)}\n{traceback.format_exc()}")  
         return json.dumps({"success": False, "error": str(e)})
+        
 
-
-def refresh(args: str) -> Async[str]:
+def _refresh(force: bool = False) -> Async[dict]:
     """
     Sync transaction history from ICRC ledger.
 
@@ -477,17 +495,38 @@ def refresh(args: str) -> Async[str]:
     logger.info("vault.refresh called")
 
     try:
-        # from .vault_lib.entities import Balance, Canisters, VaultTransaction, app_data
         from .vault_lib.entities import Canisters, app_data
         from .vault_lib.ic_util_calls import get_account_transactions
 
         app = app_data()
+        
+        if not force:
+            current_time = ic.time()
+            last_refresh_time = getattr(app, 'last_refresh_time', None)
+            
+            if last_refresh_time and (current_time - last_refresh_time) < REFRESH_COOLDOWN * 1_000_000_000:
+                time_since_refresh = (current_time - last_refresh_time) // 1_000_000_000
+                logger.info(f"Refresh skipped: last refresh was {time_since_refresh}s ago (cooldown: {REFRESH_COOLDOWN}s)")
+                return {
+                    "success": True,
+                    "data": {
+                        "TransactionSummary": {
+                            "new_txs_count": 0,
+                            "sync_status": "Skipped (cooldown)",
+                            "time_since_last_refresh_seconds": time_since_refresh,
+                            "cooldown_seconds": REFRESH_COOLDOWN
+                        }
+                    },
+                    "cached": True
+                }
+        
         indexer_canister = Canisters["ckBTC indexer"]
 
         if not indexer_canister:
-            return json.dumps(
-                {"success": False, "error": "ckBTC indexer not configured"}
-            )
+            return {
+                "success": False,
+                "error": "ckBTC indexer not configured"
+            }
 
         # Get transactions from indexer
         vault_principal = ic.id().to_str()
@@ -547,9 +586,11 @@ def refresh(args: str) -> Async[str]:
 
                 new_tx_count += 1
 
+        # Update last refresh timestamp
+        app.last_refresh_time = ic.time()
+        
         logger.info(f"Successfully synced {new_tx_count} new transactions")
-        return json.dumps(
-            {
+        return {
                 "success": True,
                 "data": {
                     "TransactionSummary": {
@@ -559,8 +600,12 @@ def refresh(args: str) -> Async[str]:
                     }
                 },
             }
-        )
 
     except Exception as e:
         logger.error(f"Error in refresh: {str(e)}\n{traceback.format_exc()}")
-        return json.dumps({"success": False, "error": str(e)})
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
+def refresh(_) -> Async[str]:
+    result = yield _refresh()
+    return json.dumps(result)
