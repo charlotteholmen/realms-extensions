@@ -129,10 +129,6 @@ def initialize(args: str):
         logger.info(f"Setting max iteration_count to {MAX_ITERATION_COUNT}")
         app_data().max_iteration_count = MAX_ITERATION_COUNT
 
-    canister_id = ic.id().to_str()
-    # if not Balance[canister_id]:
-    #     logger.info("Creating vault balance record")
-    #     Balance(_id=canister_id, amount=0)
 
     logger.info(
         f"Canisters: {[canister.serialize() for canister in Canisters.instances()]}"
@@ -343,8 +339,9 @@ def get_transactions(args: str) -> str:
 
 
 def _transfer(to_principal: str, amount: int) -> Async[dict]:
-
     try:
+        logger.info(f"vault._transfer called with to_principal: {to_principal}, amount: {amount}")
+
         if not to_principal or amount is None:
             return {"success": False, "error": "to_principal and amount are required"}
 
@@ -598,3 +595,47 @@ def _refresh(force: bool = False) -> Async[dict]:
 def refresh(_) -> Async[str]:
     result = yield _refresh()
     return json.dumps(result)
+
+
+def get_vault_balance() -> int:
+    vault_principal_str = ic.id().to_str()
+    balance = Balance[vault_principal_str]
+    if not balance:
+        return 0
+    return balance.amount
+
+
+def refresh_vault_balance(args: str) -> Async[str]:
+    logger.info("vault.refresh_vault_balance called")
+    
+    try:
+        # Get ledger canister
+        ledger_canister = Canisters["ckBTC ledger"]
+        if not ledger_canister:
+            return json.dumps({"success": False, "error": "ckBTC ledger not configured"})
+        
+        # Query vault's balance from ledger
+        vault_principal = ic.id()
+        vault_principal_str = vault_principal.to_str()
+        ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
+        balance_amount = yield ledger.icrc1_balance_of(
+            Account(owner=vault_principal, subaccount=None)
+        )
+    
+        balance = Balance[vault_principal_str]
+        if not balance:
+            logger.info("Creating vault balance record")
+            Balance(_id=vault_principal_str, amount=balance_amount)
+        else:
+            balance.amount = balance_amount
+        
+        logger.info(f"Vault balance: {balance_amount} satoshis")
+        balance_dict = {
+            "principal_id": vault_principal_str,
+            "amount": balance_amount,
+        }
+        return json.dumps({"success": True, "data": {"Balance": balance_dict}})
+        
+    except Exception as e:
+        logger.error(f"Error getting vault balance: {str(e)}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e), "traceback": traceback.format_exc()})
