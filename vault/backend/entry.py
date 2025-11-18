@@ -13,10 +13,14 @@ from ggg import Balance, Transfer
 from kybra import Async, Principal, ic
 from kybra_simple_logging import get_logger
 
-from .vault_lib.constants import CANISTER_PRINCIPALS, MAX_ITERATION_COUNT, MAX_RESULTS, REFRESH_COOLDOWN
-from .vault_lib.entities import Canisters, app_data
 from .vault_lib.candid_types import Account, ICRCLedger, TransferArg
-
+from .vault_lib.constants import (
+    CANISTER_PRINCIPALS,
+    MAX_ITERATION_COUNT,
+    MAX_RESULTS,
+    REFRESH_COOLDOWN,
+)
+from .vault_lib.entities import Canisters, app_data
 
 logger = get_logger("extensions.vault")
 
@@ -338,33 +342,22 @@ def get_transactions(args: str) -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 
-    
-
 def _transfer(to_principal: str, amount: int) -> Async[dict]:
 
     try:
         if not to_principal or amount is None:
-            return {
-                "success": False,
-                "error": "to_principal and amount are required"
-            }
+            return {"success": False, "error": "to_principal and amount are required"}
 
         # Check admin
         app = app_data()
         caller = ic.caller().to_str()
         if app.admin_principal and caller != app.admin_principal:
-            return {
-                "success": False,
-                "error": "Only admin can transfer"
-            }
+            return {"success": False, "error": "Only admin can transfer"}
 
         # Get ledger canister
         ledger_canister = Canisters["ckBTC ledger"]
         if not ledger_canister:
-            return {
-                "success": False,
-                "error": "ckBTC ledger not configured"
-            }
+            return {"success": False, "error": "ckBTC ledger not configured"}
 
         # Perform ICRC transfer
         ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
@@ -413,10 +406,7 @@ def _transfer(to_principal: str, amount: int) -> Async[dict]:
                 error = transfer_result["Err"]
                 logger.error(f"Transfer failed: {error}")
                 user_friendly_error = format_transfer_error(error)
-                return {
-                    "success": False,
-                    "error": user_friendly_error
-                }
+                return {"success": False, "error": user_friendly_error}
             else:
                 # Unexpected format - treat as tx_id for backwards compatibility
                 tx_id = str(transfer_result)
@@ -444,16 +434,12 @@ def _transfer(to_principal: str, amount: int) -> Async[dict]:
             return {
                 "success": False,
                 "error": str(error),
-                "traceback": traceback.format_exc()
+                "traceback": traceback.format_exc(),
             }
 
     except Exception as e:
         logger.error(f"Error in transfer: {str(e)}\n{traceback.format_exc()}")
-        return {
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
 
 def transfer(args: str) -> Async[str]:
@@ -478,9 +464,9 @@ def transfer(args: str) -> Async[str]:
         return json.dumps(result)
 
     except Exception as e:
-        logger.error(f"Error in transfer: {str(e)}\n{traceback.format_exc()}")  
+        logger.error(f"Error in transfer: {str(e)}\n{traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})
-        
+
 
 def _refresh(force: bool = False) -> Async[dict]:
     """
@@ -499,14 +485,20 @@ def _refresh(force: bool = False) -> Async[dict]:
         from .vault_lib.ic_util_calls import get_account_transactions
 
         app = app_data()
-        
+
         if not force:
             current_time = ic.time()
-            last_refresh_time = getattr(app, 'last_refresh_time', None)
-            
-            if last_refresh_time and (current_time - last_refresh_time) < REFRESH_COOLDOWN * 1_000_000_000:
+            last_refresh_time = getattr(app, "last_refresh_time", None)
+
+            if (
+                last_refresh_time
+                and (current_time - last_refresh_time)
+                < REFRESH_COOLDOWN * 1_000_000_000
+            ):
                 time_since_refresh = (current_time - last_refresh_time) // 1_000_000_000
-                logger.info(f"Refresh skipped: last refresh was {time_since_refresh}s ago (cooldown: {REFRESH_COOLDOWN}s)")
+                logger.info(
+                    f"Refresh skipped: last refresh was {time_since_refresh}s ago (cooldown: {REFRESH_COOLDOWN}s)"
+                )
                 return {
                     "success": True,
                     "data": {
@@ -514,19 +506,16 @@ def _refresh(force: bool = False) -> Async[dict]:
                             "new_txs_count": 0,
                             "sync_status": "Skipped (cooldown)",
                             "time_since_last_refresh_seconds": time_since_refresh,
-                            "cooldown_seconds": REFRESH_COOLDOWN
+                            "cooldown_seconds": REFRESH_COOLDOWN,
                         }
                     },
-                    "cached": True
+                    "cached": True,
                 }
-        
+
         indexer_canister = Canisters["ckBTC indexer"]
 
         if not indexer_canister:
-            return {
-                "success": False,
-                "error": "ckBTC indexer not configured"
-            }
+            return {"success": False, "error": "ckBTC indexer not configured"}
 
         # Get transactions from indexer
         vault_principal = ic.id().to_str()
@@ -588,18 +577,18 @@ def _refresh(force: bool = False) -> Async[dict]:
 
         # Update last refresh timestamp
         app.last_refresh_time = ic.time()
-        
+
         logger.info(f"Successfully synced {new_tx_count} new transactions")
         return {
-                "success": True,
-                "data": {
-                    "TransactionSummary": {
-                        "new_txs_count": new_tx_count,
-                        "sync_status": "Synced",
-                        "scan_end_tx_id": response["oldest_tx_id"] or 0,
-                    }
-                },
-            }
+            "success": True,
+            "data": {
+                "TransactionSummary": {
+                    "new_txs_count": new_tx_count,
+                    "sync_status": "Synced",
+                    "scan_end_tx_id": response["oldest_tx_id"] or 0,
+                }
+            },
+        }
 
     except Exception as e:
         logger.error(f"Error in refresh: {str(e)}\n{traceback.format_exc()}")

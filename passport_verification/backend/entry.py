@@ -16,46 +16,50 @@ logger = get_logger("passport_verification")
 # Create ExtensionEntity for passport_verification
 ExtensionEntity = create_extension_entity_class("passport_verification")
 
+
 # Define configuration entity for storing application settings
 class AppConfig(ExtensionEntity):
     """Store application configuration in stable memory.
-    
+
     Stored with namespace: ext_passport_verification::AppConfig
     """
+
     __alias__ = "key"
     key = String()
     value = String()
+
 
 RARIMO_API_BASE = "https://api.app.rarime.com"
 
 
 def initialize(args: str):
     """Initialize extension - generate application ID if not exists.
-    
+
     Called once during canister initialization.
     """
     logger.info("Initializing passport_verification extension...")
-    
+
     # Check if application ID already exists
     config = AppConfig["application_id"]
-    
+
     if not config:
         # First time initialization - generate timestamp-based decimal ID
         # IC time is in nanoseconds, convert to seconds
         timestamp_ns = ic.time()
         timestamp_s = timestamp_ns // 1_000_000_000
-        
+
         # Format: YYYYMMDDhhmmss as decimal string
         from datetime import datetime, timezone
+
         dt = datetime.fromtimestamp(timestamp_s, tz=timezone.utc)
         app_id = dt.strftime("%Y%m%d%H%M%S")
-        
+
         # Store in ExtensionEntity
         AppConfig(key="application_id", value=app_id)
         logger.info(f"🆕 Generated new application ID (timestamp): {app_id}")
     else:
         logger.info(f"📋 Application ID already exists: {config.value}")
-    
+
     logger.info("Passport verification extension initialized.")
 
 
@@ -65,7 +69,7 @@ def get_session_id(args: str) -> str:
 
 def get_event_id(args: str) -> str:
     """Get the application ID (event_id for Rarimo) from storage.
-    
+
     The ID is generated once during initialization and persists in stable storage.
     """
     config = AppConfig["application_id"]
@@ -176,15 +180,16 @@ def get_current_application_id(args: str) -> str:
     """Get the current application ID without generating a new one (query method)."""
     config = AppConfig["application_id"]
     if config:
-        return json.dumps({
-            "application_id": config.value,
-            "status": "initialized",
-            "created_at": str(config.created_at) if hasattr(config, 'created_at') else None
-        })
-    return json.dumps({
-        "application_id": None,
-        "status": "not_initialized"
-    })
+        return json.dumps(
+            {
+                "application_id": config.value,
+                "status": "initialized",
+                "created_at": (
+                    str(config.created_at) if hasattr(config, "created_at") else None
+                ),
+            }
+        )
+    return json.dumps({"application_id": None, "status": "not_initialized"})
 
 
 @update
@@ -193,7 +198,7 @@ def set_application_id(new_app_id: str) -> str:
     try:
         # Check if config already exists
         config = AppConfig["application_id"]
-        
+
         if config:
             # Update existing config
             old_value = config.value
@@ -203,17 +208,11 @@ def set_application_id(new_app_id: str) -> str:
             # Create new config
             config = AppConfig(key="application_id", value=new_app_id)
             logger.info(f"🔧 Application ID manually set to: {new_app_id}")
-        
-        return json.dumps({
-            "success": True,
-            "application_id": new_app_id
-        })
+
+        return json.dumps({"success": True, "application_id": new_app_id})
     except Exception as e:
         logger.error(f"❌ Error setting application ID: {str(e)}")
-        return json.dumps({
-            "success": False,
-            "error": str(e)
-        })
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def create_passport_identity(args: str) -> str:
@@ -256,5 +255,5 @@ def create_passport_identity(args: str) -> str:
         import traceback
 
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
-            
+
         return json.dumps({"success": False, "error": str(e)})

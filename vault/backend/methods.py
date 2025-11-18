@@ -11,8 +11,7 @@ dynamically bound to the core entities at runtime.
 from kybra import Async
 from kybra_simple_logging import get_logger
 
-from .entry import _transfer, _refresh
-
+from .entry import _refresh, _transfer
 
 logger = get_logger("vault.methods")
 

@@ -19,7 +19,7 @@ class ApplicationData(Entity, TimestampedMixin):
     scan_end_tx_id = Integer(default=0)
     scan_start_tx_id = Integer(default=0)
     scan_oldest_tx_id = Integer(default=0)
-    
+
     last_refresh_time = Integer(default=0)  # Timestamp in nanoseconds of last refresh
 
 

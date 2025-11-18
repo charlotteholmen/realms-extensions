@@ -8,7 +8,8 @@
 #   ./lint_all_extensions.sh vault        # Lint only vault extension
 #   ./lint_all_extensions.sh --fix vault  # Lint and fix vault extension
 
-set -e
+# Note: Don't use 'set -e' here because we want to continue linting all extensions
+# even if some fail, and collect results at the end
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
