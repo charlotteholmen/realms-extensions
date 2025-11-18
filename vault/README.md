@@ -5,6 +5,7 @@ A secure digital asset and token management extension that provides treasury fun
 ## Features
 
 - **ckBTC Balance Tracking**: Monitor user deposits and withdrawals
+- **Vault Balance Queries**: Query the vault's total ckBTC balance directly from the ledger
 - **Transaction History**: Complete audit trail of all vault operations
 - **Admin-Controlled Transfers**: Only realm admins can transfer tokens out
 - **ICRC Integration**: Direct integration with ICRC-1 ledger and indexer canisters
@@ -103,13 +104,39 @@ yield treasury.refresh()
 # Updates Treasury with latest transactions from ICRC ledger
 ```
 
+### Check Vault's Total Balance
+
+```python
+# Get the vault's actual ckBTC balance from the ledger
+result = yield get_vault_balance({})
+# Returns: {
+#   "vault_principal": "h5vpp-qyaaa-aaaac-qai3a-cai",
+#   "balance": 100000000,  # in satoshis
+#   "balance_btc": "1.00000000"  # in BTC
+# }
+```
+
+#### Using dfx command line:
+
+```bash
+# Get vault canister ID
+VAULT_ID=$(dfx canister id realm_backend)
+
+# Query balance from ckBTC ledger
+dfx canister call mxzaz-hqaaa-aaaar-qaada-cai icrc1_balance_of \
+  "(record { owner = principal \"$VAULT_ID\"; subaccount = null })"
+
+# For staging network
+dfx canister --network staging call mxzaz-hqaaa-aaaar-qaada-cai icrc1_balance_of \
+  "(record { owner = principal \"h5vpp-qyaaa-aaaac-qai3a-cai\"; subaccount = null })"
+```
+
 ## Extension API
 
 The extension exposes the following functions:
 
-The extension exposes the following functions:
-
-- `get_balance(args)` - Get balance for a principal
+- `get_balance(args)` - Get user balance for a specific principal
+- `get_vault_balance(args)` - Get the vault's total ckBTC balance from the ledger
 - `get_status(args)` - Get vault status and stats
 - `get_transactions(args)` - Get transaction history for a principal
 - `transfer(args)` - Transfer tokens to a principal (admin only)
