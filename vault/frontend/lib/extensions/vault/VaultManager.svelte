@@ -23,6 +23,8 @@ let vaultPrincipal: string = '';
 let lastRefreshTime: Date | null = null;
 let copiedPrincipal: string = '';
 let copiedTimestamp: string = '';
+let vaultTotalBalance: number = 0;
+let vaultBalanceLoading: boolean = false;
 
 // Ledger canister principals from backend constants
 const LEDGER_CANISTERS = {
@@ -120,6 +122,74 @@ loading = false;
 }
 }
 
+async function loadVaultBalance() {
+try {
+// Fetch all Balance objects to find vault balance
+const response = await backend.get_objects_paginated('Balance', 0n, 100n, 'asc');
+
+if (response.success && response.data?.objectsListPaginated) {
+const objectsData = response.data.objectsListPaginated;
+const balances = objectsData.objects.map((objStr: string) => JSON.parse(objStr));
+
+// Get vault principal if not already loaded
+if (!vaultPrincipal) {
+try {
+if (typeof backend.get_canister_id === 'function') {
+const principalResult = await backend.get_canister_id();
+vaultPrincipal = principalResult || '';
+}
+} catch (e) {
+console.warn('Could not fetch vault principal:', e);
+}
+}
+
+// Find vault's own balance
+const vaultBalance = balances.find(b => b.id === vaultPrincipal || b._id === vaultPrincipal);
+vaultTotalBalance = vaultBalance ? (vaultBalance.amount || 0) : 0;
+}
+} catch (e: any) {
+console.error('Failed to load vault balance:', e);
+}
+}
+
+async function refreshVaultBalance() {
+vaultBalanceLoading = true;
+error = '';
+try {
+// Use extension_async_call to refresh vault balance from ledger
+const result = await backend.extension_async_call({
+extension_name: 'vault',
+function_name: 'refresh_vault_balance',
+args: '{}'
+});
+
+// Parse the inner JSON response from the extension
+let innerResponse;
+try {
+innerResponse = JSON.parse(result.response);
+} catch {
+error = result.response || 'Refresh failed';
+return;
+}
+
+// Check the inner success field from the extension
+if (innerResponse.success) {
+// Update vault balance from response
+if (innerResponse.data?.Balance) {
+vaultTotalBalance = innerResponse.data.Balance.amount || 0;
+}
+lastRefreshTime = new Date();
+} else {
+error = innerResponse.error || 'Failed to refresh vault balance';
+}
+} catch (e: any) {
+console.error('Failed to refresh vault balance:', e);
+error = e.message || 'Failed to refresh vault balance';
+} finally {
+vaultBalanceLoading = false;
+}
+}
+
 async function refreshVault() {
 loading = true;
 error = '';
@@ -147,6 +217,7 @@ if (innerResponse.success) {
 lastRefreshTime = new Date();
 // Reload data after successful refresh
 await loadBalance();
+await loadVaultBalance();
 await loadTransactions(0); // Reset to first page
 } else {
 error = innerResponse.error || 'Refresh failed';
@@ -279,6 +350,7 @@ goToPage(currentPage - 1);
 
 onMount(async () => {
 await loadBalance();
+await loadVaultBalance();
 await loadTransactions(0);
 });
 </script>
@@ -294,6 +366,42 @@ class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opaci
 >
 {loading ? 'Refreshing...' : 'Refresh'}
 </button>
+</div>
+
+<!-- Vault Total Balance Card -->
+<div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-6">
+<div class="flex items-start justify-between">
+<div class="flex-1">
+<h3 class="text-sm font-semibold text-blue-800 mb-2">{$_('extensions.vault.vault_balance.title')}</h3>
+<div class="text-4xl font-bold text-blue-900 mb-1">
+{vaultTotalBalance.toLocaleString()} <span class="text-2xl font-medium text-blue-700">{$_('extensions.vault.vault_balance.satoshis')}</span>
+</div>
+<div class="text-lg text-blue-700">
+≈ {(vaultTotalBalance / 100000000).toFixed(8)} ckBTC
+</div>
+<div class="mt-3 text-xs text-blue-600">
+<span class="font-medium">{$_('extensions.vault.vault_balance.description')}</span>
+</div>
+</div>
+<button
+on:click={refreshVaultBalance}
+disabled={vaultBalanceLoading}
+class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+title={$_('extensions.vault.vault_balance.refresh_tooltip')}
+>
+{#if vaultBalanceLoading}
+<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg>
+{:else}
+<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+</svg>
+{/if}
+<span>{vaultBalanceLoading ? $_('extensions.vault.vault_balance.querying') : $_('extensions.vault.vault_balance.refresh')}</span>
+</button>
+</div>
 </div>
 
 <!-- Vault Info Card -->
