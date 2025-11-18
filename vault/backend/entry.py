@@ -11,6 +11,7 @@ from typing import Any, Dict
 
 from ggg import Balance, Transfer
 from kybra import Async, Principal, ic
+from kybra_simple_db import Database
 from kybra_simple_logging import get_logger
 
 from .vault_lib.candid_types import Account, ICRCLedger, TransferArg
@@ -20,7 +21,10 @@ from .vault_lib.constants import (
     MAX_RESULTS,
     REFRESH_COOLDOWN,
 )
+from .vault_lib import entities as vault_entities
 from .vault_lib.entities import Canisters, app_data
+from .vault_lib.ic_util_calls import get_account_transactions, get_vault_balance_from_ledger
+
 
 logger = get_logger("extensions.vault")
 
@@ -62,9 +66,7 @@ def format_transfer_error(error_dict: Dict) -> str:
 
 def register_entities():
     """Register vault entity types with the Database."""
-    from kybra_simple_db import Database
 
-    from .vault_lib import entities as vault_entities
 
     logger.info("Registering vault entity types...")
     vault_entity_types = [
@@ -478,8 +480,6 @@ def _refresh(force: bool = False) -> Async[dict]:
     logger.info("vault.refresh called")
 
     try:
-        from .vault_lib.entities import Canisters, app_data
-        from .vault_lib.ic_util_calls import get_account_transactions
 
         app = app_data()
 
@@ -597,12 +597,36 @@ def refresh(_) -> Async[str]:
     return json.dumps(result)
 
 
-def get_vault_balance() -> int:
+def _get_vault_balance_amount() -> int:
+    """Internal helper to get vault balance amount."""
     vault_principal_str = ic.id().to_str()
     balance = Balance[vault_principal_str]
     if not balance:
         return 0
     return balance.amount
+
+
+def get_vault_balance(args: str) -> str:
+    """
+    Get the vault's current balance from local storage.
+    This reads the cached balance without querying the ledger.
+    Use refresh_vault_balance() to update from the ledger.
+    
+    Returns:
+        JSON string with vault balance information
+    """
+    try:
+        vault_principal_str = ic.id().to_str()
+        balance = Balance[vault_principal_str]
+        
+        balance_dict = {
+            "principal_id": vault_principal_str,
+            "amount": balance.amount if balance else 0,
+        }
+        return json.dumps({"success": True, "data": {"Balance": balance_dict}})
+    except Exception as e:
+        logger.error(f"Error getting vault balance: {str(e)}")
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def refresh_vault_balance(args: str) -> Async[str]:
@@ -614,25 +638,26 @@ def refresh_vault_balance(args: str) -> Async[str]:
         if not ledger_canister:
             return json.dumps({"success": False, "error": "ckBTC ledger not configured"})
         
-        # Query vault's balance from ledger
+        # Query vault's balance from ledger using utility function
         vault_principal = ic.id()
         vault_principal_str = vault_principal.to_str()
-        ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
-        balance_amount = yield ledger.icrc1_balance_of(
-            Account(owner=vault_principal, subaccount=None)
+        
+        balance_amount_int = yield get_vault_balance_from_ledger(
+            ledger_canister.principal, vault_principal
         )
-    
+        
+        # Update or create Balance entity
         balance = Balance[vault_principal_str]
         if not balance:
             logger.info("Creating vault balance record")
-            Balance(_id=vault_principal_str, amount=balance_amount)
+            Balance(_id=vault_principal_str, amount=balance_amount_int)
         else:
-            balance.amount = balance_amount
+            balance.amount = balance_amount_int
         
-        logger.info(f"Vault balance: {balance_amount} satoshis")
+        logger.info(f"Vault balance updated: {balance_amount_int} satoshis")
         balance_dict = {
             "principal_id": vault_principal_str,
-            "amount": balance_amount,
+            "amount": balance_amount_int,
         }
         return json.dumps({"success": True, "data": {"Balance": balance_dict}})
         

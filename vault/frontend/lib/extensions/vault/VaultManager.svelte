@@ -124,28 +124,26 @@ loading = false;
 
 async function loadVaultBalance() {
 try {
-// Fetch all Balance objects to find vault balance
-const response = await backend.get_objects_paginated('Balance', 0n, 100n, 'asc');
+// Call the vault extension's get_vault_balance function
+const result = await backend.extension_sync_call({
+extension_name: 'vault',
+function_name: 'get_vault_balance',
+args: '{}'
+});
 
-if (response.success && response.data?.objectsListPaginated) {
-const objectsData = response.data.objectsListPaginated;
-const balances = objectsData.objects.map((objStr: string) => JSON.parse(objStr));
-
-// Get vault principal if not already loaded
-if (!vaultPrincipal) {
+// Parse the response
+let response;
 try {
-if (typeof backend.get_canister_id === 'function') {
-const principalResult = await backend.get_canister_id();
-vaultPrincipal = principalResult || '';
-}
-} catch (e) {
-console.warn('Could not fetch vault principal:', e);
-}
+response = JSON.parse(result.response);
+} catch {
+console.error('Failed to parse vault balance response');
+return;
 }
 
-// Find vault's own balance
-const vaultBalance = balances.find(b => b.id === vaultPrincipal || b._id === vaultPrincipal);
-vaultTotalBalance = vaultBalance ? (vaultBalance.amount || 0) : 0;
+// Update vault balance and principal from response
+if (response.success && response.data?.Balance) {
+vaultTotalBalance = response.data.Balance.amount || 0;
+vaultPrincipal = response.data.Balance.principal_id || '';
 }
 } catch (e: any) {
 console.error('Failed to load vault balance:', e);
@@ -179,6 +177,8 @@ if (innerResponse.data?.Balance) {
 vaultTotalBalance = innerResponse.data.Balance.amount || 0;
 }
 lastRefreshTime = new Date();
+// Also reload to ensure we have the latest cached value
+await loadVaultBalance();
 } else {
 error = innerResponse.error || 'Failed to refresh vault balance';
 }

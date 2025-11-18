@@ -9,6 +9,7 @@ from .candid_types import (
     GetAccountTransactionsRequest,
     GetAccountTransactionsResponse,
     ICRCIndexer,
+    ICRCLedger,
 )
 
 logger = get_logger(__name__)
@@ -233,3 +234,64 @@ def get_account_transactions(
 
     # Default response for all error cases
     return GetAccountTransactionsResponse(balance=0, transactions=[], oldest_tx_id=None)
+
+
+def get_vault_balance_from_ledger(
+    ledger_canister_id: str, vault_principal: Principal
+) -> Async[int]:
+    """
+    Query the vault's balance directly from the ICRC-1 ledger canister.
+
+    Args:
+        ledger_canister_id: The principal ID of the ledger canister (e.g., ckBTC ledger)
+        vault_principal: The Principal object of the vault canister
+
+    Returns:
+        The vault's balance as a Python int (in satoshis)
+    """
+    try:
+        ledger = ICRCLedger(Principal.from_str(ledger_canister_id))
+        balance_result = yield ledger.icrc1_balance_of(
+            Account(owner=vault_principal, subaccount=None)
+        )
+
+        logger.info(f"Ledger raw result type: {type(balance_result)}")
+        logger.info(f"Ledger raw result: {balance_result}")
+        logger.info(f"Ledger raw result hasattr Ok: {hasattr(balance_result, 'Ok')}")
+        logger.info(f"Ledger raw result dir: {dir(balance_result)}")
+        
+        # Check if CallResult has Ok attribute (similar to get_account_transactions)
+        if hasattr(balance_result, "Ok"):
+            logger.info(f"balance_result.Ok type: {type(balance_result.Ok)}")
+            logger.info(f"balance_result.Ok: {balance_result.Ok}")
+            
+            # Check for double-nested Ok structure
+            if isinstance(balance_result.Ok, dict) and "Ok" in balance_result.Ok:
+                balance_amount = balance_result.Ok["Ok"]
+                logger.info(f"Found double-nested Ok, balance: {balance_amount}")
+            else:
+                # Single Ok structure - the value is directly in Ok
+                balance_amount = balance_result.Ok
+                logger.info(f"Found single Ok, balance: {balance_amount}")
+        else:
+            # No Ok attribute, use the result directly
+            balance_amount = balance_result
+            logger.info(f"No Ok attribute, using result directly: {balance_amount}")
+
+        logger.info(f"Extracted balance_amount: {balance_amount}, type: {type(balance_amount)}")
+
+        # Convert balance to int if it's a string (with underscore separators)
+        if isinstance(balance_amount, str):
+            balance_amount_int = int(balance_amount.replace("_", ""))
+        else:
+            balance_amount_int = int(balance_amount)
+
+        logger.info(f"Vault balance from ledger: {balance_amount_int} satoshis")
+        return balance_amount_int
+
+    except Exception as e:
+        logger.error(
+            f"Error querying vault balance from ledger: {str(e)}\n{traceback.format_exc()}"
+        )
+        # Return 0 on error
+        return 0

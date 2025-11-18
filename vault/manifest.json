@@ -17,7 +17,9 @@
     "get_status",
     "get_transactions",
     "transfer",
-    "refresh"
+    "refresh",
+    "get_vault_balance",
+    "refresh_vault_balance"
   ],
   "profiles": [
     "admin"
