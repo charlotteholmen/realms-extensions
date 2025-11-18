@@ -14,6 +14,7 @@ from kybra import Async, Principal, ic
 from kybra_simple_db import Database
 from kybra_simple_logging import get_logger
 
+from .vault_lib import entities as vault_entities
 from .vault_lib.candid_types import Account, ICRCLedger, TransferArg
 from .vault_lib.constants import (
     CANISTER_PRINCIPALS,
@@ -21,10 +22,11 @@ from .vault_lib.constants import (
     MAX_RESULTS,
     REFRESH_COOLDOWN,
 )
-from .vault_lib import entities as vault_entities
 from .vault_lib.entities import Canisters, app_data
-from .vault_lib.ic_util_calls import get_account_transactions, get_vault_balance_from_ledger
-
+from .vault_lib.ic_util_calls import (
+    get_account_transactions,
+    get_vault_balance_from_ledger,
+)
 
 logger = get_logger("extensions.vault")
 
@@ -66,7 +68,6 @@ def format_transfer_error(error_dict: Dict) -> str:
 
 def register_entities():
     """Register vault entity types with the Database."""
-
 
     logger.info("Registering vault entity types...")
     vault_entity_types = [
@@ -130,7 +131,6 @@ def initialize(args: str):
     if not app_data().max_iteration_count:
         logger.info(f"Setting max iteration_count to {MAX_ITERATION_COUNT}")
         app_data().max_iteration_count = MAX_ITERATION_COUNT
-
 
     logger.info(
         f"Canisters: {[canister.serialize() for canister in Canisters.instances()]}"
@@ -342,7 +342,9 @@ def get_transactions(args: str) -> str:
 
 def _transfer(to_principal: str, amount: int) -> Async[dict]:
     try:
-        logger.info(f"vault._transfer called with to_principal: {to_principal}, amount: {amount}")
+        logger.info(
+            f"vault._transfer called with to_principal: {to_principal}, amount: {amount}"
+        )
 
         if not to_principal or amount is None:
             return {"success": False, "error": "to_principal and amount are required"}
@@ -611,14 +613,14 @@ def get_vault_balance(args: str) -> str:
     Get the vault's current balance from local storage.
     This reads the cached balance without querying the ledger.
     Use refresh_vault_balance() to update from the ledger.
-    
+
     Returns:
         JSON string with vault balance information
     """
     try:
         vault_principal_str = ic.id().to_str()
         balance = Balance[vault_principal_str]
-        
+
         balance_dict = {
             "principal_id": vault_principal_str,
             "amount": balance.amount if balance else 0,
@@ -631,21 +633,23 @@ def get_vault_balance(args: str) -> str:
 
 def refresh_vault_balance(args: str) -> Async[str]:
     logger.info("vault.refresh_vault_balance called")
-    
+
     try:
         # Get ledger canister
         ledger_canister = Canisters["ckBTC ledger"]
         if not ledger_canister:
-            return json.dumps({"success": False, "error": "ckBTC ledger not configured"})
-        
+            return json.dumps(
+                {"success": False, "error": "ckBTC ledger not configured"}
+            )
+
         # Query vault's balance from ledger using utility function
         vault_principal = ic.id()
         vault_principal_str = vault_principal.to_str()
-        
+
         balance_amount_int = yield get_vault_balance_from_ledger(
             ledger_canister.principal, vault_principal
         )
-        
+
         # Update or create Balance entity
         balance = Balance[vault_principal_str]
         if not balance:
@@ -653,14 +657,16 @@ def refresh_vault_balance(args: str) -> Async[str]:
             Balance(_id=vault_principal_str, amount=balance_amount_int)
         else:
             balance.amount = balance_amount_int
-        
+
         logger.info(f"Vault balance updated: {balance_amount_int} satoshis")
         balance_dict = {
             "principal_id": vault_principal_str,
             "amount": balance_amount_int,
         }
         return json.dumps({"success": True, "data": {"Balance": balance_dict}})
-        
+
     except Exception as e:
         logger.error(f"Error getting vault balance: {str(e)}\n{traceback.format_exc()}")
-        return json.dumps({"success": False, "error": str(e), "traceback": traceback.format_exc()})
+        return json.dumps(
+            {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+        )

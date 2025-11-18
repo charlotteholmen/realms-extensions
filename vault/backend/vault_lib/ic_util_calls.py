@@ -259,12 +259,12 @@ def get_vault_balance_from_ledger(
         logger.info(f"Ledger raw result: {balance_result}")
         logger.info(f"Ledger raw result hasattr Ok: {hasattr(balance_result, 'Ok')}")
         logger.info(f"Ledger raw result dir: {dir(balance_result)}")
-        
+
         # Check if CallResult has Ok attribute (similar to get_account_transactions)
         if hasattr(balance_result, "Ok"):
             logger.info(f"balance_result.Ok type: {type(balance_result.Ok)}")
             logger.info(f"balance_result.Ok: {balance_result.Ok}")
-            
+
             # Check for double-nested Ok structure
             if isinstance(balance_result.Ok, dict) and "Ok" in balance_result.Ok:
                 balance_amount = balance_result.Ok["Ok"]
@@ -278,7 +278,9 @@ def get_vault_balance_from_ledger(
             balance_amount = balance_result
             logger.info(f"No Ok attribute, using result directly: {balance_amount}")
 
-        logger.info(f"Extracted balance_amount: {balance_amount}, type: {type(balance_amount)}")
+        logger.info(
+            f"Extracted balance_amount: {balance_amount}, type: {type(balance_amount)}"
+        )
 
         # Convert balance to int if it's a string (with underscore separators)
         if isinstance(balance_amount, str):
