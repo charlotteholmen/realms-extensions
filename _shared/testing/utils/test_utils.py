@@ -93,10 +93,10 @@ def run_command_json(command: str) -> Optional[Dict[str, Any]]:
 def get_canister_id(canister_name: str) -> Optional[str]:
     """
     Get the canister ID for the given canister name.
-    
+
     Args:
         canister_name: Name of the canister
-        
+
     Returns:
         Canister ID string, or None if not found
     """
@@ -110,7 +110,7 @@ def get_canister_id(canister_name: str) -> Optional[str]:
 def get_current_principal() -> Optional[str]:
     """
     Get the principal ID of the current identity.
-    
+
     Returns:
         Principal ID string, or None if failed
     """
@@ -308,20 +308,22 @@ def create_test_identities(identity_names: List[str]) -> Dict[str, str]:
     return identities
 
 
-def wait_for_canister_ready(canister_name: str, max_attempts: int = 30, delay: int = 2) -> bool:
+def wait_for_canister_ready(
+    canister_name: str, max_attempts: int = 30, delay: int = 2
+) -> bool:
     """
     Wait for a canister to be ready by attempting to query its status.
-    
+
     Args:
         canister_name: Name of the canister to check
         max_attempts: Maximum number of retry attempts
         delay: Delay in seconds between attempts
-        
+
     Returns:
         True if canister is ready, False if timeout
     """
     import time
-    
+
     for attempt in range(max_attempts):
         try:
             result = run_command(f"dfx canister status {canister_name}")
@@ -330,11 +332,13 @@ def wait_for_canister_ready(canister_name: str, max_attempts: int = 30, delay: i
                 return True
         except Exception:
             pass
-        
+
         if attempt < max_attempts - 1:
-            print_info(f"Waiting for {canister_name} to be ready... ({attempt + 1}/{max_attempts})")
+            print_info(
+                f"Waiting for {canister_name} to be ready... ({attempt + 1}/{max_attempts})"
+            )
             time.sleep(delay)
-    
+
     print_error(f"Canister {canister_name} did not become ready within timeout")
     return False
 
@@ -342,12 +346,12 @@ def wait_for_canister_ready(canister_name: str, max_attempts: int = 30, delay: i
 def validate_json_response(data: dict, expected_keys: list, context: str) -> bool:
     """
     Validate that JSON response has expected structure.
-    
+
     Args:
         data: JSON data to validate
         expected_keys: List of required keys
         context: Context string for error messages
-        
+
     Returns:
         True if all expected keys present, False otherwise
     """
