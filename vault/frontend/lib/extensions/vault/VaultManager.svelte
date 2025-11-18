@@ -241,9 +241,22 @@ console.error('Failed to copy:', e);
 
 // Convert nanosecond timestamp to Date
 function parseTimestamp(timestamp: string): Date {
+// Check if timestamp is in ISO format (contains 'T', '-', or ':')
+if (timestamp.includes('T') || timestamp.includes('-') || timestamp.includes(':')) {
+// Parse as ISO format timestamp
+return new Date(timestamp);
+}
+
+// Otherwise, parse as nanosecond timestamp
+try {
 const nanos = BigInt(timestamp);
 const millis = Number(nanos / BigInt(1000000));
 return new Date(millis);
+} catch (e) {
+// If parsing fails, return current date as fallback
+console.error('Failed to parse timestamp:', timestamp, e);
+return new Date();
+}
 }
 
 // Pagination helpers
