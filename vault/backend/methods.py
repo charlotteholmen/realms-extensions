@@ -18,7 +18,7 @@ logger = get_logger("vault.methods")
 
 def execute_transfer(self) -> Async[dict]:
     logger.info("Executing transfer...")
-    vault_response = yield _transfer(self.to_principal, self.amount)
+    vault_response = yield _transfer(self.principal_to, self.amount)
     return vault_response
 
 
