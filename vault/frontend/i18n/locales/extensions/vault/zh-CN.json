@@ -53,5 +53,13 @@
     "ckbtc_ledger": "ckBTC账本",
     "ckbtc_indexer": "ckBTC索引器",
     "copy_tooltip": "点击复制"
+  },
+  "vault_balance": {
+    "title": "保险库总余额",
+    "refresh": "刷新",
+    "querying": "查询中...",
+    "refresh_tooltip": "从账本查询当前余额",
+    "description": "这是保险库在ckBTC账本上的总余额",
+    "satoshis": "聪"
   }
 }

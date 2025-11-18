@@ -53,5 +53,13 @@
     "ckbtc_ledger": "ckBTC Ledger",
     "ckbtc_indexer": "ckBTC Indexer",
     "copy_tooltip": "Click to copy"
+  },
+  "vault_balance": {
+    "title": "Vault Total Balance",
+    "refresh": "Refresh",
+    "querying": "Querying...",
+    "refresh_tooltip": "Query ledger for current balance",
+    "description": "This is the vault's total balance on the ckBTC ledger",
+    "satoshis": "satoshis"
   }
 }
