@@ -1,16 +1,16 @@
-name: Citizen Dashboard Test
+name: Member Dashboard Test
 
 on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'citizen_dashboard/**'
-      - '.github/workflows/citizen_dashboard-test.yml'
+      - 'member_dashboard/**'
+      - '.github/workflows/member_dashboard-test.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'citizen_dashboard/**'
-      - '.github/workflows/citizen_dashboard-test.yml'
+      - 'member_dashboard/**'
+      - '.github/workflows/member_dashboard-test.yml'
 
 jobs:
   test:
@@ -32,14 +32,14 @@ jobs:
         
     - name: Install extension dependencies
       run: |
-        cd citizen_dashboard
+        cd member_dashboard
         if [ -f requirements.txt ]; then
           pip install -r requirements.txt
         fi
         
     - name: Run linters
       run: |
-        cd citizen_dashboard
+        cd member_dashboard
         if [ -d backend ]; then
           echo "Running black..."
           black backend --check || echo "⚠️  Black check failed or no Python files found"
@@ -51,7 +51,7 @@ jobs:
         
     - name: Run tests
       run: |
-        cd citizen_dashboard
+        cd member_dashboard
         if [ -f run_tests.sh ]; then
           bash run_tests.sh
         else
