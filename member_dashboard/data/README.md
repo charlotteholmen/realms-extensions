@@ -23,20 +23,17 @@ Contains public services available to members.
 
 ### tax_records_data.json
 
-Contains tax records for members.
+Contains invoices (tax and billing records) for members.
 
-**Entity**: TaxRecord
+**Entity**: Invoice
 
 **Fields**:
-- tax_id: Unique tax record identifier (e.g., "tax-001")
-- tax_type: Type of tax (Income Tax, Property Tax, Vehicle Tax, etc.)
-- description: Tax description
-- period: Tax period (e.g., "2024", "2024 Q1")
-- amount: Tax amount (float)
+- id: Unique invoice identifier (e.g., "invoice-001")
+- amount: Invoice amount (float)
 - due_date: ISO format timestamp for payment deadline
 - status: Payment status (Pending, Paid, Overdue)
 - user: Reference to User entity ID
-- metadata: Additional metadata as JSON string
+- metadata: Additional information (e.g., "Income Tax - Annual personal income tax (2024)")
 
 ## Loading Data
 

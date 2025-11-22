@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from ggg import Service, TaxRecord, User
+from ggg import Invoice, Service, User
 from kybra import Async
 from kybra_simple_logging import get_logger
 
@@ -24,16 +24,14 @@ def _service_to_dict(service: Service) -> Dict[str, Any]:
     }
 
 
-def _tax_record_to_dict(tax_record: TaxRecord) -> Dict[str, Any]:
-    """Convert TaxRecord entity to dictionary format"""
+def _invoice_to_dict(invoice: Invoice) -> Dict[str, Any]:
+    """Convert Invoice entity to dictionary format"""
     return {
-        "id": tax_record.tax_id,
-        "tax_type": tax_record.tax_type,
-        "description": tax_record.description,
-        "period": tax_record.period,
-        "amount": tax_record.amount,
-        "due_date": tax_record.due_date,
-        "status": tax_record.status,
+        "id": invoice.id,
+        "amount": invoice.amount,
+        "due_date": invoice.due_date,
+        "status": invoice.status,
+        "metadata": invoice.metadata,
     }
 
 
@@ -46,30 +44,30 @@ def get_dashboard_summary(args: str) -> Async[str]:
 
         # Get data from database
         all_services = Service.instances()
-        all_tax_records = TaxRecord.instances()
+        all_invoices = Invoice.instances()
 
         # Filter by user if provided
         if user_id and user_id != "anonymous":
             user_services = [s for s in all_services if s.user and s.user.id == user_id]
-            user_tax_records = [
-                t for t in all_tax_records if t.user and t.user.id == user_id
+            user_invoices = [
+                i for i in all_invoices if i.user and i.user.id == user_id
             ]
         else:
             user_services = list(all_services)
-            user_tax_records = list(all_tax_records)
+            user_invoices = list(all_invoices)
 
         # Calculate summary
         services_approaching = len(
             [s for s in user_services if s.status == "Approaching"]
         )
-        tax_overdue = len([t for t in user_tax_records if t.status == "Overdue"])
+        invoices_overdue = len([i for i in user_invoices if i.status == "Overdue"])
 
         summary_data = {
             "user_name": user_id,
             "services_count": len(user_services),
             "services_approaching": services_approaching,
-            "tax_records": len(user_tax_records),
-            "tax_overdue": tax_overdue,
+            "tax_records": len(user_invoices),
+            "tax_overdue": invoices_overdue,
             "personal_data_items": 0,
             "personal_data_updated": 0,
         }
@@ -128,47 +126,47 @@ def get_public_services(args: str) -> Async[str]:
 
 def get_tax_information(args: str) -> str:
     """
-    Get tax information for the member.
+    Get invoice information for the member (tax/billing data).
 
     Args:
         args (str): JSON string containing user_id
 
     Returns:
-        str: JSON string with tax information data
+        str: JSON string with invoice information data
     """
     try:
         logger.info(f"get_tax_information called with args: {args}")
         params = json.loads(args) if args else {}
         user_id = params.get("user_id", "anonymous")
 
-        # Get tax records from database
-        all_tax_records = TaxRecord.instances()
+        # Get invoices from database
+        all_invoices = Invoice.instances()
 
         # Filter by user if user_id provided
         if user_id and user_id != "anonymous":
-            tax_records = [
-                t for t in all_tax_records if t.user and t.user.id == user_id
+            invoices = [
+                i for i in all_invoices if i.user and i.user.id == user_id
             ]
         else:
-            tax_records = list(all_tax_records)
+            invoices = list(all_invoices)
 
         # Convert to dict format
-        tax_records_list = [_tax_record_to_dict(t) for t in tax_records]
+        invoices_list = [_invoice_to_dict(i) for i in invoices]
 
         # Calculate summary
         total_paid = sum(
             record["amount"]
-            for record in tax_records_list
+            for record in invoices_list
             if record["status"] == "Paid"
         )
         total_pending = sum(
             record["amount"]
-            for record in tax_records_list
+            for record in invoices_list
             if record["status"] == "Pending"
         )
         total_overdue = sum(
             record["amount"]
-            for record in tax_records_list
+            for record in invoices_list
             if record["status"] == "Overdue"
         )
 
@@ -181,7 +179,7 @@ def get_tax_information(args: str) -> str:
 
         response = {
             "success": True,
-            "data": {"tax_records": tax_records_list, "summary": summary},
+            "data": {"tax_records": invoices_list, "summary": summary},
         }
 
         logger.info(f"get_tax_information successful for user: {user_id}")
