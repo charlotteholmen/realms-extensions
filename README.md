@@ -7,7 +7,7 @@ Welcome to the consolidated Realms extensions repository! This repository contai
 This repository includes the following extensions:
 
 - **admin_dashboard** - Administrative dashboard for realm management
-- **citizen_dashboard** - Citizen-facing dashboard for personal account management
+- **member_dashboard** - Member-facing dashboard for personal account management
 - **erd_explorer** - Entity Relationship Diagram explorer for the realm database
 - **justice_litigation** - Justice and litigation management system
 - **land_registry** - Land registry and property management

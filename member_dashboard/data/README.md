@@ -1,12 +1,12 @@
-# Citizen Dashboard Extension Data
+# Member Dashboard Extension Data
 
-This directory contains initial data for the citizen dashboard extension.
+This directory contains initial data for the member dashboard extension.
 
 ## Data Files
 
 ### services_data.json
 
-Contains public services available to citizens.
+Contains public services available to members.
 
 **Entity**: Service
 
@@ -23,7 +23,7 @@ Contains public services available to citizens.
 
 ### tax_records_data.json
 
-Contains tax records for citizens.
+Contains tax records for members.
 
 **Entity**: TaxRecord
 

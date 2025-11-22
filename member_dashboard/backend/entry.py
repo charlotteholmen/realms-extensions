@@ -8,7 +8,7 @@ from kybra import Async
 from kybra_simple_logging import get_logger
 
 # Initialize logger
-logger = get_logger("citizen_dashboard")
+logger = get_logger("member_dashboard")
 
 
 def _service_to_dict(service: Service) -> Dict[str, Any]:
@@ -87,7 +87,7 @@ def get_dashboard_summary(args: str) -> Async[str]:
 
 def get_public_services(args: str) -> Async[str]:
     """
-    Get a list of public services for the citizen.
+    Get a list of public services for the member.
 
     Args:
         args (str): JSON string containing user_id
@@ -128,7 +128,7 @@ def get_public_services(args: str) -> Async[str]:
 
 def get_tax_information(args: str) -> str:
     """
-    Get tax information for the citizen.
+    Get tax information for the member.
 
     Args:
         args (str): JSON string containing user_id
@@ -195,7 +195,7 @@ def get_tax_information(args: str) -> str:
 
 def get_personal_data(args: str) -> str:
     """
-    Get personal data for the citizen.
+    Get personal data for the member.
 
     Args:
         args (str): JSON string containing user_id
@@ -224,7 +224,7 @@ def get_personal_data(args: str) -> str:
             "id_number": user.id or "",
             "date_of_birth": "",
             "citizenship_status": (
-                "Full Citizenship"
+                "Full Membership"
                 if user.profiles and "member" in user.profiles
                 else "Pending"
             ),

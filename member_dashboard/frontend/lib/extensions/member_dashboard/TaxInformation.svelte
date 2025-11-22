@@ -193,7 +193,7 @@
 		<!-- Tax Info Alert -->
 		<Alert color="blue" class="mt-4">
 			<p class="font-medium">Need help with your taxes?</p>
-			<p class="text-sm mt-1">Contact the citizen tax help desk at <span class="font-medium">tax-help@city.gov</span> or visit your local tax office.</p>
+			<p class="text-sm mt-1">Contact the member tax help desk at <span class="font-medium">tax-help@city.gov</span> or visit your local tax office.</p>
 		</Alert>
 	{:else}
 		<Alert color="blue" class="mb-4">

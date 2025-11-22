@@ -1,6 +1,6 @@
-# Citizen Dashboard
+# Member Dashboard
 
-Personal dashboard for citizens to manage government services and documents.
+Personal dashboard for members to manage government services and documents.
 
 ## Features
 - Document management
