@@ -36,7 +36,7 @@
 			
 			// Use the extension_async_call API method
 			const response = await backend.extension_sync_call({
-				extension_name: "citizen_dashboard",
+				extension_name: "member_dashboard",
 				function_name: "get_personal_data",
 				args: JSON.stringify(callParams)
 			});

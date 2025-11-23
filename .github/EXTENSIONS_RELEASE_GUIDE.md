@@ -54,7 +54,7 @@ The workflow automatically releases:
 
 - ✅ vault
 - ✅ admin_dashboard
-- ✅ citizen_dashboard
+- ✅ member_dashboard
 - ✅ erd_explorer
 - ✅ justice_litigation
 - ✅ land_registry
@@ -78,7 +78,7 @@ Each extension gets its own tag:
 ```
 vault-v1.0.1
 admin_dashboard-v1.0.1
-citizen_dashboard-v1.0.1
+member_dashboard-v1.0.1
 ...
 ```
 

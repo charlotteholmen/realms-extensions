@@ -114,7 +114,7 @@ Before adding a test workflow, ensure your extension has:
 |-----------|--------------|------------------|-------|
 | vault | ✅ | ✅ | Fully configured |
 | admin_dashboard | ❌ | ❌ | Needs test setup |
-| citizen_dashboard | ❌ | ❌ | Needs test setup |
+| member_dashboard | ❌ | ❌ | Needs test setup |
 | erd_explorer | ❌ | ❌ | Needs test setup |
 | justice_litigation | ❌ | ❌ | Needs test setup |
 | land_registry | ❌ | ❌ | Needs test setup |

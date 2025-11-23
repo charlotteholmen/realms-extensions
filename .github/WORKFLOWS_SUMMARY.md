@@ -12,7 +12,7 @@
 |-----------|--------------|---------|-------------|
 | vault | `vault-test.yml` | ✅ Full (tests exist) | `vault/**` |
 | admin_dashboard | `admin_dashboard-test.yml` | ⚙️ Linting only | `admin_dashboard/**` |
-| citizen_dashboard | `citizen_dashboard-test.yml` | ⚙️ Linting only | `citizen_dashboard/**` |
+| member_dashboard | `member_dashboard-test.yml` | ⚙️ Linting only | `member_dashboard/**` |
 | erd_explorer | `erd_explorer-test.yml` | ⚙️ Linting only | `erd_explorer/**` |
 | justice_litigation | `justice_litigation-test.yml` | ⚙️ Linting only | `justice_litigation/**` |
 | land_registry | `land_registry-test.yml` | ⚙️ Linting only | `land_registry/**` |
