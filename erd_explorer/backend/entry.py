@@ -31,7 +31,7 @@ def extension_sync_call(method_name: str, args: dict):
 
 
 from ggg.balance import Balance
-from ggg.citizen import Citizen
+from ggg.member import Member
 from ggg.codex import Codex
 from ggg.contract import Contract
 from ggg.dispute import Dispute
@@ -77,7 +77,7 @@ def extract_entity_schema():
         Realm,
         Human,
         Identity,
-        Citizen,
+        Member,
         Organization,
         Codex,
         Task,
