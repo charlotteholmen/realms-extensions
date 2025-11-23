@@ -48,7 +48,7 @@
   "successful": "Successful",
   "failed": "Failed",
   "errors": "Errors",
-  "citizen_votes": "Citizen Votes",
+  "member_votes": "Member Votes",
   "democratic_participation": "Democratic participation",
   "no_data_found": "No GGG Data Found",
   "load_demo_data": "Click \"Load Demo Data\" to populate the system with sample governance data",

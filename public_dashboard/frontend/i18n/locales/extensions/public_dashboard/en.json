@@ -1,8 +1,8 @@
 {
   "name": "Public Dashboard",
-  "description": "Public access dashboard with citizen services and community information",
+  "description": "Public access dashboard with member services and community information",
   "sidebar": "Public Dashboard",
-  "title": "Citizen Dashboard",
+  "title": "Member Dashboard",
   "summary": "Dashboard Overview",
   "services": "Public Services",
   "taxes": "Tax Information",

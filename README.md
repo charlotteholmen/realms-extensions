@@ -87,7 +87,7 @@ extensions/{your_extension_id}/
 
 
 **Available Categories:**
-- `public_services`: Government and public sector functionality (citizen services, land registry, justice, identity verification)
+- `public_services`: Government and public sector functionality (member services, land registry, justice, identity verification)
 - `finances`: Financial and economic tools (vault management, treasury, payments)
 - `oversight`: Monitoring, analytics, and intelligence tools (dashboards, metrics, AI assistants)
 - `system`: Platform administration and management (marketplace, configuration, deployment)
@@ -219,5 +219,5 @@ realms-cli extension list
 realms-cli extension install-from-source
 
 # Create a new realm with demo data for testing
-realms-cli create --citizens 25 --organizations 3 --transactions 50
+realms-cli create --members 25 --organizations 3 --transactions 50
 ```

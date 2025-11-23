@@ -134,7 +134,7 @@ def update_land_ownership(args: str) -> str:
                 return json.dumps(
                     {
                         "success": False,
-                        "error": "Citizens can only own residential land",
+                        "error": "Members can only own residential land",
                     }
                 )
 

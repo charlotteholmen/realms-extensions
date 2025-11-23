@@ -71,7 +71,7 @@ def export_data(args):
         entity_classes = [
             "User",
             "Human",
-            "Citizen",
+            "Member",
             "Organization",
             "Realm",
             "Treasury",
@@ -92,7 +92,7 @@ def export_data(args):
             "Service",
             "Proposal",
             "Vote",
-            "TaxRecord",
+            "Invoice",
             "Notification",
             "Identity",
             "UserProfile",
