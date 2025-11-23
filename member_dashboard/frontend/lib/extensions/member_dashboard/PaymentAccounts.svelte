@@ -202,8 +202,8 @@
     <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
       {$_('extensions.member_dashboard.payment_accounts')}
     </h3>
-    <Button on:click={() => showAddModal = true} disabled={loading}>
-      {$_('extensions.member_dashboard.add_payment_account')}
+    <Button color="alternative" size="sm" on:click={() => showAddModal = true} disabled={loading}>
+      + {$_('extensions.member_dashboard.add_payment_account')}
     </Button>
   </div>
   
@@ -258,12 +258,12 @@
           
           <div class="account-actions">
             <Button
-              size="sm"
-              color="red"
+              color="alternative"
+              size="xs"
               on:click={() => removeAccount(account.id)}
               disabled={loading}
             >
-              {$_('extensions.member_dashboard.remove')}
+              🗑️ {$_('extensions.member_dashboard.remove')}
             </Button>
           </div>
         </div>
@@ -274,11 +274,9 @@
 
 <!-- Add Payment Account Modal -->
 <Modal bind:open={showAddModal} size="md" autoclose={false}>
-  <div class="mb-4">
-    <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
-      {$_('extensions.member_dashboard.add_payment_account')}
-    </h3>
-  </div>
+  <h3 slot="header" class="text-xl font-semibold text-gray-900 dark:text-white">
+    {$_('extensions.member_dashboard.add_payment_account')}
+  </h3>
   
   <div class="space-y-4">
     <div>
@@ -318,20 +316,22 @@
     </div>
     
     {#if errorMessage}
-      <div class="alert alert-error">
+      <div class="p-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400">
         {errorMessage}
       </div>
     {/if}
-    
-    <div class="flex justify-end gap-2 mt-4">
+  </div>
+  
+  <svelte:fragment slot="footer">
+    <div class="flex justify-end gap-2 w-full">
       <Button color="alternative" on:click={() => { showAddModal = false; resetForm(); }} disabled={loading}>
         {$_('extensions.member_dashboard.cancel')}
       </Button>
-      <Button on:click={addAccount} disabled={loading}>
+      <Button color="alternative" on:click={addAccount} disabled={loading}>
         {$_('extensions.member_dashboard.save')}
       </Button>
     </div>
-  </div>
+  </svelte:fragment>
 </Modal>
 
 <style>
