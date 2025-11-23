@@ -21,7 +21,8 @@
   "tabs": {
     "public_services": "Public Services",
     "my_taxes": "My Taxes",
-    "personal_data": "Personal Data"
+    "personal_data": "Personal Data",
+    "payment_accounts": "Payment Accounts"
   },
   "services_list": {
     "title": "My Public Services",
@@ -59,5 +60,23 @@
   },
   "settings": {
     "profile_picture": "Profile Picture"
-  }
+  },
+  "payment_accounts": "Payment Accounts",
+  "add_payment_account": "Add Payment Account",
+  "no_payment_accounts": "No payment accounts configured yet",
+  "payment_accounts_description": "Add payment accounts to receive transfers from the realm treasury or other users",
+  "account_label": "Account Label",
+  "account_label_placeholder": "e.g., My ICP Wallet",
+  "network": "Network",
+  "currency": "Currency",
+  "address": "Address",
+  "address_placeholder": "Enter your address or principal ID",
+  "save": "Save",
+  "cancel": "Cancel",
+  "remove": "Remove",
+  "verified": "Verified",
+  "created_at": "Created",
+  "confirm_remove_payment_account": "Are you sure you want to remove this payment account?",
+  "configure_accounts": "Configure payment accounts",
+  "manage_addresses": "Manage your addresses"
 }

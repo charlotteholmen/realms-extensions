@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Card, Spinner, Alert, Tabs, TabItem } from 'flowbite-svelte';
-	import { UserCircleOutline, FileDocOutline, DollarOutline } from 'flowbite-svelte-icons';
+	import { UserCircleOutline, FileDocOutline, DollarOutline, WalletOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { principal } from '$lib/stores/auth';
 	import { _ } from 'svelte-i18n';
 	import ServicesList from './ServicesList.svelte';
 	import TaxInformation from './TaxInformation.svelte';
 	import PersonalData from './PersonalData.svelte';
+	import PaymentAccounts from './PaymentAccounts.svelte';
 	
 	// Component state
 	let loading = true;
@@ -91,7 +92,7 @@
 				</div>
 			</div>
 			
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
 				<!-- Public Services Summary -->
 				<div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-900/30">
 					<div class="flex items-center mb-2">
@@ -136,6 +137,21 @@
 						<span class="text-blue-600 dark:text-blue-400">{$_('extensions.member_dashboard.recently_updated', { values: { count: summaryData.personal_data_updated || 0 } })}</span>
 					</div>
 				</div>
+				
+				<!-- Payment Accounts Summary -->
+				<div class="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-100 dark:border-orange-900/30 cursor-pointer hover:shadow-md transition-shadow">
+					<div class="flex items-center mb-2">
+						<WalletOutline class="w-5 h-5 text-orange-600 dark:text-orange-400 mr-2" />
+						<h4 class="text-base font-medium text-orange-600 dark:text-orange-400">{$_('extensions.member_dashboard.tabs.payment_accounts')}</h4>
+					</div>
+					<div class="mb-2">
+						<p class="font-bold text-xl">-</p>
+						<p class="text-xs text-gray-600 dark:text-gray-400">{$_('extensions.member_dashboard.configure_accounts')}</p>
+					</div>
+					<div class="text-xs font-medium">
+						<span class="text-orange-600 dark:text-orange-400">{$_('extensions.member_dashboard.manage_addresses')}</span>
+					</div>
+				</div>
 			</div>
 		</Card>
 		
@@ -151,6 +167,10 @@
 			
 			<TabItem title={$_('extensions.member_dashboard.tabs.personal_data')} icon={UserCircleOutline}>
 				<PersonalData userId={$principal || 'demo-user'} />
+			</TabItem>
+			
+			<TabItem title={$_('extensions.member_dashboard.tabs.payment_accounts')} icon={WalletOutline}>
+				<PaymentAccounts />
 			</TabItem>
 		</Tabs>
 	{:else}

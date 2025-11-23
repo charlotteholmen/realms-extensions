@@ -21,7 +21,8 @@
   "tabs": {
     "public_services": "公共服务",
     "my_taxes": "我的税务",
-    "personal_data": "个人数据"
+    "personal_data": "个人数据",
+    "payment_accounts": "支付账户"
   },
   "services_list": {
     "title": "我的公共服务",
@@ -56,5 +57,23 @@
     "show": "显示数据",
     "hide": "隐藏数据",
     "manage": "管理隐私设置"
-  }
+  },
+  "payment_accounts": "支付账户",
+  "add_payment_account": "添加支付账户",
+  "no_payment_accounts": "尚未配置支付账户",
+  "payment_accounts_description": "添加支付账户以从域金库或其他用户接收转账",
+  "account_label": "账户标签",
+  "account_label_placeholder": "例如：我的ICP钱包",
+  "network": "网络",
+  "currency": "货币",
+  "address": "地址",
+  "address_placeholder": "输入您的地址或主体ID",
+  "save": "保存",
+  "cancel": "取消",
+  "remove": "删除",
+  "verified": "已验证",
+  "created_at": "创建于",
+  "confirm_remove_payment_account": "确定要删除此支付账户吗？",
+  "configure_accounts": "配置支付账户",
+  "manage_addresses": "管理您的地址"
 }
