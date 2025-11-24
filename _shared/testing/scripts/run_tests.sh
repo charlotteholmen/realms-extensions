@@ -165,18 +165,15 @@ if [ "$E2E_ENABLED" = "true" ]; then
     docker cp "$CONTAINER_NAME:/app/extension-root/tests/e2e/playwright-report" "./tests/e2e/" 2>/dev/null || log_warning "No E2E HTML report found"
 fi
 
+# Clean up container after tests
+log_info "Cleaning up container..."
+docker rm -f "$CONTAINER_NAME" || true
 
-sleep 9999999
+if [ $EXIT_CODE -eq 0 ]; then
+    log_success "Test run completed successfully!"
+else
+    log_warning "Tests failed with exit code $EXIT_CODE"
+    log_info "Check test-logs/ directory for detailed logs"
+fi
 
-# # Clean up container after tests
-# log_info "Cleaning up container..."
-# docker rm -f "$CONTAINER_NAME" || true
-
-# if [ $EXIT_CODE -eq 0 ]; then
-#     log_success "Test run completed successfully!"
-# else
-#     log_warning "Tests failed with exit code $EXIT_CODE"
-#     log_info "Check test-logs/ directory for detailed logs"
-# fi
-
-# exit $EXIT_CODE
+exit $EXIT_CODE
