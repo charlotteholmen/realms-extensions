@@ -34,3 +34,4 @@ E2E_WARMUP_PATH="/extensions/vault" ./run-e2e-tests.sh --headed
 - The vault extension is accessible at `/extensions/vault` path
 - First page load can be slow due to canister cold start
 - Warmup helps reduce test timeouts
+- Tests run in Docker containers for consistent environments
