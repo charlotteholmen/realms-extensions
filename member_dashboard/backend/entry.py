@@ -315,8 +315,8 @@ def check_invoice_payment(args: str) -> Async[str]:
             })
         
         # Import vault utilities for ledger queries
-        from extensions.vault.vault_lib.entities import Canisters
-        from extensions.vault.vault_lib.candid_types import ICRCLedger, Account
+        from extension_packages.vault.vault_lib.entities import Canisters
+        from extension_packages.vault.vault_lib.candid_types import ICRCLedger, Account
         from kybra import Principal
         
         # Get ledger canister
@@ -329,9 +329,15 @@ def check_invoice_payment(args: str) -> Async[str]:
         subaccount_bytes = invoice.get_subaccount()
         
         ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
-        balance = yield ledger.icrc1_balance_of(
+        result = yield ledger.icrc1_balance_of(
             Account(owner=vault_principal, subaccount=list(subaccount_bytes))
         )
+        
+        # Unwrap the CallResult
+        if hasattr(result, "Ok"):
+            balance = result.Ok
+        else:
+            balance = result
         
         # Convert invoice amount to satoshis (1 ckBTC = 100,000,000 satoshis)
         amount_satoshis = int(invoice.amount * 100_000_000)

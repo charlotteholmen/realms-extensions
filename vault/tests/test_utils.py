@@ -111,8 +111,8 @@ def call_realm_extension(
     escaped_args = args.replace('"', '\\"')
 
     command = (
-        f"dfx canister call realm_backend call_extension "
-        f'\'("{extension_name}", "{method_name}", "{escaped_args}")\' '
+        f"dfx canister call realm_backend extension_async_call "
+        f"'(record {{ extension_name = \"{extension_name}\"; function_name = \"{method_name}\"; args = \"{escaped_args}\" }})' "
         f"--output json"
     )
 
@@ -120,14 +120,12 @@ def call_realm_extension(
     if not result:
         return None
 
-    # The response is nested: result["data"]["extension_response"]
-    # which itself contains JSON that needs parsing
-    if "data" in result and "extension_response" in result["data"]:
-        extension_response_str = result["data"]["extension_response"]
+    # The response is in result["response"] as a JSON string
+    if "response" in result:
         try:
-            return json.loads(extension_response_str)
+            return json.loads(result["response"])
         except json.JSONDecodeError:
-            print_error(f"Failed to parse extension response: {extension_response_str}")
+            print_error(f"Failed to parse extension response: {result['response']}")
             return None
 
     return result

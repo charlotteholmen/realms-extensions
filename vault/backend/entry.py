@@ -579,15 +579,17 @@ def _refresh(force: bool = False) -> Async[dict]:
                                 )
 
                 # Create transaction record
-                Transfer(
+                transfer = Transfer(
                     id=tx_id,
                     principal_from=principal_from,
                     principal_to=principal_to,
                     subaccount=subaccount_hex,
-                    invoice=matched_invoice,
                     amount=amount,
                     timestamp=str(tx["timestamp"]),
                 )
+                # Link to invoice if payment matched
+                if matched_invoice:
+                    transfer.invoice = matched_invoice
 
                 # Update balances
                 if principal_to == vault_principal:

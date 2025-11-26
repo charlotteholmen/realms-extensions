@@ -19,7 +19,5 @@ async def test_refresh():
     ic.print(f"✅ Refresh completed!")
     ic.print(f"Result: {result}")
 
-    return result
-
 
 result = test_refresh()
