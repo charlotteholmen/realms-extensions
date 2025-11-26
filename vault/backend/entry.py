@@ -548,14 +548,45 @@ def _refresh(force: bool = False) -> Async[dict]:
                 principal_from = transfer_data["from_"]["owner"].to_str()
                 principal_to = transfer_data["to"]["owner"].to_str()
                 amount = transfer_data["amount"]
+                
+                # Extract destination subaccount (if present)
+                to_subaccount = transfer_data["to"].get("subaccount")
+                subaccount_hex = None
+                matched_invoice = None
+                
+                if to_subaccount:
+                    subaccount_bytes = bytes(to_subaccount)
+                    subaccount_hex = subaccount_bytes.hex()
+                    
+                    # Check if this deposit matches a pending invoice
+                    if principal_to == vault_principal:
+                        from ggg import Invoice
+                        
+                        # Direct lookup: subaccount → invoice_id → Invoice
+                        invoice = Invoice.from_subaccount(subaccount_bytes)
+                        
+                        if invoice and invoice.status == "Pending":
+                            # Check if amount is sufficient (convert ckBTC to satoshis)
+                            amount_required = int(invoice.amount * 100_000_000)
+                            
+                            if amount >= amount_required:
+                                invoice.status = "Paid"
+                                invoice.paid_at = str(ic.time())
+                                matched_invoice = invoice
+                                logger.info(
+                                    f"Invoice {invoice.id} marked as Paid via transfer {tx_id} "
+                                    f"(received: {amount}, required: {amount_required})"
+                                )
 
                 # Create transaction record
                 Transfer(
                     id=tx_id,
                     principal_from=principal_from,
                     principal_to=principal_to,
+                    subaccount=subaccount_hex,
+                    invoice=matched_invoice,
                     amount=amount,
-                    timestamp=str(tx["timestamp"]),  # Convert to string
+                    timestamp=str(tx["timestamp"]),
                 )
 
                 # Update balances
