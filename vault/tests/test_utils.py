@@ -112,7 +112,7 @@ def call_realm_extension(
 
     command = (
         f"dfx canister call realm_backend extension_async_call "
-        f"'(record {{ extension_name = \"{extension_name}\"; function_name = \"{method_name}\"; args = \"{escaped_args}\" }})' "
+        f'\'(record {{ extension_name = "{extension_name}"; function_name = "{method_name}"; args = "{escaped_args}" }})\' '
         f"--output json"
     )
 

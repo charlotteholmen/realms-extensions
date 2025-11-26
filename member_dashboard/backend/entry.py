@@ -26,10 +26,12 @@ def _service_to_dict(service: Service) -> Dict[str, Any]:
     }
 
 
-def _invoice_to_dict(invoice: Invoice, include_deposit_address: bool = True) -> Dict[str, Any]:
+def _invoice_to_dict(
+    invoice: Invoice, include_deposit_address: bool = True
+) -> Dict[str, Any]:
     """Convert Invoice entity to dictionary format with optional deposit address."""
     vault_principal = ic.id().to_str()
-    
+
     result = {
         "id": invoice.id,
         "amount": invoice.amount,
@@ -39,13 +41,13 @@ def _invoice_to_dict(invoice: Invoice, include_deposit_address: bool = True) -> 
         "paid_at": getattr(invoice, "paid_at", None),
         "metadata": invoice.metadata,
     }
-    
+
     if include_deposit_address:
         result["deposit_address"] = {
             "owner": vault_principal,
             "subaccount": invoice.get_subaccount_hex(),
         }
-    
+
     return result
 
 
@@ -62,12 +64,8 @@ def get_dashboard_summary(args: str) -> Async[str]:
 
         # Filter by user if provided
         if user_id and user_id != "anonymous":
-            user_services = [
-                s for s in all_services if s.user and s.user.id == user_id
-            ]
-            user_invoices = [
-                i for i in all_invoices if i.user and i.user.id == user_id
-            ]
+            user_services = [s for s in all_services if s.user and s.user.id == user_id]
+            user_invoices = [i for i in all_invoices if i.user and i.user.id == user_id]
         else:
             user_services = list(all_services)
             user_invoices = list(all_invoices)
@@ -76,9 +74,7 @@ def get_dashboard_summary(args: str) -> Async[str]:
         services_approaching = len(
             [s for s in user_services if s.status == "Approaching"]
         )
-        invoices_overdue = len(
-            [i for i in user_invoices if i.status == "Overdue"]
-        )
+        invoices_overdue = len([i for i in user_invoices if i.status == "Overdue"])
 
         summary_data = {
             "user_name": user_id,
@@ -121,9 +117,7 @@ def get_public_services(args: str) -> Async[str]:
 
         # Filter by user if user_id provided
         if user_id and user_id != "anonymous":
-            services = [
-                s for s in all_services if s.user and s.user.id == user_id
-            ]
+            services = [s for s in all_services if s.user and s.user.id == user_id]
         else:
             services = list(all_services)
 
@@ -132,10 +126,7 @@ def get_public_services(args: str) -> Async[str]:
 
         response = {
             "success": True,
-            "data": {
-                "services": services_list,
-                "total_count": len(services_list)
-            },
+            "data": {"services": services_list, "total_count": len(services_list)},
         }
 
         logger.info(f"get_public_services successful for user: {user_id}")
@@ -167,9 +158,7 @@ def get_tax_information(args: str) -> str:
 
         # Filter by user if user_id provided
         if user_id and user_id != "anonymous":
-            invoices = [
-                i for i in all_invoices if i.user and i.user.id == user_id
-            ]
+            invoices = [i for i in all_invoices if i.user and i.user.id == user_id]
         else:
             invoices = list(all_invoices)
 
@@ -178,9 +167,7 @@ def get_tax_information(args: str) -> str:
 
         # Calculate summary
         total_paid = sum(
-            record["amount"]
-            for record in invoices_list
-            if record["status"] == "Paid"
+            record["amount"] for record in invoices_list if record["status"] == "Paid"
         )
         total_pending = sum(
             record["amount"]
@@ -217,21 +204,23 @@ def get_tax_information(args: str) -> str:
 def get_vault_address(args: str) -> str:
     """
     Get the realm's vault address (canister principal) for deposits.
-    
+
     Returns:
         JSON string with vault principal ID
     """
     try:
         vault_principal = ic.id().to_str()
-        
-        return json.dumps({
-            "success": True,
-            "data": {
-                "vault_principal": vault_principal,
-                "network": "ICP",
-                "currency": "ckBTC",
+
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "vault_principal": vault_principal,
+                    "network": "ICP",
+                    "currency": "ckBTC",
+                },
             }
-        })
+        )
     except Exception as e:
         logger.error(f"Error in get_vault_address: {str(e)}")
         return json.dumps({"success": False, "error": str(e)})
@@ -240,10 +229,10 @@ def get_vault_address(args: str) -> str:
 def get_invoice_deposit_address(args: str) -> str:
     """
     Get the deposit address for a specific invoice.
-    
+
     Args:
         args: JSON string with {"invoice_id": "..."}
-    
+
     Returns:
         JSON string with owner (vault principal) and subaccount
     """
@@ -251,30 +240,34 @@ def get_invoice_deposit_address(args: str) -> str:
         logger.info(f"get_invoice_deposit_address called with args: {args}")
         params = json.loads(args) if args else {}
         invoice_id = params.get("invoice_id")
-        
+
         if not invoice_id:
             return json.dumps({"success": False, "error": "invoice_id is required"})
-        
+
         # Find the invoice
         invoice = Invoice[invoice_id]
         if not invoice:
             return json.dumps({"success": False, "error": "Invoice not found"})
-        
+
         vault_principal = ic.id().to_str()
-        
-        return json.dumps({
-            "success": True,
-            "data": {
-                "owner": vault_principal,
-                "subaccount": invoice.get_subaccount_hex(),
-                "subaccount_bytes": invoice.get_subaccount_list(),
-                "invoice_id": invoice_id,
-                "amount_due": invoice.amount,
-                "currency": getattr(invoice, "currency", "ckBTC") or "ckBTC",
+
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "owner": vault_principal,
+                    "subaccount": invoice.get_subaccount_hex(),
+                    "subaccount_bytes": invoice.get_subaccount_list(),
+                    "invoice_id": invoice_id,
+                    "amount_due": invoice.amount,
+                    "currency": getattr(invoice, "currency", "ckBTC") or "ckBTC",
+                },
             }
-        })
+        )
     except Exception as e:
-        logger.error(f"Error in get_invoice_deposit_address: {str(e)}\n{traceback.format_exc()}")
+        logger.error(
+            f"Error in get_invoice_deposit_address: {str(e)}\n{traceback.format_exc()}"
+        )
         return json.dumps({"success": False, "error": str(e)})
 
 
@@ -282,12 +275,12 @@ def check_invoice_payment(args: str) -> Async[str]:
     """
     Check if an invoice has been paid by querying its subaccount balance.
     If sufficient funds are found, marks the invoice as Paid.
-    
+
     This is an async function that queries the ckBTC ledger.
-    
+
     Args:
         args: JSON string with {"invoice_id": "..."}
-    
+
     Returns:
         JSON string with payment status and balance info
     """
@@ -295,86 +288,98 @@ def check_invoice_payment(args: str) -> Async[str]:
         logger.info(f"check_invoice_payment called with args: {args}")
         params = json.loads(args) if args else {}
         invoice_id = params.get("invoice_id")
-        
+
         if not invoice_id:
             return json.dumps({"success": False, "error": "invoice_id is required"})
-        
+
         # Find the invoice
         invoice = Invoice[invoice_id]
         if not invoice:
             return json.dumps({"success": False, "error": "Invoice not found"})
-        
+
         if invoice.status == "Paid":
-            return json.dumps({
-                "success": True,
-                "data": {
-                    "already_paid": True,
-                    "invoice_id": invoice_id,
-                    "paid_at": getattr(invoice, "paid_at", None),
+            return json.dumps(
+                {
+                    "success": True,
+                    "data": {
+                        "already_paid": True,
+                        "invoice_id": invoice_id,
+                        "paid_at": getattr(invoice, "paid_at", None),
+                    },
                 }
-            })
-        
+            )
+
         # Import vault utilities for ledger queries
         from extension_packages.vault.vault_lib.entities import Canisters
         from extension_packages.vault.vault_lib.candid_types import ICRCLedger, Account
         from kybra import Principal
-        
+
         # Get ledger canister
         ledger_canister = Canisters["ckBTC ledger"]
         if not ledger_canister:
-            return json.dumps({"success": False, "error": "ckBTC ledger not configured"})
-        
+            return json.dumps(
+                {"success": False, "error": "ckBTC ledger not configured"}
+            )
+
         # Query the invoice's subaccount balance
         vault_principal = ic.id()
         subaccount_bytes = invoice.get_subaccount()
-        
+
         ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
         result = yield ledger.icrc1_balance_of(
             Account(owner=vault_principal, subaccount=list(subaccount_bytes))
         )
-        
+
         # Unwrap the CallResult
         if hasattr(result, "Ok"):
             balance = result.Ok
         else:
             balance = result
-        
+
         # Convert invoice amount to satoshis (1 ckBTC = 100,000,000 satoshis)
         amount_satoshis = int(invoice.amount * 100_000_000)
-        
-        logger.info(f"Invoice {invoice_id}: balance={balance}, required={amount_satoshis}")
-        
+
+        logger.info(
+            f"Invoice {invoice_id}: balance={balance}, required={amount_satoshis}"
+        )
+
         if balance >= amount_satoshis:
             # Payment received! Mark invoice as paid
             invoice.status = "Paid"
             invoice.paid_at = datetime.utcnow().isoformat()
-            
+
             logger.info(f"Invoice {invoice_id} marked as Paid")
-            
-            return json.dumps({
-                "success": True,
-                "data": {
-                    "paid": True,
-                    "invoice_id": invoice_id,
-                    "balance_satoshis": balance,
-                    "amount_required_satoshis": amount_satoshis,
-                    "paid_at": invoice.paid_at,
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "data": {
+                        "paid": True,
+                        "invoice_id": invoice_id,
+                        "balance_satoshis": balance,
+                        "amount_required_satoshis": amount_satoshis,
+                        "paid_at": invoice.paid_at,
+                    },
                 }
-            })
+            )
         else:
-            return json.dumps({
-                "success": True,
-                "data": {
-                    "paid": False,
-                    "invoice_id": invoice_id,
-                    "balance_satoshis": balance,
-                    "amount_required_satoshis": amount_satoshis,
-                    "shortfall_satoshis": amount_satoshis - balance,
+            return json.dumps(
+                {
+                    "success": True,
+                    "data": {
+                        "paid": False,
+                        "invoice_id": invoice_id,
+                        "balance_satoshis": balance,
+                        "amount_required_satoshis": amount_satoshis,
+                        "shortfall_satoshis": amount_satoshis - balance,
+                    },
                 }
-            })
-            
+            )
+
     except Exception as e:
-        logger.error(f"Error in check_invoice_payment: {str(e)}\n{traceback.format_exc()}")
+        logger.error(
+            f"Error in check_invoice_payment: {str(e)}\n{traceback.format_exc()}"
+        )
         return json.dumps({"success": False, "error": str(e)})
 
 
@@ -429,8 +434,7 @@ def get_personal_data(args: str) -> str:
         return json.dumps(response)
     except Exception as e:
         logger.error(
-            f"Error in get_personal_data: {str(e)}\n"
-            f"{traceback.format_exc()}"
+            f"Error in get_personal_data: {str(e)}\n" f"{traceback.format_exc()}"
         )
         return json.dumps({"success": False, "error": str(e)})
 
@@ -484,9 +488,7 @@ def add_payment_account(args: str) -> str:
         currency = params.get("currency")
 
         if not all([user_id, address, label, network, currency]):
-            return json.dumps(
-                {"success": False, "error": "Missing required fields"}
-            )
+            return json.dumps({"success": False, "error": "Missing required fields"})
 
         # Get user
         user = User[user_id]
@@ -521,20 +523,15 @@ def add_payment_account(args: str) -> str:
             user=user,
             is_active=True,
             is_verified=False,
-            metadata="{}"
+            metadata="{}",
         )
 
-        logger.info(
-            f"Created payment account {payment_account.id} for user {user_id}"
-        )
+        logger.info(f"Created payment account {payment_account.id} for user {user_id}")
 
-        return json.dumps(
-            {"success": True, "data": payment_account.serialize()}
-        )
+        return json.dumps({"success": True, "data": payment_account.serialize()})
     except Exception as e:
         logger.error(
-            f"Error in add_payment_account: {str(e)}\n"
-            f"{traceback.format_exc()}"
+            f"Error in add_payment_account: {str(e)}\n" f"{traceback.format_exc()}"
         )
         return json.dumps({"success": False, "error": str(e)})
 
@@ -563,9 +560,7 @@ def list_payment_accounts(args: str) -> str:
 
         # Get active payment accounts
         accounts = [
-            pa.serialize()
-            for pa in list(user.payment_accounts)
-            if pa.is_active
+            pa.serialize() for pa in list(user.payment_accounts) if pa.is_active
         ]
 
         return json.dumps({"success": True, "data": accounts})
@@ -591,9 +586,7 @@ def remove_payment_account(args: str) -> str:
         account_id = params.get("account_id")
 
         if not all([user_id, account_id]):
-            return json.dumps(
-                {"success": False, "error": "Missing required fields"}
-            )
+            return json.dumps({"success": False, "error": "Missing required fields"})
 
         # Get user
         user = User[user_id]
@@ -603,9 +596,7 @@ def remove_payment_account(args: str) -> str:
         # Find account
         account = PaymentAccount[account_id]
         if not account or account.user != user:
-            return json.dumps(
-                {"success": False, "error": "Payment account not found"}
-            )
+            return json.dumps({"success": False, "error": "Payment account not found"})
 
         # Soft delete
         account.is_active = False
