@@ -24,32 +24,29 @@ def extension_sync_call(method_name: str, args: dict):
     Synchronous extension API calls for task monitoring operations
     """
     methods = {
-        "get_all_tasks": (get_all_tasks, False),
-        "get_task_details": (get_task_details, True),
-        "get_task_executions": (get_task_executions, True),
-        "toggle_schedule": (toggle_schedule, True),
-        "run_task_now": (run_task_now, True),
-        "delete_task": (delete_task, True),
-        "get_task_logs": (get_task_logs, True),
+        "get_all_tasks": get_all_tasks,
+        "get_task_details": get_task_details,
+        "get_task_executions": get_task_executions,
+        "toggle_schedule": toggle_schedule,
+        "run_task_now": run_task_now,
+        "delete_task": delete_task,
+        "get_task_logs": get_task_logs,
     }
 
     if method_name not in methods:
-        return {"success": False, "error": f"Unknown method: {method_name}"}
+        return json.dumps({"success": False, "error": f"Unknown method: {method_name}"})
 
-    function, requires_args = methods[method_name]
+    function = methods[method_name]
 
     try:
-        if requires_args:
-            return function(args)
-        else:
-            return function()
+        return function(args)
     except Exception as e:
         logger.error(f"Error calling {method_name}: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"success": False, "error": f"Error calling {method_name}: {str(e)}"}
+        return json.dumps({"success": False, "error": f"Error calling {method_name}: {str(e)}"})
 
 
-def get_all_tasks():
+def get_all_tasks(args: str = "{}"):
     """
     Get all tasks with their schedules and status
     """
@@ -89,11 +86,11 @@ def get_all_tasks():
 
             tasks.append(task_data)
 
-        return {"success": True, "tasks": tasks, "count": len(tasks)}
+        return json.dumps({"success": True, "tasks": tasks, "count": len(tasks)})
     except Exception as e:
         logger.error(f"Error getting tasks: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"success": False, "error": str(e)}
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def get_task_details(args):
@@ -103,7 +100,7 @@ def get_task_details(args):
     try:
         task_id = args.get("task_id")
         if not task_id:
-            return {"success": False, "error": "task_id is required"}
+            return json.dumps({"success": False, "error": "task_id is required"})
 
         # Find task
         task = None
@@ -113,7 +110,7 @@ def get_task_details(args):
                 break
 
         if not task:
-            return {"success": False, "error": f"Task {task_id} not found"}
+            return json.dumps({"success": False, "error": f"Task {task_id} not found"})
 
         # Build detailed task data
         task_data = {
@@ -177,11 +174,11 @@ def get_task_details(args):
                     }
                 )
 
-        return {"success": True, "task": task_data}
+        return json.dumps({"success": True, "task": task_data})
     except Exception as e:
         logger.error(f"Error getting task details: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"success": False, "error": str(e)}
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def get_task_executions(args):
@@ -193,7 +190,7 @@ def get_task_executions(args):
         limit = args.get("limit", 50)
 
         if not task_id:
-            return {"success": False, "error": "task_id is required"}
+            return json.dumps({"success": False, "error": "task_id is required"})
 
         # Find task
         task = None
@@ -203,7 +200,7 @@ def get_task_executions(args):
                 break
 
         if not task:
-            return {"success": False, "error": f"Task {task_id} not found"}
+            return json.dumps({"success": False, "error": f"Task {task_id} not found"})
 
         executions = []
         if hasattr(task, "executions"):
@@ -230,16 +227,16 @@ def get_task_executions(args):
                     }
                 )
 
-        return {
+        return json.dumps({
             "success": True,
             "executions": executions,
             "count": len(executions),
             "task_name": task.name,
-        }
+        })
     except Exception as e:
         logger.error(f"Error getting task executions: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"success": False, "error": str(e)}
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def toggle_schedule(args):
@@ -251,7 +248,7 @@ def toggle_schedule(args):
         disabled = args.get("disabled", True)
 
         if not schedule_id:
-            return {"success": False, "error": "schedule_id is required"}
+            return json.dumps({"success": False, "error": "schedule_id is required"})
 
         # Find schedule
         schedule = None
@@ -261,23 +258,23 @@ def toggle_schedule(args):
                 break
 
         if not schedule:
-            return {"success": False, "error": f"Schedule {schedule_id} not found"}
+            return json.dumps({"success": False, "error": f"Schedule {schedule_id} not found"})
 
         schedule.disabled = disabled
         logger.info(
             f"Schedule {schedule.name} ({'disabled' if disabled else 'enabled'})"
         )
 
-        return {
+        return json.dumps({
             "success": True,
             "message": f"Schedule {'disabled' if disabled else 'enabled'}",
             "schedule_id": str(schedule._id),
             "disabled": disabled,
-        }
+        })
     except Exception as e:
         logger.error(f"Error toggling schedule: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"success": False, "error": str(e)}
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def run_task_now(args):
@@ -288,7 +285,7 @@ def run_task_now(args):
         task_id = args.get("task_id")
 
         if not task_id:
-            return {"success": False, "error": "task_id is required"}
+            return json.dumps({"success": False, "error": "task_id is required"})
 
         # Find task
         task = None
@@ -298,7 +295,7 @@ def run_task_now(args):
                 break
 
         if not task:
-            return {"success": False, "error": f"Task {task_id} not found"}
+            return json.dumps({"success": False, "error": f"Task {task_id} not found"})
 
         # Reset task to pending state
         if hasattr(task, "status"):
@@ -319,15 +316,15 @@ def run_task_now(args):
 
         logger.info(f"Task {task.name} triggered manually")
 
-        return {
+        return json.dumps({
             "success": True,
             "message": f"Task {task.name} started",
             "task_id": str(task._id),
-        }
+        })
     except Exception as e:
         logger.error(f"Error running task: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"success": False, "error": str(e)}
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def delete_task(args):
@@ -338,7 +335,7 @@ def delete_task(args):
         task_id = args.get("task_id")
 
         if not task_id:
-            return {"success": False, "error": "task_id is required"}
+            return json.dumps({"success": False, "error": "task_id is required"})
 
         # Find task
         task = None
@@ -348,7 +345,7 @@ def delete_task(args):
                 break
 
         if not task:
-            return {"success": False, "error": f"Task {task_id} not found"}
+            return json.dumps({"success": False, "error": f"Task {task_id} not found"})
 
         task_name = task.name
 
@@ -374,15 +371,15 @@ def delete_task(args):
 
         logger.info(f"Task {task_name} deleted")
 
-        return {
+        return json.dumps({
             "success": True,
             "message": f"Task {task_name} deleted successfully",
             "task_id": task_id,
-        }
+        })
     except Exception as e:
         logger.error(f"Error deleting task: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"success": False, "error": str(e)}
+        return json.dumps({"success": False, "error": str(e)})
 
 
 def get_task_logs(args):
@@ -394,7 +391,7 @@ def get_task_logs(args):
         limit = args.get("limit", 100)
 
         if not task_id:
-            return {"success": False, "error": "task_id is required"}
+            return json.dumps({"success": False, "error": "task_id is required"})
 
         # Import the logging module to access logs
         from kybra_simple_logging import get_logs
@@ -403,19 +400,19 @@ def get_task_logs(args):
         logger_name = f"task_{task_id}"
         logs = get_logs(logger_name, limit)
 
-        return {"success": True, "logs": logs, "count": len(logs)}
+        return json.dumps({"success": True, "logs": logs, "count": len(logs)})
     except Exception as e:
         # Fallback if get_logs doesn't exist
         logger.error(f"Error getting task logs: {str(e)}")
-        return {
+        return json.dumps({
             "success": False,
             "error": "Log retrieval not available",
             "message": "Check TaskExecution records for execution logs",
-        }
+        })
 
 
 def extension_async_call(method_name: str, args: dict):
     """
     Async extension API calls (reserved for future use)
     """
-    return {"success": False, "error": "No async methods available"}
+    return json.dumps({"success": False, "error": "No async methods available"})

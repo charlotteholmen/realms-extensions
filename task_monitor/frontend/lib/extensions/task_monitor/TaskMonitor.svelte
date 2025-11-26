@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { _ } from 'svelte-i18n';
-  import { extensionSyncCall } from '$lib/api/extensions';
+  import { backend } from '$lib/canisters';
   import { Button, Badge, Card, Modal, Spinner, Table, TableHead, TableHeadCell, TableBody, TableBodyCell, TableBodyRow } from 'flowbite-svelte';
   
   interface TaskSchedule {
@@ -56,15 +56,20 @@
   
   async function loadTasks() {
     try {
-      const response = await extensionSyncCall('task_monitor', 'get_all_tasks', {});
+      const response = await backend.extension_sync_call({
+        extension_name: 'task_monitor',
+        function_name: 'get_all_tasks',
+        args: '{}'
+      });
       if (response.success) {
-        tasks = response.tasks || [];
+        const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+        tasks = data.tasks || [];
         error = '';
       } else {
-        error = response.error || 'Failed to load tasks';
+        error = response.response || 'Failed to load tasks';
       }
-    } catch (e: any) {
-      error = e.message || 'Error loading tasks';
+    } catch (e) {
+      error = 'Error loading tasks: ' + e.message;
     } finally {
       loading = false;
     }
@@ -72,9 +77,14 @@
   
   async function viewTaskDetails(taskId: string) {
     try {
-      const response = await extensionSyncCall('task_monitor', 'get_task_details', { task_id: taskId });
+      const response = await backend.extension_sync_call({
+        extension_name: 'task_monitor',
+        function_name: 'get_task_details',
+        args: JSON.stringify({ task_id: taskId })
+      });
       if (response.success) {
-        selectedTask = response.task;
+        const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+        selectedTask = data.task;
         showDetailModal = true;
       } else {
         alert(response.error || 'Failed to load task details');
@@ -86,9 +96,14 @@
   
   async function viewExecutions(taskId: string) {
     try {
-      const response = await extensionSyncCall('task_monitor', 'get_task_executions', { task_id: taskId, limit: 50 });
+      const response = await backend.extension_sync_call({
+        extension_name: 'task_monitor',
+        function_name: 'get_task_executions',
+        args: JSON.stringify({ task_id: taskId, limit: 50 })
+      });
       if (response.success) {
-        taskExecutions = response.executions || [];
+        const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+        taskExecutions = data.executions || [];
         showExecutionsModal = true;
       } else {
         alert(response.error || 'Failed to load executions');
@@ -100,9 +115,13 @@
   
   async function toggleSchedule(scheduleId: string, disabled: boolean) {
     try {
-      const response = await extensionSyncCall('task_monitor', 'toggle_schedule', { 
-        schedule_id: scheduleId, 
-        disabled: !disabled 
+      const response = await backend.extension_sync_call({
+        extension_name: 'task_monitor',
+        function_name: 'toggle_schedule',
+        args: JSON.stringify({ 
+          schedule_id: scheduleId, 
+          disabled: !disabled 
+        })
       });
       if (response.success) {
         await loadTasks();
@@ -118,9 +137,14 @@
     if (!confirm($_('extensions.task_monitor.confirm_run'))) return;
     
     try {
-      const response = await extensionSyncCall('task_monitor', 'run_task_now', { task_id: taskId });
+      const response = await backend.extension_sync_call({
+        extension_name: 'task_monitor',
+        function_name: 'run_task_now',
+        args: JSON.stringify({ task_id: taskId })
+      });
       if (response.success) {
-        alert(response.message || 'Task started');
+        const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+        alert(data.message || 'Task started');
         await loadTasks();
       } else {
         alert(response.error || 'Failed to run task');
@@ -134,9 +158,14 @@
     if (!confirm($_('extensions.task_monitor.confirm_delete'))) return;
     
     try {
-      const response = await extensionSyncCall('task_monitor', 'delete_task', { task_id: taskId });
+      const response = await backend.extension_sync_call({
+        extension_name: 'task_monitor',
+        function_name: 'delete_task',
+        args: JSON.stringify({ task_id: taskId })
+      });
       if (response.success) {
-        alert(response.message || 'Task deleted');
+        const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+        alert(data.message || 'Task deleted');
         await loadTasks();
       } else {
         alert(response.error || 'Failed to delete task');
