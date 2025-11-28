@@ -60,7 +60,7 @@ The voting extension has been migrated from hardcoded data to using GGG (General
 
 1. Create a new realm:
    ```bash
-   realms create --random --output-dir my-realm
+   realms realm create --random --output-dir my-realm
    ```
 
 2. Import the voting data:
@@ -78,7 +78,7 @@ The voting extension has been migrated from hardcoded data to using GGG (General
 
 2. Redeploy the realm:
    ```bash
-   realms deploy
+   realms realm deploy
    ```
 
 3. Import the voting data:

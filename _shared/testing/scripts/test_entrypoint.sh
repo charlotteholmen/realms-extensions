@@ -135,7 +135,7 @@ fi
 
 # Create realm
 echo "[INFO] Creating test realm..."
-REALM_CMD="realms create"
+REALM_CMD="realms realm create"
 if [ "$REALM_RANDOM" = "true" ]; then
     REALM_CMD="$REALM_CMD --random"
 fi
@@ -186,7 +186,7 @@ fi
 
 # Deploy realm
 echo '[INFO] Deploying realm...'
-realms deploy --folder ".realm"
+realms realm deploy --folder ".realm"
 
 # Deploy test canisters if enabled
 if [ "$TEST_CANISTERS_ENABLED" = "true" ] && [ -n "$TEST_CANISTERS_DEPLOY" ]; then

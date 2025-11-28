@@ -112,7 +112,7 @@ realms extension install --source ../realms-extension-vault/
 
 # Deploy and test
 dfx start --clean --background
-realms deploy --network local
+realms realm deploy --network local
 
 # Verify installation
 dfx canister call realm_backend extension_call '("vault", "get_status", "{}")'

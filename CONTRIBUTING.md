@@ -43,7 +43,7 @@ Thank you for your interest in contributing to the Vault Manager extension for R
 
 6. **Deploy for Testing**
    ```bash
-   realms deploy --network local
+   realms realm deploy --network local
    ```
 
 ## Project Structure
@@ -78,7 +78,7 @@ realms-extension-vault/
    ```bash
    cd ../realms
    realms extension install --source ../realms-extension-vault/
-   realms deploy --network local
+   realms realm deploy --network local
    ```
 
 3. Verify changes:

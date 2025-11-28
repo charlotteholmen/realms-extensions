@@ -28,7 +28,7 @@ The file follows the GGG entity format for Dispute entities. Each dispute record
 
 This data is automatically loaded during realm deployment via the automatic extension data loading feature.
 
-When you run `realms create --deploy`, the system will:
+When you run `realms realm create --deploy`, the system will:
 1. Discover all `extensions/*/data/*.json` files
 2. Import them automatically into the database
 

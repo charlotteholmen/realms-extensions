@@ -28,7 +28,7 @@ The file follows the GGG entity format. Each notification record includes:
 
 This data is automatically loaded during realm deployment via the automatic extension data loading feature.
 
-When you run `realms create --deploy` or deploy a generated realm, the system will:
+When you run `realms realm create --deploy` or deploy a generated realm, the system will:
 1. Discover all `extensions/*/data/*.json` files
 2. Import them automatically
 

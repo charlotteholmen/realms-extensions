@@ -47,7 +47,7 @@ realms extension install --source /path/to/realms-extension-vault/
 
 # Deploy locally for testing
 dfx start --clean --background
-realms deploy --network local
+realms realm deploy --network local
 
 # Run tests
 cd /path/to/realms-extension-vault/
@@ -65,7 +65,7 @@ realms extension install vault \
 realms extension install vault@0.1.0
 
 # Deploy
-realms deploy
+realms realm deploy
 ```
 
 ## Usage

@@ -88,7 +88,7 @@ The vault E2E tests cover:
 Make sure the realm is deployed:
 ```bash
 cd ../../..
-realms deploy
+realms realm deploy
 ```
 
 ### Browser not found

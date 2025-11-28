@@ -31,12 +31,12 @@ The file follows the same format as `realm_data.json` in the main realm director
 
 To load this data into your realm:
 
-1. **During realm creation** with `realms create`:
+1. **During realm creation** with `realms realm create`:
    ```bash
-   realms create --random --output-dir my-realm
+   realms realm create --random --output-dir my-realm
    ```
 
-2. **During deployment** with `realms deploy`:
+2. **During deployment** with `realms realm deploy`:
    The data will be automatically loaded when you run:
    ```bash
    cd my-realm
