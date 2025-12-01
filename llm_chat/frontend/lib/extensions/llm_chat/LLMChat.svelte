@@ -6,7 +6,7 @@
 	// @ts-ignore
 	import { backend } from '$lib/canisters';
 	// @ts-ignore
-	import { canisterId as backendCanisterId } from 'declarations/realm_backend';
+	import { canisterId as backendCanisterId } from '$lib/declarations/realm_backend';
 	import { principal, isAuthenticated } from '$lib/stores/auth';
 	import { _ } from 'svelte-i18n';
 	import SafeText from '$lib/components/SafeText.svelte';
