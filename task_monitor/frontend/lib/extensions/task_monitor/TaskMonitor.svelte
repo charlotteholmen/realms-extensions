@@ -231,7 +231,7 @@
     <div class="overflow-x-auto">
       <Table striped={true}>
         <TableHead>
-          <TableHeadCell>{$_('extensions.task_monitor.name')}</TableHeadCell>
+          <TableHeadCell>{$_('extensions.task_monitor.name_column')}</TableHeadCell>
           <TableHeadCell>{$_('extensions.task_monitor.status')}</TableHeadCell>
           <TableHeadCell>{$_('extensions.task_monitor.progress')}</TableHeadCell>
           <TableHeadCell>{$_('extensions.task_monitor.schedule')}</TableHeadCell>
