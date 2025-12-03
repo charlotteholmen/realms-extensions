@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { _ } from 'svelte-i18n';
+  import { goto } from '$app/navigation';
   import { backend } from '$lib/canisters';
-  import { Button, Badge, Card, Modal, Spinner, Table, TableHead, TableHeadCell, TableBody, TableBodyCell, TableBodyRow } from 'flowbite-svelte';
+  import { Button, Badge, Card, Spinner, Table, TableHead, TableHeadCell, TableBody, TableBodyCell, TableBodyRow } from 'flowbite-svelte';
   
   interface TaskSchedule {
     _id: string;
@@ -26,23 +27,9 @@
     updated_at: number | null;
   }
   
-  interface TaskExecution {
-    _id: string;
-    name: string;
-    status: string;
-    logs: string;
-    result: string;
-    created_at: number | null;
-    updated_at: number | null;
-  }
-  
   let tasks: Task[] = [];
   let loading = true;
   let error = '';
-  let selectedTask: any = null;
-  let showDetailModal = false;
-  let showExecutionsModal = false;
-  let taskExecutions: TaskExecution[] = [];
   let refreshInterval: any = null;
   
   onMount(() => {
@@ -75,42 +62,8 @@
     }
   }
   
-  async function viewTaskDetails(taskId: string) {
-    try {
-      const response = await backend.extension_sync_call({
-        extension_name: 'task_monitor',
-        function_name: 'get_task_details',
-        args: JSON.stringify({ task_id: taskId })
-      });
-      if (response.success) {
-        const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-        selectedTask = data.task;
-        showDetailModal = true;
-      } else {
-        alert(response.error || 'Failed to load task details');
-      }
-    } catch (e: any) {
-      alert(e.message || 'Error loading task details');
-    }
-  }
-  
-  async function viewExecutions(taskId: string) {
-    try {
-      const response = await backend.extension_sync_call({
-        extension_name: 'task_monitor',
-        function_name: 'get_task_executions',
-        args: JSON.stringify({ task_id: taskId, limit: 50 })
-      });
-      if (response.success) {
-        const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-        taskExecutions = data.executions || [];
-        showExecutionsModal = true;
-      } else {
-        alert(response.error || 'Failed to load executions');
-      }
-    } catch (e: any) {
-      alert(e.message || 'Error loading executions');
-    }
+  function viewTaskDetails(taskId: string) {
+    goto(`/monitor/${taskId}`);
   }
   
   async function toggleSchedule(scheduleId: string, disabled: boolean) {
@@ -288,7 +241,7 @@
               </TableBodyCell>
               <TableBodyCell>
                 <button
-                  on:click={() => viewExecutions(task._id)}
+                  on:click={() => viewTaskDetails(task._id)}
                   class="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   {task.executions_count}
@@ -299,10 +252,10 @@
                   <Button size="xs" color="light" on:click={() => viewTaskDetails(task._id)}>
                     {$_('extensions.task_monitor.view')}
                   </Button>
-                  <Button size="xs" color="blue" on:click={() => runTaskNow(task._id)}>
+                  <Button size="xs" class="bg-blue-600 text-white hover:bg-blue-700" on:click={() => runTaskNow(task._id)}>
                     {$_('extensions.task_monitor.run')}
                   </Button>
-                  <Button size="xs" color="red" on:click={() => deleteTask(task._id)}>
+                  <Button size="xs" class="bg-red-600 text-white hover:bg-red-700" on:click={() => deleteTask(task._id)}>
                     {$_('extensions.task_monitor.delete')}
                   </Button>
                 </div>
@@ -314,123 +267,6 @@
     </div>
   {/if}
 </div>
-
-<!-- Task Details Modal -->
-<Modal bind:open={showDetailModal} size="xl" autoclose={false}>
-  <div slot="header">
-    <h3 class="text-xl font-semibold">{$_('extensions.task_monitor.task_details')}</h3>
-  </div>
-  
-  {#if selectedTask}
-    <div class="space-y-4">
-      <div>
-        <h4 class="font-semibold mb-2">{$_('extensions.task_monitor.basic_info')}</h4>
-        <div class="grid grid-cols-2 gap-4 text-sm">
-          <div><strong>Name:</strong> {selectedTask.name}</div>
-          <div><strong>Status:</strong> <Badge color={getStatusBadge(selectedTask.status)}>{selectedTask.status}</Badge></div>
-          <div><strong>ID:</strong> {selectedTask._id}</div>
-          <div><strong>Progress:</strong> {selectedTask.step_to_execute} / {selectedTask.steps?.length || 0} steps</div>
-        </div>
-      </div>
-      
-      {#if selectedTask.steps && selectedTask.steps.length > 0}
-        <div>
-          <h4 class="font-semibold mb-2">{$_('extensions.task_monitor.steps')}</h4>
-          {#each selectedTask.steps as step, i}
-            <Card class="mb-2">
-              <div class="flex justify-between items-start">
-                <div>
-                  <div class="font-medium">Step {i + 1}</div>
-                  <Badge color={getStatusBadge(step.status)} class="mt-1">{step.status}</Badge>
-                  {#if step.is_async}
-                    <Badge color="purple" class="mt-1 ml-2">Async</Badge>
-                  {/if}
-                </div>
-              </div>
-              {#if step.codex}
-                <div class="mt-2">
-                  <div class="text-sm font-medium">{$_('extensions.task_monitor.codex')}: {step.codex.name}</div>
-                  {#if step.codex.description}
-                    <div class="text-sm text-gray-600 dark:text-gray-400">{step.codex.description}</div>
-                  {/if}
-                  <details class="mt-2">
-                    <summary class="cursor-pointer text-sm text-blue-600 dark:text-blue-400">
-                      {$_('extensions.task_monitor.show_code')}
-                    </summary>
-                    <pre class="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-x-auto">{step.codex.code}</pre>
-                  </details>
-                </div>
-              {/if}
-            </Card>
-          {/each}
-        </div>
-      {/if}
-      
-      {#if selectedTask.schedules && selectedTask.schedules.length > 0}
-        <div>
-          <h4 class="font-semibold mb-2">{$_('extensions.task_monitor.schedules')}</h4>
-          {#each selectedTask.schedules as schedule}
-            <Card class="mb-2">
-              <div class="grid grid-cols-2 gap-2 text-sm">
-                <div><strong>Name:</strong> {schedule.name}</div>
-                <div><strong>Interval:</strong> {formatInterval(schedule.repeat_every)}</div>
-                <div><strong>Status:</strong> 
-                  <Badge color={schedule.disabled ? 'gray' : 'green'}>
-                    {schedule.disabled ? 'Disabled' : 'Enabled'}
-                  </Badge>
-                </div>
-                <div><strong>Last Run:</strong> {formatTimestamp(schedule.last_run_at)}</div>
-              </div>
-            </Card>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  {/if}
-</Modal>
-
-<!-- Executions Modal -->
-<Modal bind:open={showExecutionsModal} size="xl" autoclose={false}>
-  <div slot="header">
-    <h3 class="text-xl font-semibold">{$_('extensions.task_monitor.execution_history')}</h3>
-  </div>
-  
-  {#if taskExecutions.length === 0}
-    <p class="text-gray-500 dark:text-gray-400 text-center py-8">
-      {$_('extensions.task_monitor.no_executions')}
-    </p>
-  {:else}
-    <div class="space-y-2 max-h-96 overflow-y-auto">
-      {#each taskExecutions as execution}
-        <Card>
-          <div class="flex justify-between items-start mb-2">
-            <div>
-              <div class="font-medium">{execution.name}</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                {formatTimestamp(execution.created_at)}
-              </div>
-            </div>
-            <Badge color={getStatusBadge(execution.status)}>{execution.status}</Badge>
-          </div>
-          {#if execution.result}
-            <div class="mt-2 text-sm">
-              <strong>{$_('extensions.task_monitor.result')}:</strong>
-              <pre class="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-x-auto">{execution.result}</pre>
-            </div>
-          {/if}
-          {#if execution.logs}
-            <details class="mt-2">
-              <summary class="cursor-pointer text-sm text-blue-600 dark:text-blue-400">
-                {$_('extensions.task_monitor.show_logs')}
-              </summary>
-              <pre class="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-x-auto">{execution.logs}</pre>
-            </details>
-          {/if}
-        </Card>
-      {/each}
-    </div>
-  {/if}
-</Modal>
 
 <style>
   :global(.dark) pre {

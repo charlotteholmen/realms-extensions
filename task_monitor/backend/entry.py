@@ -98,6 +98,9 @@ def get_task_details(args):
     Get detailed information about a specific task including steps and codex
     """
     try:
+        # Parse args if it's a string
+        if isinstance(args, str):
+            args = json.loads(args)
         task_id = args.get("task_id")
         if not task_id:
             return json.dumps({"success": False, "error": "task_id is required"})
@@ -186,6 +189,9 @@ def get_task_executions(args):
     Get execution history for a specific task
     """
     try:
+        # Parse args if it's a string
+        if isinstance(args, str):
+            args = json.loads(args)
         task_id = args.get("task_id")
         limit = args.get("limit", 50)
 
@@ -244,6 +250,9 @@ def toggle_schedule(args):
     Enable or disable a task schedule
     """
     try:
+        # Parse args if it's a string
+        if isinstance(args, str):
+            args = json.loads(args)
         schedule_id = args.get("schedule_id")
         disabled = args.get("disabled", True)
 
@@ -282,6 +291,9 @@ def run_task_now(args):
     Immediately execute a task by triggering the task manager
     """
     try:
+        # Parse args if it's a string
+        if isinstance(args, str):
+            args = json.loads(args)
         task_id = args.get("task_id")
 
         if not task_id:
@@ -332,6 +344,9 @@ def delete_task(args):
     Delete a task and its associated schedules and executions
     """
     try:
+        # Parse args if it's a string
+        if isinstance(args, str):
+            args = json.loads(args)
         task_id = args.get("task_id")
 
         if not task_id:
@@ -387,6 +402,9 @@ def get_task_logs(args):
     Get recent logs from kybra-simple-logging for a specific task
     """
     try:
+        # Parse args if it's a string
+        if isinstance(args, str):
+            args = json.loads(args)
         task_id = args.get("task_id")
         limit = args.get("limit", 100)
 
