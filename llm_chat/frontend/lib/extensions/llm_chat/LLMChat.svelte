@@ -96,27 +96,6 @@
 			console.log("Got canister ID from direct import:", REALM_CANISTER_ID);
 		} catch (err) {
 			console.error("Error getting canister ID from direct import:", err);
-			
-			try {
-				// Alternative method: try to get it from the URL
-				const hostname = window.location.hostname;
-				// Format: uzt4z-lp777-77774-qaaaq-cai.localhost:8000
-				if (hostname.includes('-')) {
-					const parts = hostname.split('.');
-					if (parts.length > 0) {
-						REALM_CANISTER_ID = parts[0];
-						console.log("Got canister ID from hostname:", REALM_CANISTER_ID);
-					}
-				}
-			} catch (err2) {
-				console.error("Error getting canister ID from URL:", err2);
-			}
-			
-			// Fallback if all else fails
-			if (!REALM_CANISTER_ID) {
-				REALM_CANISTER_ID = "uxrrr-q7777-77774-qaaaq-cai"; // Default fallback
-				console.log("Using default canister ID:", REALM_CANISTER_ID);
-			}
 		}
 		
 		// Initialize API URL
