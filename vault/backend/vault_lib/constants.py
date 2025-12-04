@@ -1,12 +1,22 @@
 # Canister Configuration and System Limits
 
+# Import canister IDs from central config (updated during deployment)
+try:
+    from config import CANISTER_IDS
+    _ckbtc_ledger = CANISTER_IDS.get("ckbtc_ledger", "mxzaz-hqaaa-aaaar-qaada-cai")
+    _ckbtc_indexer = CANISTER_IDS.get("ckbtc_indexer", "n5wcd-faaaa-aaaar-qaaea-cai")
+except ImportError:
+    # Fallback to IC mainnet defaults if config not available
+    _ckbtc_ledger = "mxzaz-hqaaa-aaaar-qaada-cai"
+    _ckbtc_indexer = "n5wcd-faaaa-aaaar-qaaea-cai"
+
 # Dictionary of canister principal IDs implementing Chain-Key tokens in the IC
 # Each token has a corresponding ledger canister for token operations
 # and an indexer canister for transaction history and queries
 CANISTER_PRINCIPALS = {
     "ckBTC": {
-        "ledger": "mxzaz-hqaaa-aaaar-qaada-cai",
-        "indexer": "n5wcd-faaaa-aaaar-qaaea-cai",
+        "ledger": _ckbtc_ledger,
+        "indexer": _ckbtc_indexer,
     }
 }
 
