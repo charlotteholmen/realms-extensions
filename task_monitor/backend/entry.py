@@ -11,7 +11,7 @@ import ggg
 from core.task_manager import TaskManager
 from ggg.codex import Codex
 from ggg.task import Task
-from ggg.task_executions import TaskExecution
+from ggg.task_execution import TaskExecution
 from ggg.task_schedule import TaskSchedule
 from kybra import ic
 from kybra_simple_logging import get_logger
