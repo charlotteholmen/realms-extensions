@@ -59,7 +59,7 @@
   }
 
   function viewCodex(codexId: string) {
-    goto(`/codex/${codexId}`);
+    goto(`/extensions/codex_viewer/${codexId}`);
   }
 
   function formatTimestamp(timestamp: number | null): string {

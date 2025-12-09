@@ -79,7 +79,7 @@
 <div class="p-6 max-w-6xl mx-auto">
   <!-- Header -->
   <div class="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-    <a href="/codex" class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+    <a href="/extensions/codex_viewer" class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
       </svg>

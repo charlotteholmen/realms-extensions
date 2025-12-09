@@ -6,6 +6,6 @@
   "categories": ["other"],
   "permissions": ["admin"],
   "profiles": ["admin"],
-  "path": "codex",
+  "path": "codex_viewer",
   "show_in_sidebar": true
 }

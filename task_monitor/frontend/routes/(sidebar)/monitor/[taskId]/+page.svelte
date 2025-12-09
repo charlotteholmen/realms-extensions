@@ -364,7 +364,7 @@
               <Badge color={getStatusColor(step.status)} class="text-xs">{step.status}</Badge>
               {#if step.codex?.name}
                 <a 
-                  href="/codex/{step.codex.name}" 
+                  href="/extensions/codex_viewer/{step.codex.name}" 
                   class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
                 >
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
