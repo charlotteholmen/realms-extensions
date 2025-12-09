@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Card, Spinner, Alert, Table, TableBody, TableBodyCell, TableBodyRow, TableHead, TableHeadCell, Badge, Button, Tooltip } from 'flowbite-svelte';
+	import { Card, Spinner, Alert, Table, TableBody, TableBodyCell, TableBodyRow, TableHead, TableHeadCell, Badge, Button, Tooltip, Modal } from 'flowbite-svelte';
 	import { DollarOutline, CheckCircleOutline, ClockOutline, ExclamationCircleOutline, DownloadOutline, CreditCardOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	
@@ -11,6 +11,13 @@
 	let loading = true;
 	let error = '';
 	let taxData = null;
+	
+	// Payment modal state
+	let showPaymentModal = false;
+	let paymentLoading = false;
+	let paymentInfo = null;
+	let selectedRecord = null;
+	let copied = false;
 	
 	// Calculate percentages for the distribution bar
 	$: totalAmount = taxData ? (taxData.summary.total_paid + taxData.summary.total_pending + taxData.summary.total_overdue) : 0;
@@ -97,6 +104,46 @@
 			error = `Error fetching tax information: ${err.message || err}`;
 		} finally {
 			loading = false;
+		}
+	}
+	
+	// Open payment modal and fetch deposit address
+	async function openPaymentModal(record) {
+		selectedRecord = record;
+		showPaymentModal = true;
+		paymentLoading = true;
+		paymentInfo = null;
+		
+		try {
+			const response = await backend.extension_sync_call({
+				extension_name: "member_dashboard",
+				function_name: "get_invoice_deposit_address",
+				args: JSON.stringify({ invoice_id: record.id })
+			});
+			
+			if (response.success) {
+				const data = JSON.parse(response.response);
+				if (data.success) {
+					paymentInfo = data.data;
+				} else {
+					console.error('Failed to get deposit address:', data.error);
+				}
+			}
+		} catch (err) {
+			console.error('Error fetching deposit address:', err);
+		} finally {
+			paymentLoading = false;
+		}
+	}
+	
+	// Copy command to clipboard
+	async function copyCommand(text) {
+		try {
+			await navigator.clipboard.writeText(text);
+			copied = true;
+			setTimeout(() => { copied = false; }, 2000);
+		} catch (e) {
+			console.error('Failed to copy:', e);
 		}
 	}
 	
@@ -236,7 +283,14 @@
 							</TableBodyCell>
 							<TableBodyCell class="text-right">
 								{#if record.status === 'Pending' || record.status === 'Overdue'}
-									<Button size="xs" color="blue" class="px-3">Pay</Button>
+									<Button 
+										size="xs" 
+										class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+										on:click={() => openPaymentModal(record)}
+									>
+										<CreditCardOutline class="w-3.5 h-3.5 mr-1.5" />
+										Pay
+									</Button>
 								{:else}
 									<Button size="xs" color="light" class="px-3">View</Button>
 								{/if}
@@ -266,3 +320,100 @@
 		</Alert>
 	{/if}
 </div>
+
+<!-- Payment Instructions Modal -->
+<Modal bind:open={showPaymentModal} size="lg" class="w-full">
+	<div slot="header" class="flex items-center gap-2">
+		<CreditCardOutline class="w-5 h-5 text-blue-600" />
+		<span class="text-lg font-semibold">Payment Instructions</span>
+	</div>
+	
+	{#if paymentLoading}
+		<div class="flex justify-center items-center py-12">
+			<Spinner size="8" />
+			<span class="ml-3 text-gray-600">Loading payment details...</span>
+		</div>
+	{:else if paymentInfo}
+		<div class="space-y-6">
+			<!-- Invoice Summary -->
+			<div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+				<div class="grid grid-cols-2 gap-4 text-sm">
+					<div>
+						<span class="text-gray-500">Invoice ID:</span>
+						<span class="ml-2 font-medium text-gray-900 dark:text-white">{paymentInfo.invoice_id}</span>
+					</div>
+					<div>
+						<span class="text-gray-500">Amount Due:</span>
+						<span class="ml-2 font-bold text-blue-600">{paymentInfo.amount_due} {paymentInfo.currency}</span>
+					</div>
+				</div>
+			</div>
+			
+			<!-- Payment Details -->
+			<div class="space-y-4">
+				<h4 class="font-semibold text-gray-900 dark:text-white">Transfer Details</h4>
+				
+				<div class="space-y-3">
+					<div>
+						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Owner (Canister ID)</label>
+						<div class="flex items-center gap-2">
+							<code class="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded font-mono text-sm break-all">{paymentInfo.owner}</code>
+						</div>
+					</div>
+					
+					<div>
+						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subaccount (Hex)</label>
+						<div class="flex items-center gap-2">
+							<code class="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded font-mono text-xs break-all">{paymentInfo.subaccount}</code>
+						</div>
+					</div>
+				</div>
+			</div>
+			
+			<!-- ICW Command -->
+			<div class="space-y-3">
+				<h4 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+					</svg>
+					Transfer using ICW CLI
+				</h4>
+				
+				<div class="bg-gray-900 rounded-lg p-4 relative">
+					<pre class="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">icw transfer {paymentInfo.amount_due} \{`\n`}  --to {paymentInfo.owner} \{`\n`}  --subaccount {paymentInfo.subaccount}</pre>
+					<button 
+						class="absolute top-2 right-2 p-2 rounded hover:bg-gray-700 transition-colors"
+						on:click={() => copyCommand(`icw transfer ${paymentInfo.amount_due} --to ${paymentInfo.owner} --subaccount ${paymentInfo.subaccount}`)}
+					>
+						{#if copied}
+							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+							</svg>
+						{:else}
+							<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+							</svg>
+						{/if}
+					</button>
+				</div>
+				
+				<p class="text-sm text-gray-500 dark:text-gray-400">
+					Run this command in your terminal to transfer <strong>{paymentInfo.amount_due} {paymentInfo.currency}</strong> to this invoice.
+				</p>
+			</div>
+			
+			<!-- Help Text -->
+			<div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-sm">
+				<p class="text-blue-800 dark:text-blue-300">
+					<strong>Need the ICW tool?</strong> Install it with: <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">pip install icw</code>
+				</p>
+			</div>
+		</div>
+	{:else}
+		<Alert color="red">Failed to load payment details. Please try again.</Alert>
+	{/if}
+	
+	<div slot="footer" class="flex justify-end gap-3">
+		<Button color="light" on:click={() => showPaymentModal = false}>Close</Button>
+	</div>
+</Modal>
