@@ -1,23 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { _ } from 'svelte-i18n';
   import { backend } from '$lib/canisters';
-  import { Button, Badge, Card, Spinner, Tabs, TabItem } from 'flowbite-svelte';
-  import { ArrowLeftOutline } from 'flowbite-svelte-icons';
-
-  interface TaskStep {
-    _id: string;
-    status: string;
-    run_next_after: number;
-    is_async?: boolean;
-    codex?: {
-      _id: string;
-      name: string;
-      code: string;
-      description: string;
-    };
-  }
+  import { Button, Badge, Card, Spinner, Checkbox } from 'flowbite-svelte';
 
   interface TaskSchedule {
     _id: string;
@@ -28,92 +14,127 @@
     last_run_at: number;
   }
 
-  interface TaskExecution {
-    _id: string;
-    name: string;
-    status: string;
-    logs: string;
-    result: string;
-    created_at: number | null;
-    updated_at: number | null;
-  }
-
   interface TaskDetails {
     _id: string;
     name: string;
     status: string;
     metadata: string;
     step_to_execute: number;
-    steps: TaskStep[];
+    steps: any[];
     schedules: TaskSchedule[];
     created_at: number | null;
     updated_at: number | null;
   }
 
+  interface LogEntry {
+    timestamp: string;
+    level: string;
+    message: string;
+  }
+
   let taskId: string;
   let task: TaskDetails | null = null;
-  let executions: TaskExecution[] = [];
+  let logs: LogEntry[] = [];
+  let rawLogs: string = '';
   let loading = true;
+  let logsLoading = false;
   let error = '';
-  let activeTab = 'details';
+  let followLogs = false;
+  let refreshInterval: ReturnType<typeof setInterval> | null = null;
+  let logsContainer: HTMLElement;
 
   $: taskId = $page.params.taskId;
 
+  // Auto-scroll when following and logs update
+  $: if (followLogs && logsContainer && rawLogs) {
+    setTimeout(() => {
+      logsContainer.scrollTop = logsContainer.scrollHeight;
+    }, 50);
+  }
+
+  // Start/stop auto-refresh when followLogs changes
+  $: {
+    if (followLogs) {
+      startAutoRefresh();
+    } else {
+      stopAutoRefresh();
+    }
+  }
+
   onMount(() => {
-    loadTaskDetails();
-    loadExecutions();
+    loadAll();
   });
 
+  onDestroy(() => {
+    stopAutoRefresh();
+  });
+
+  function startAutoRefresh() {
+    if (refreshInterval) return;
+    refreshInterval = setInterval(loadAll, 3000);
+  }
+
+  function stopAutoRefresh() {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+  }
+
+  async function loadAll() {
+    await Promise.all([loadTaskDetails(), loadLogs()]);
+  }
+
   async function loadTaskDetails() {
-    loading = true;
-    error = '';
+    if (!taskId) return;
     
     try {
-      console.log('Loading task details for:', taskId);
       const response = await backend.extension_sync_call({
         extension_name: 'task_monitor',
         function_name: 'get_task_details',
         args: JSON.stringify({ task_id: taskId })
       });
       
-      console.log('Task details response:', response);
-      
       if (response.success) {
         const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-        console.log('Parsed data:', data);
-        
-        if (data.success === false) {
-          error = data.error || 'Failed to load task details';
-        } else {
+        if (data.success !== false) {
           task = data.task;
+          error = '';
+        } else {
+          error = data.error || 'Failed to load task details';
         }
       } else {
         error = response.error || 'Failed to load task details';
       }
     } catch (e: any) {
-      console.error('Error loading task details:', e);
       error = e.message || 'Error loading task details';
     } finally {
       loading = false;
     }
   }
 
-  async function loadExecutions() {
+  async function loadLogs() {
+    if (!taskId) return;
+    logsLoading = true;
+    
     try {
       const response = await backend.extension_sync_call({
         extension_name: 'task_monitor',
-        function_name: 'get_task_executions',
-        args: JSON.stringify({ task_id: taskId, limit: 100 })
+        function_name: 'get_task_logs',
+        args: JSON.stringify({ task_id: taskId, limit: 500 })
       });
       
       if (response.success) {
         const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
         if (data.success !== false) {
-          executions = data.executions || [];
+          rawLogs = data.logs || '';
+          logs = data.parsed_logs || [];
         }
       }
     } catch (e: any) {
-      console.error('Error loading executions:', e);
+      console.error('Error loading logs:', e);
+    } finally {
+      logsLoading = false;
     }
   }
 
@@ -130,8 +151,7 @@
       if (response.success) {
         const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
         alert(data.message || 'Task started');
-        await loadTaskDetails();
-        await loadExecutions();
+        await loadAll();
       } else {
         alert(response.error || 'Failed to run task');
       }
@@ -140,7 +160,7 @@
     }
   }
 
-  function getStatusBadge(status: string) {
+  function getStatusColor(status: string): string {
     const statusMap: Record<string, string> = {
       'pending': 'yellow',
       'running': 'blue',
@@ -158,221 +178,215 @@
 
   function formatInterval(seconds: number): string {
     if (!seconds) return 'One-time';
-    const hours = Math.floor(seconds / 3600);
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `Every ${days}d ${hours}h`;
     if (hours > 0) return `Every ${hours}h ${minutes}m`;
     if (minutes > 0) return `Every ${minutes}m`;
     return `Every ${seconds}s`;
   }
+
+  function getDescription(metadata: string): string {
+    if (!metadata) return '';
+    try {
+      const parsed = JSON.parse(metadata);
+      return parsed.description || parsed.desc || '';
+    } catch {
+      return metadata.length > 100 ? metadata.substring(0, 100) + '...' : metadata;
+    }
+  }
+
+  function getProgressPercent(): number {
+    if (!task?.steps?.length) return 0;
+    return Math.round((task.step_to_execute / task.steps.length) * 100);
+  }
 </script>
 
 <div class="p-6 max-w-6xl mx-auto">
-  <!-- Header with back button -->
-  <div class="mb-6 flex items-center gap-4">
-    <a href="/monitor" class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-      <ArrowLeftOutline class="w-6 h-6" />
+  <!-- Header -->
+  <div class="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+    <a href="/monitor" class="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+      </svg>
+      <span>Back</span>
     </a>
     <div class="flex-1">
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+          {task?.name || 'Task Details'}
+        </h1>
         {#if task}
-          {task.name}
-        {:else}
-          Task Details
+          {#if task.status?.toLowerCase() === 'running'}
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+            </span>
+          {/if}
+          <Badge color={getStatusColor(task.status)}>{task.status}</Badge>
         {/if}
-      </h1>
-      <p class="text-sm text-gray-500 dark:text-gray-400">ID: {taskId}</p>
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">ID: {taskId}</p>
     </div>
-    {#if task}
-      <Button color="blue" on:click={runTaskNow}>
+    <div class="flex gap-2">
+      <Button color="green" size="sm" on:click={runTaskNow}>
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
         Run Now
       </Button>
-      <Button color="light" on:click={() => { loadTaskDetails(); loadExecutions(); }}>
-        Refresh
-      </Button>
-    {/if}
+    </div>
   </div>
 
   {#if loading}
     <div class="flex justify-center items-center py-20">
       <Spinner size="12" />
-      <span class="ml-3 text-gray-600 dark:text-gray-400">Loading task details...</span>
+      <span class="ml-3 text-gray-600 dark:text-gray-400">Loading...</span>
     </div>
   {:else if error}
-    <Card>
-      <div class="text-center py-8">
-        <p class="text-red-600 dark:text-red-400 mb-4">{error}</p>
-        <Button color="light" on:click={loadTaskDetails}>Try Again</Button>
-      </div>
+    <Card class="text-center py-8">
+      <p class="text-red-600 dark:text-red-400 mb-4">{error}</p>
+      <Button color="light" on:click={loadAll}>Try Again</Button>
     </Card>
   {:else if task}
-    <Tabs style="underline" contentClass="mt-4">
-      <TabItem open title="Overview">
-        <!-- Task Status Card -->
-        <Card class="mb-4">
-          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Task Information</h3>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">Status</p>
-              <Badge color={getStatusBadge(task.status)} class="mt-1">{task.status}</Badge>
-            </div>
-            <div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">Progress</p>
-              <p class="font-medium text-gray-900 dark:text-white">{task.step_to_execute} / {task.steps?.length || 0} steps</p>
-            </div>
-            <div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">Created</p>
-              <p class="font-medium text-gray-900 dark:text-white">{formatTimestamp(task.created_at)}</p>
-            </div>
-            <div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">Updated</p>
-              <p class="font-medium text-gray-900 dark:text-white">{formatTimestamp(task.updated_at)}</p>
-            </div>
-          </div>
-          {#if task.metadata}
-            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <p class="text-sm text-gray-500 dark:text-gray-400">Metadata</p>
-              <p class="font-medium text-gray-900 dark:text-white">{task.metadata}</p>
-            </div>
-          {/if}
-        </Card>
+    <!-- Task Info Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <!-- Status Card -->
+      <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm text-gray-500 dark:text-gray-400">Progress</span>
+          <span class="text-sm font-medium text-gray-900 dark:text-white">{getProgressPercent()}%</span>
+        </div>
+        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+          <div 
+            class="h-2 rounded-full transition-all duration-300 {task.status?.toLowerCase() === 'failed' ? 'bg-red-500' : 'bg-blue-600'}" 
+            style="width: {getProgressPercent()}%"
+          ></div>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          {task.step_to_execute} / {task.steps?.length || 0} steps
+        </p>
+      </div>
 
-        <!-- Progress Bar -->
-        {#if task.steps && task.steps.length > 0}
-          <Card class="mb-4">
-            <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Execution Progress</h3>
-            <div class="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700">
-              <div 
-                class="bg-blue-600 h-4 rounded-full transition-all duration-300" 
-                style="width: {(task.step_to_execute / task.steps.length) * 100}%"
-              ></div>
-            </div>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              {task.step_to_execute} of {task.steps.length} steps completed
+      <!-- Schedule Card -->
+      <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <span class="text-sm text-gray-500 dark:text-gray-400">Schedule</span>
+        {#if task.schedules?.length > 0}
+          {@const schedule = task.schedules[0]}
+          <div class="mt-1">
+            <p class="font-medium text-gray-900 dark:text-white">{formatInterval(schedule.repeat_every)}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Last: {formatTimestamp(schedule.last_run_at)}
             </p>
-          </Card>
+          </div>
+        {:else}
+          <p class="font-medium text-gray-900 dark:text-white mt-1">One-time task</p>
         {/if}
+      </div>
 
-        <!-- Schedules -->
-        {#if task.schedules && task.schedules.length > 0}
-          <Card>
-            <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Schedules</h3>
-            <div class="space-y-3">
-              {#each task.schedules as schedule}
-                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div>
-                    <p class="font-medium text-gray-900 dark:text-white">{schedule.name}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">{formatInterval(schedule.repeat_every)}</p>
-                  </div>
-                  <div class="text-right">
-                    <Badge color={schedule.disabled ? 'gray' : 'green'}>
-                      {schedule.disabled ? 'Disabled' : 'Enabled'}
-                    </Badge>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Last run: {formatTimestamp(schedule.last_run_at)}
-                    </p>
-                  </div>
-                </div>
-              {/each}
+      <!-- Description Card -->
+      <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <span class="text-sm text-gray-500 dark:text-gray-400">Description</span>
+        <p class="font-medium text-gray-900 dark:text-white mt-1 text-sm">
+          {getDescription(task.metadata) || 'No description'}
+        </p>
+      </div>
+    </div>
+
+    <!-- Logs Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+      <!-- Logs Header -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          Logs
+          {#if logsLoading}
+            <Spinner size="4" class="ml-2" />
+          {/if}
+        </h2>
+        <div class="flex items-center gap-4">
+          <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+            <Checkbox bind:checked={followLogs} />
+            <span>Follow</span>
+            {#if followLogs}
+              <span class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+            {/if}
+          </label>
+          <Button size="xs" color="light" on:click={loadLogs}>
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+          </Button>
+        </div>
+      </div>
+      
+      <!-- Logs Content -->
+      <div 
+        bind:this={logsContainer}
+        class="bg-gray-900 text-gray-100 p-4 font-mono text-sm overflow-auto"
+        style="height: 400px; max-height: 60vh;"
+      >
+        {#if rawLogs}
+          <pre class="whitespace-pre-wrap break-words">{rawLogs}</pre>
+        {:else}
+          <div class="text-gray-500 italic text-center py-8">
+            No logs available. Run the task to generate logs.
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Steps Preview (collapsed) -->
+    {#if task.steps?.length > 0}
+      <details class="mt-6">
+        <summary class="cursor-pointer text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+          View {task.steps.length} step(s)
+        </summary>
+        <div class="mt-3 space-y-2">
+          {#each task.steps as step, i}
+            <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-medium">
+                {i + 1}
+              </div>
+              <div class="flex-1">
+                <p class="text-sm font-medium text-gray-900 dark:text-white">
+                  {step.codex?.name || `Step ${i + 1}`}
+                </p>
+              </div>
+              <Badge color={getStatusColor(step.status)} class="text-xs">{step.status}</Badge>
+              {#if step.codex?.name}
+                <a 
+                  href="/codex/{step.codex.name}" 
+                  class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                  </svg>
+                  View Code
+                </a>
+              {/if}
             </div>
-          </Card>
-        {/if}
-      </TabItem>
-
-      <TabItem title="Steps ({task.steps?.length || 0})">
-        {#if task.steps && task.steps.length > 0}
-          <div class="space-y-4">
-            {#each task.steps as step, i}
-              <Card>
-                <div class="flex items-start justify-between mb-3">
-                  <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-sm font-medium">
-                      {i + 1}
-                    </div>
-                    <div>
-                      <p class="font-medium text-gray-900 dark:text-white">
-                        {step.codex?.name || `Step ${i + 1}`}
-                      </p>
-                      {#if step.codex?.description}
-                        <p class="text-sm text-gray-500 dark:text-gray-400">{step.codex.description}</p>
-                      {/if}
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <Badge color={getStatusBadge(step.status)}>{step.status}</Badge>
-                    {#if step.is_async}
-                      <Badge color="purple">Async</Badge>
-                    {/if}
-                  </div>
-                </div>
-                
-                {#if step.codex?.code}
-                  <details class="mt-3">
-                    <summary class="cursor-pointer text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                      Show Code
-                    </summary>
-                    <pre class="mt-2 p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto max-h-96">{step.codex.code}</pre>
-                  </details>
-                {/if}
-              </Card>
-            {/each}
-          </div>
-        {:else}
-          <Card>
-            <p class="text-center py-8 text-gray-500 dark:text-gray-400">No steps defined for this task.</p>
-          </Card>
-        {/if}
-      </TabItem>
-
-      <TabItem title="Execution History ({executions.length})">
-        {#if executions.length > 0}
-          <div class="space-y-4">
-            {#each executions as execution}
-              <Card>
-                <div class="flex items-start justify-between mb-3">
-                  <div>
-                    <p class="font-medium text-gray-900 dark:text-white">{execution.name}</p>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">
-                      {formatTimestamp(execution.created_at)}
-                    </p>
-                  </div>
-                  <Badge color={getStatusBadge(execution.status)}>{execution.status}</Badge>
-                </div>
-                
-                {#if execution.result}
-                  <div class="mb-3">
-                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Result:</p>
-                    <pre class="p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-x-auto">{execution.result}</pre>
-                  </div>
-                {/if}
-                
-                {#if execution.logs}
-                  <div>
-                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Logs:</p>
-                    <pre class="p-3 bg-gray-900 text-green-400 rounded text-xs overflow-x-auto max-h-64 font-mono">{execution.logs}</pre>
-                  </div>
-                {:else}
-                  <p class="text-sm text-gray-500 dark:text-gray-400 italic">No logs available for this execution.</p>
-                {/if}
-              </Card>
-            {/each}
-          </div>
-        {:else}
-          <Card>
-            <p class="text-center py-8 text-gray-500 dark:text-gray-400">No execution history available.</p>
-          </Card>
-        {/if}
-      </TabItem>
-    </Tabs>
+          {/each}
+        </div>
+      </details>
+    {/if}
   {:else}
-    <Card>
-      <p class="text-center py-8 text-gray-500 dark:text-gray-400">Task not found.</p>
+    <Card class="text-center py-8">
+      <p class="text-gray-500 dark:text-gray-400">Task not found.</p>
     </Card>
   {/if}
 </div>
 
 <style>
   pre {
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    margin: 0;
   }
 </style>
