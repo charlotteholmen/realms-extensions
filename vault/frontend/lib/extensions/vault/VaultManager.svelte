@@ -12,6 +12,8 @@ let loading = false;
 let error = '';
 let transferAmount = 0;
 let transferTo = '';
+let transferToSubaccount = '';
+let transferFromSubaccount = '';
 let activeTab: 'balance' | 'transactions' | 'transfer' | 'admin' = 'balance';
 let currentPrincipal: string = '';
 let canisterPrincipal: string = '';
@@ -239,14 +241,23 @@ return;
 loading = true;
 error = '';
 try {
+// Build transfer args with optional subaccounts
+const transferArgs: any = {
+to_principal: transferTo,
+amount: transferAmount
+};
+if (transferToSubaccount.trim()) {
+transferArgs.to_subaccount = transferToSubaccount.trim();
+}
+if (transferFromSubaccount.trim()) {
+transferArgs.from_subaccount = transferFromSubaccount.trim();
+}
+
 // Use extension_async_call for the transfer action
 const result = await backend.extension_async_call({
 extension_name: 'vault',
 function_name: 'transfer',
-args: JSON.stringify({
-to_principal: transferTo,
-amount: transferAmount
-})
+args: JSON.stringify(transferArgs)
 });
 
 // Parse the inner JSON response from the extension
@@ -662,6 +673,28 @@ type="number"
 bind:value={transferAmount}
 placeholder="100000000"
 class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+/>
+</div>
+<div>
+<label class="block text-sm font-medium text-gray-700 mb-2">
+To Subaccount (optional, 64-char hex)
+</label>
+<input
+type="text"
+bind:value={transferToSubaccount}
+placeholder="0000000000000000000000000000000000000000000000000000000000000000"
+class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+/>
+</div>
+<div>
+<label class="block text-sm font-medium text-gray-700 mb-2">
+From Subaccount (optional, 64-char hex)
+</label>
+<input
+type="text"
+bind:value={transferFromSubaccount}
+placeholder="0000000000000000000000000000000000000000000000000000000000000000"
+class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
 />
 </div>
 <button

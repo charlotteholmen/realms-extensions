@@ -87,13 +87,13 @@ class TransactionsListRecord(Record):
 # ICRC-1 standard account representation with owner principal and optional subaccount.
 class Account(Record):
     owner: Principal
-    subaccount: Opt[Vec[nat]]
+    subaccount: Opt[blob]
 
 
 # Represents a spender for ICRC-2 approvals.
 class Spender(Record):
     owner: Principal
-    subaccount: Opt[Vec[nat]]
+    subaccount: Opt[blob]
 
 
 # Arguments for ICRC-1 transfer operations.

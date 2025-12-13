@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Card, Spinner, Alert, Table, TableBody, TableBodyCell, TableBodyRow, TableHead, TableHeadCell, Badge, Button, Tooltip, Modal } from 'flowbite-svelte';
-	import { DollarOutline, CheckCircleOutline, ClockOutline, ExclamationCircleOutline, DownloadOutline, CreditCardOutline } from 'flowbite-svelte-icons';
+	import { DollarOutline, CheckCircleOutline, ClockOutline, ExclamationCircleOutline, DownloadOutline, CreditCardOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	
 	// Props
@@ -18,6 +18,9 @@
 	let paymentInfo = null;
 	let selectedRecord = null;
 	let copied = false;
+	
+	// Refresh state
+	let refreshingInvoiceId: string | null = null;
 	
 	// Calculate percentages for the distribution bar
 	$: totalAmount = taxData ? (taxData.summary.total_paid + taxData.summary.total_pending + taxData.summary.total_overdue) : 0;
@@ -144,6 +147,36 @@
 			setTimeout(() => { copied = false; }, 2000);
 		} catch (e) {
 			console.error('Failed to copy:', e);
+		}
+	}
+	
+	// Refresh invoice payment status
+	async function refreshInvoice(record) {
+		refreshingInvoiceId = record.id;
+		try {
+			const response = await backend.extension_async_call({
+				extension_name: "vault",
+				function_name: "refresh_invoice",
+				args: JSON.stringify({ invoice_id: record.id })
+			});
+			
+			console.log('Refresh invoice response:', response);
+			
+			if (response.success) {
+				const data = JSON.parse(response.response);
+				if (data.success && data.data?.invoice) {
+					// Update the record status if it changed
+					const updatedInvoice = data.data.invoice;
+					if (updatedInvoice.status !== record.status) {
+						// Refresh the entire tax data to get updated summary
+						await getTaxInformation();
+					}
+				}
+			}
+		} catch (err) {
+			console.error('Error refreshing invoice:', err);
+		} finally {
+			refreshingInvoiceId = null;
 		}
 	}
 	
@@ -283,14 +316,30 @@
 							</TableBodyCell>
 							<TableBodyCell class="text-right">
 								{#if record.status === 'Pending' || record.status === 'Overdue'}
-									<Button 
-										size="xs" 
-										class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-										on:click={() => openPaymentModal(record)}
-									>
-										<CreditCardOutline class="w-3.5 h-3.5 mr-1.5" />
-										Pay
-									</Button>
+									<div class="flex items-center justify-end gap-2">
+										<Button 
+											size="xs" 
+											color="light"
+											class="px-3 py-1.5"
+											disabled={refreshingInvoiceId === record.id}
+											on:click={() => refreshInvoice(record)}
+										>
+											{#if refreshingInvoiceId === record.id}
+												<Spinner size="3" class="mr-1.5" />
+											{:else}
+												<RefreshOutline class="w-3.5 h-3.5 mr-1.5" />
+											{/if}
+											Refresh
+										</Button>
+										<Button 
+											size="xs" 
+											class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+											on:click={() => openPaymentModal(record)}
+										>
+											<CreditCardOutline class="w-3.5 h-3.5 mr-1.5" />
+											Pay
+										</Button>
+									</div>
 								{:else}
 									<Button size="xs" color="light" class="px-3">View</Button>
 								{/if}

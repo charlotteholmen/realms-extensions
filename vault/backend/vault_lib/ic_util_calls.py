@@ -42,7 +42,7 @@ def set_account_mock_transaction(
     try:
         # Get current test mode data and increment transaction ID
         test_data = test_mode_data()
-        tx_id = test_data.tx_id
+        tx_id = f"demo_{test_data.tx_id}"  # Prefix with demo_ to avoid collision with real tx IDs
         test_data.tx_id += 1
 
         # Use current time if timestamp not provided
@@ -168,7 +168,7 @@ def get_account_transactions(
     canister_id: str,
     owner_principal: str,
     max_results: nat,
-    subaccount: Optional[List[int]] = None,
+    subaccount: Optional[bytes] = None,
     start_tx_id: Optional[nat] = None,
 ) -> Async[GetAccountTransactionsResponse]:
     """
@@ -178,23 +178,27 @@ def get_account_transactions(
         canister_id: The principal ID of the indexer canister
         owner_principal: The principal ID of the account owner
         max_results: Maximum number of transactions to return
-        subaccount: Optional subaccount (as a list of bytes)
+        subaccount: Optional subaccount (as bytes)
         start_tx_id: Transaction ID to start retrieving from (None = most recent, for pagination)
 
     Returns:
         A GetAccountTransactionsResponse object containing balance and transactions
     """
     try:
+        logger.info(f"QUERY PARAMS: canister_id={canister_id}, owner={owner_principal}, subaccount={subaccount.hex() if subaccount else None}, start={start_tx_id}, max={max_results}")
+        
         indexer = ICRCIndexer(Principal.from_str(canister_id))
-        result = yield indexer.get_account_transactions(
-            GetAccountTransactionsRequest(
-                account=Account(
-                    owner=Principal.from_str(owner_principal), subaccount=subaccount
-                ),
-                start=start_tx_id,
-                max_results=max_results,
-            )
+        account = Account(
+            owner=Principal.from_str(owner_principal), subaccount=subaccount
         )
+        
+        request = GetAccountTransactionsRequest(
+            account=account,
+            start=start_tx_id,
+            max_results=max_results,
+        )
+        
+        result = yield indexer.get_account_transactions(request)
 
         logger.info(f"Indexer raw result type: {type(result)}")
         logger.info(f"Indexer raw result hasattr Ok: {hasattr(result, 'Ok')}")
