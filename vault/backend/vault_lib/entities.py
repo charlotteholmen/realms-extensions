@@ -52,6 +52,22 @@ class Category(Entity, TimestampedMixin):
     name = String()
 
 
+class KnownSubaccount(Entity, TimestampedMixin):
+    """Tracks subaccounts that should be monitored during refresh.
+    
+    When an invoice is created or a user manually adds a subaccount,
+    it is registered here so that refresh operations can query it.
+    
+    The _id should be the subaccount_hex (64-char hex string) for easy lookup.
+    """
+
+    subaccount_hex = String()  # 64-char hex string (redundant with _id for queries)
+    source = String()  # "invoice", "manual", "discovered"
+    invoice_id = String()  # Optional: link to invoice if source is "invoice"
+    scan_end_tx_id = Integer(default=0)  # Per-subaccount scan position
+    balance = Integer(default=0)  # Cached balance in smallest units
+
+
 # class VaultTransaction(Entity, TimestampedMixin):
 #     """Records details of an ICRC-1 transaction relevant to the vault's operations."""
 
