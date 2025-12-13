@@ -49,38 +49,21 @@
 	const isLocalhost = false;
 	console.log("isLocalhost", isLocalhost);
 	
-	// Function to fetch server host from remote config
-	async function fetchServerHost(): Promise<string> {
-			console.log("Fetching server host from remote config...");
-			const response = await fetch('https://raw.githubusercontent.com/smart-social-contracts/ashoka/refs/heads/main/public.env');
-			const text = await response.text();
-			
-			// Parse MAIN_SERVER_HOST from the environment file format
-			const lines = text.trim().split('\n');
-			for (const line of lines) {
-				if (line.startsWith('MAIN_SERVER_HOST=')) {
-					const serverHost = line.split('=')[1].trim();
-					console.log("Found MAIN_SERVER_HOST in remote config:", serverHost);
-					return serverHost;
-				}
-			}
-			throw new Error('MAIN_SERVER_HOST not found in remote config');
-	}
+	// Production server host (CNAME points to current RunPod pod)
+	const SERVER_HOST = 'https://ashoka.realmsgos.ch/';
 	
 	// Determine API URL based on environment
 	let API_URL = '';
 	let SUGGESTIONS_API_URL = '';
 	
 	// Initialize API URL
-	const initializeApiUrl = async () => {
+	const initializeApiUrl = () => {
 		if (isLocalhost) {
 			API_URL = "http://localhost:5000/api/ask";
 			SUGGESTIONS_API_URL = "http://localhost:5000/suggestions";
 		} else {
-			// Fetch production server host dynamically
-			const serverHost = await fetchServerHost();
-			API_URL = `${serverHost}api/ask`;
-			SUGGESTIONS_API_URL = `${serverHost}suggestions`;
+			API_URL = `${SERVER_HOST}api/ask`;
+			SUGGESTIONS_API_URL = `${SERVER_HOST}suggestions`;
 		}
 		console.log("API_URL set to:", API_URL);
 		console.log("SUGGESTIONS_API_URL set to:", SUGGESTIONS_API_URL);
