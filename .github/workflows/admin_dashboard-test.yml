@@ -5,12 +5,15 @@ on:
     branches: [ main, develop ]
     paths:
       - 'admin_dashboard/**'
+      - '_shared/**'
       - '.github/workflows/admin_dashboard-test.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
       - 'admin_dashboard/**'
+      - '_shared/**'
       - '.github/workflows/admin_dashboard-test.yml'
+  workflow_dispatch:
 
 jobs:
   test:
