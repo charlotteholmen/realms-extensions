@@ -5,10 +5,14 @@
   "error": "Error:",
   "loading": "Loading...",
   "refresh": "Refresh",
+  "retry": "Retry",
   "loading_proposals": "Loading proposals...",
   "loading_proposal": "Loading proposal...",
+  "loading_code": "Fetching code from repository...",
   "no_proposals": "No proposals found",
   "no_proposals_hint": "Be the first to submit a proposal!",
+  "no_code": "No code available for this proposal",
+  "lines": "Lines",
   "proposal_details": "Proposal Details",
   "proposal_not_found": "Proposal not found",
   "back_to_list": "Back to Proposals",
@@ -30,6 +34,7 @@
     "pending_vote": "Pending Vote",
     "voting": "Voting Active",
     "accepted": "Accepted",
+    "executed": "Executed",
     "rejected": "Rejected"
   },
   "votes": {
@@ -49,15 +54,18 @@
     "fields": {
       "title": "Proposal Title",
       "description": "Description",
-      "code_url": "Code URL"
+      "code_url": "Code URL",
+      "code_checksum": "Code Checksum (Optional)"
     },
     "placeholders": {
       "title": "Enter a clear, descriptive title for your proposal",
       "description": "Describe what this proposal does and why it should be approved",
-      "code_url": "https://github.com/your-repo/proposal.py"
+      "code_url": "https://github.com/your-repo/proposal.py",
+      "code_checksum": "sha256:abc123..."
     },
     "help": {
-      "code_url": "Link to the Python code that will be executed if this proposal passes"
+      "code_url": "Link to the Python code that will be executed if this proposal passes",
+      "code_checksum": "Optional SHA-256 checksum to verify the code has not been tampered with"
     },
     "security": {
       "title": "Security Notice",
@@ -104,6 +112,7 @@
   "detail": {
     "title": "Proposal Details",
     "code_diff": "Code Changes",
+    "code_content": "Proposal Code",
     "proposer": "Proposer",
     "created": "Created",
     "deadline": "Voting Deadline",
@@ -117,5 +126,14 @@
       "title": "Security Warning:",
       "message": "Always review the code carefully before voting. Approved proposals will execute with realm privileges."
     }
+  },
+  "demo_feature": {
+    "title": "Demo Feature",
+    "badge": "Demo Feature",
+    "description": "In demo mode, you can approve and execute proposals instantly without waiting for the voting period to end.",
+    "approve": "Approve Proposal",
+    "approving": "Approving...",
+    "execute": "Execute Codex",
+    "executing": "Executing..."
   }
 }

@@ -5,10 +5,14 @@
   "error": "错误：",
   "loading": "加载中...",
   "refresh": "刷新",
+  "retry": "重试",
   "loading_proposals": "加载提案中...",
   "loading_proposal": "加载提案中...",
+  "loading_code": "正在从仓库获取代码...",
   "no_proposals": "未找到提案",
   "no_proposals_hint": "成为第一个提交提案的人！",
+  "no_code": "此提案没有可用代码",
+  "lines": "行数",
   "proposal_details": "提案详情",
   "proposal_not_found": "未找到提案",
   "back_to_list": "返回提案列表",
@@ -30,6 +34,7 @@
     "pending_vote": "待投票",
     "voting": "投票中",
     "accepted": "已通过",
+    "executed": "已执行",
     "rejected": "已拒绝"
   },
   "votes": {
@@ -104,6 +109,7 @@
   "detail": {
     "title": "提案详情",
     "code_diff": "代码变更",
+    "code_content": "提案代码",
     "proposer": "提案人",
     "created": "创建时间",
     "deadline": "投票截止时间",
@@ -117,5 +123,14 @@
       "title": "安全警告：",
       "message": "投票前请仔细审核代码。批准的提案将以领域权限执行。"
     }
+  },
+  "demo_feature": {
+    "title": "演示功能",
+    "badge": "演示功能",
+    "description": "在演示模式下，您可以立即批准和执行提案，无需等待投票期结束。",
+    "approve": "批准提案",
+    "approving": "批准中...",
+    "execute": "执行代码",
+    "executing": "执行中..."
   }
 }

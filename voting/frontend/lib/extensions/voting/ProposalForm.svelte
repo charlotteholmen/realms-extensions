@@ -11,6 +11,7 @@
 	let title = '';
 	let description = '';
 	let codeUrl = '';
+	let codeChecksum = '';
 	let submitting = false;
 	let error = '';
 	let success = '';
@@ -38,6 +39,7 @@
 					title: title.trim(),
 					description: description.trim(),
 					code_url: codeUrl.trim(),
+					code_checksum: codeChecksum.trim() || undefined,
 					proposer: $principal || 'anonymous'
 				})
 			});
@@ -52,6 +54,7 @@
 					title = '';
 					description = '';
 					codeUrl = '';
+					codeChecksum = '';
 					// Notify parent component
 					setTimeout(() => {
 						dispatch('submitted', data.data);
@@ -74,6 +77,7 @@
 		title = '';
 		description = '';
 		codeUrl = '';
+		codeChecksum = '';
 		error = '';
 		success = '';
 		dispatch('cancelled');
@@ -157,6 +161,21 @@
 				/>
 				<p class="text-sm text-gray-500 mt-1">
 					{$_('extensions.voting.form.help.code_url')}
+				</p>
+			</div>
+
+			<div>
+				<Label for="code-checksum" class="mb-2">
+					{$_('extensions.voting.form.fields.code_checksum')}
+				</Label>
+				<Input
+					id="code-checksum"
+					bind:value={codeChecksum}
+					placeholder={$_('extensions.voting.form.placeholders.code_checksum')}
+					disabled={submitting}
+				/>
+				<p class="text-sm text-gray-500 mt-1">
+					{$_('extensions.voting.form.help.code_checksum')}
 				</p>
 			</div>
 

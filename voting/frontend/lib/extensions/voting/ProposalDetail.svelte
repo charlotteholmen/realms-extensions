@@ -1,20 +1,141 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
-	import { Card, Button, Badge, Alert } from 'flowbite-svelte';
-	import { LinkOutline, CalendarMonthOutline, UserCircleSolid, CodeBranchOutline } from 'flowbite-svelte-icons';
+	import { createEventDispatcher, onMount } from 'svelte';
+	import { Card, Button, Badge, Alert, Spinner } from 'flowbite-svelte';
+	import { LinkOutline, CalendarMonthOutline, UserCircleSolid, CodeBranchOutline, CheckCircleSolid, PlaySolid } from 'flowbite-svelte-icons';
 	import { _ } from 'svelte-i18n';
+	import { backend } from '$lib/canisters';
 	import VotingCard from './VotingCard.svelte';
 	
 	export let proposal;
 	
 	const dispatch = createEventDispatcher();
 	
+	// Code fetching state
+	let codeContent = '';
+	let codeLoading = true;
+	let codeError = '';
+	let codeChecksum = '';
+	
+	// Demo feature state
+	let approving = false;
+	let executing = false;
+	let actionError = '';
+	let actionSuccess = '';
+	
+	onMount(async () => {
+		await fetchCode();
+	});
+	
+	async function fetchCode() {
+		try {
+			codeLoading = true;
+			codeError = '';
+			
+			const response = await backend.extension_async_call({
+				extension_name: "voting",
+				function_name: "fetch_proposal_code",
+				args: JSON.stringify({ proposal_id: proposal.id })
+			});
+			
+			if (response.success) {
+				const data = typeof response.response === 'string' 
+					? JSON.parse(response.response) 
+					: response.response;
+				
+				if (data.success) {
+					codeContent = data.data.code;
+					codeChecksum = data.data.checksum;
+				} else {
+					codeError = data.error || 'Failed to fetch code';
+				}
+			} else {
+				codeError = 'Failed to communicate with backend';
+			}
+		} catch (e) {
+			console.error('Error fetching code:', e);
+			codeError = 'Error fetching code: ' + e.message;
+		} finally {
+			codeLoading = false;
+		}
+	}
+	
+	async function handleApprove() {
+		try {
+			approving = true;
+			actionError = '';
+			actionSuccess = '';
+			
+			const response = await backend.extension_sync_call({
+				extension_name: "voting",
+				function_name: "approve_proposal",
+				args: JSON.stringify({ proposal_id: proposal.id })
+			});
+			
+			if (response.success) {
+				const data = typeof response.response === 'string' 
+					? JSON.parse(response.response) 
+					: response.response;
+				
+				if (data.success) {
+					actionSuccess = data.data.message;
+					proposal.status = 'accepted';
+					dispatch('statusChanged', { proposal_id: proposal.id, status: 'accepted' });
+				} else {
+					actionError = data.error || 'Failed to approve proposal';
+				}
+			} else {
+				actionError = 'Failed to communicate with backend';
+			}
+		} catch (e) {
+			console.error('Error approving proposal:', e);
+			actionError = 'Error: ' + e.message;
+		} finally {
+			approving = false;
+		}
+	}
+	
+	async function handleExecute() {
+		try {
+			executing = true;
+			actionError = '';
+			actionSuccess = '';
+			
+			const response = await backend.extension_async_call({
+				extension_name: "voting",
+				function_name: "execute_proposal",
+				args: JSON.stringify({ proposal_id: proposal.id })
+			});
+			
+			if (response.success) {
+				const data = typeof response.response === 'string' 
+					? JSON.parse(response.response) 
+					: response.response;
+				
+				if (data.success) {
+					actionSuccess = data.data.message;
+					proposal.status = 'executed';
+					dispatch('statusChanged', { proposal_id: proposal.id, status: 'executed' });
+				} else {
+					actionError = data.error || 'Failed to execute proposal';
+				}
+			} else {
+				actionError = 'Failed to communicate with backend';
+			}
+		} catch (e) {
+			console.error('Error executing proposal:', e);
+			actionError = 'Error: ' + e.message;
+		} finally {
+			executing = false;
+		}
+	}
+	
 	function getStatusColor(status: string) {
 		switch (status) {
 			case 'pending_review': return 'yellow';
 			case 'pending_vote': return 'blue';
 			case 'voting': return 'green';
-			case 'accepted': return 'green';
+			case 'accepted': return 'purple';
+			case 'executed': return 'indigo';
 			case 'rejected': return 'red';
 			default: return 'gray';
 		}
@@ -172,6 +293,66 @@
 					</Card>
 				{/if}
 
+				<!-- Demo Feature: Approve & Execute -->
+				{#if proposal.status === 'voting' || proposal.status === 'accepted'}
+					<Card class="border-2 border-blue-200 bg-blue-50">
+						<div class="flex items-center justify-between mb-3">
+							<h3 class="text-lg font-semibold text-blue-800">{$_('extensions.voting.demo_feature.title')}</h3>
+							<Badge color="blue">{$_('extensions.voting.demo_feature.badge')}</Badge>
+						</div>
+						<p class="text-sm text-blue-700 mb-4">
+							{$_('extensions.voting.demo_feature.description')}
+						</p>
+						
+						{#if actionError}
+							<Alert color="red" class="mb-3">
+								<span class="font-medium">{$_('extensions.voting.error')}</span> {actionError}
+							</Alert>
+						{/if}
+						
+						{#if actionSuccess}
+							<Alert color="green" class="mb-3">
+								<CheckCircleSolid class="w-4 h-4 mr-2 inline" />
+								<span class="font-medium">{actionSuccess}</span>
+							</Alert>
+						{/if}
+						
+						<div class="flex gap-3">
+							{#if proposal.status === 'voting'}
+								<Button 
+									color="green"
+									on:click={handleApprove}
+									disabled={approving || executing}
+								>
+									{#if approving}
+										<Spinner size="4" class="mr-2" />
+										{$_('extensions.voting.demo_feature.approving')}
+									{:else}
+										<CheckCircleSolid class="w-4 h-4 mr-2" />
+										{$_('extensions.voting.demo_feature.approve')}
+									{/if}
+								</Button>
+							{/if}
+							
+							{#if proposal.status === 'accepted'}
+								<Button 
+									color="purple"
+									on:click={handleExecute}
+									disabled={approving || executing}
+								>
+									{#if executing}
+										<Spinner size="4" class="mr-2" />
+										{$_('extensions.voting.demo_feature.executing')}
+									{:else}
+										<PlaySolid class="w-4 h-4 mr-2" />
+										{$_('extensions.voting.demo_feature.execute')}
+									{/if}
+								</Button>
+							{/if}
+						</div>
+					</Card>
+				{/if}
+
 				<!-- Security Warning -->
 				<Alert color="yellow">
 					<span class="font-medium">{$_('extensions.voting.detail.security_warning.title')}</span>
@@ -179,114 +360,63 @@
 				</Alert>
 			</div>
 
-			<!-- Right Column: Code Diff Viewer -->
-			<div class="bg-gray-50 rounded-lg border overflow-hidden">
-				<div class="bg-gray-100 px-4 py-2 border-b flex items-center gap-2">
-					<CodeBranchOutline class="w-4 h-4 text-gray-600" />
-					<h3 class="font-semibold text-gray-800">{$_('extensions.voting.detail.code_diff')}</h3>
+			<!-- Right Column: Code Viewer -->
+			<div class="bg-gray-50 rounded-lg border overflow-hidden flex flex-col">
+				<div class="bg-gray-100 px-4 py-2 border-b flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<CodeBranchOutline class="w-4 h-4 text-gray-600" />
+						<h3 class="font-semibold text-gray-800">{$_('extensions.voting.detail.code_content')}</h3>
+					</div>
+					<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+						{proposal.code_url ? proposal.code_url.split('/').pop() : 'proposal.py'}
+					</span>
 				</div>
 				
-				<div class="p-4 h-full max-h-[70vh] overflow-y-auto">
-					<div class="font-mono text-sm space-y-1">
-						<!-- Mock code diff display -->
-						<div class="text-gray-500 mb-3">
-							<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-								{proposal.code_url ? proposal.code_url.split('/').pop() : 'proposal.py'}
-							</span>
+				<div class="p-4 flex-1 overflow-y-auto max-h-[70vh]">
+					{#if codeLoading}
+						<div class="flex items-center justify-center py-8">
+							<Spinner size="8" />
+							<span class="ml-3 text-gray-600">{$_('extensions.voting.loading_code')}</span>
 						</div>
-						
-						<!-- Sample diff content -->
-						<div class="bg-red-50 border-l-4 border-red-400 pl-3 py-1">
-							<span class="text-red-600">- def calculate_fee(amount):</span>
+					{:else if codeError}
+						<Alert color="red" class="mb-4">
+							<span class="font-medium">{$_('extensions.voting.error')}</span> {codeError}
+						</Alert>
+						<div class="text-center">
+							<Button size="sm" color="light" on:click={fetchCode}>
+								{$_('extensions.voting.retry')}
+							</Button>
 						</div>
-						<div class="bg-red-50 border-l-4 border-red-400 pl-3 py-1">
-							<span class="text-red-600">-     return amount * 0.001  # 0.1% fee</span>
-						</div>
-						<div class="bg-green-50 border-l-4 border-green-400 pl-3 py-1">
-							<span class="text-green-600">+ def calculate_fee(amount):</span>
-						</div>
-						<div class="bg-green-50 border-l-4 border-green-400 pl-3 py-1">
-							<span class="text-green-600">+     return amount * 0.0011  # 0.11% fee (increased by 0.01%)</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700"></span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">class TransactionProcessor:</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">    def __init__(self, realm_id):</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        self.realm_id = realm_id</span>
-						</div>
-						<div class="bg-green-50 border-l-4 border-green-400 pl-3 py-1">
-							<span class="text-green-600">+         self.fee_rate = 0.0011  # Updated fee rate</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700"></span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">    def process_transaction(self, transaction):</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        amount = transaction.amount</span>
-						</div>
-						<div class="bg-red-50 border-l-4 border-red-400 pl-3 py-1">
-							<span class="text-red-600">-         fee = calculate_fee(amount)</span>
-						</div>
-						<div class="bg-green-50 border-l-4 border-green-400 pl-3 py-1">
-							<span class="text-green-600">+         fee = amount * self.fee_rate</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        net_amount = amount - fee</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        </span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        # Log the transaction</span>
-						</div>
-						<div class="bg-green-50 border-l-4 border-green-400 pl-3 py-1">
-							<span class="text-green-600">+         logger.info(f"Processing transaction: &#123;amount&#125;, fee: &#123;fee&#125;")</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        </span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        return &#123;</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">            'original_amount': amount,</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">            'fee': fee,</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">            'net_amount': net_amount</span>
-						</div>
-						<div class="pl-3 py-1">
-							<span class="text-gray-700">        &#125;</span>
-						</div>
-						
-						<!-- Diff stats -->
-						<div class="mt-4 pt-3 border-t border-gray-200">
-							<div class="text-xs text-gray-500 space-y-1">
-								<div class="flex justify-between">
-									<span>Lines added:</span>
-									<span class="text-green-600 font-medium">+4</span>
-								</div>
-								<div class="flex justify-between">
-									<span>Lines removed:</span>
-									<span class="text-red-600 font-medium">-2</span>
-								</div>
-								<div class="flex justify-between">
-									<span>Net change:</span>
-									<span class="font-medium">+2 lines</span>
-								</div>
+					{:else if codeContent}
+						<div class="font-mono text-sm">
+							<!-- Code with line numbers -->
+							<div class="bg-gray-900 rounded-lg overflow-hidden">
+								<pre class="p-4 overflow-x-auto"><code class="text-gray-100">{codeContent}</code></pre>
 							</div>
+							
+							<!-- Checksum display -->
+							{#if codeChecksum}
+								<div class="mt-4 pt-3 border-t border-gray-200">
+									<div class="text-xs text-gray-500">
+										<div class="flex justify-between items-center">
+											<span class="font-medium">{$_('extensions.voting.detail.checksum')}:</span>
+											<code class="bg-gray-100 px-2 py-1 rounded text-xs break-all ml-2">
+												{codeChecksum}
+											</code>
+										</div>
+										<div class="flex justify-between mt-2">
+											<span>{$_('extensions.voting.lines')}:</span>
+											<span class="font-medium">{codeContent.split('\n').length}</span>
+										</div>
+									</div>
+								</div>
+							{/if}
 						</div>
-					</div>
+					{:else}
+						<div class="text-center py-8 text-gray-500">
+							{$_('extensions.voting.no_code')}
+						</div>
+					{/if}
 				</div>
 			</div>
 </div>
