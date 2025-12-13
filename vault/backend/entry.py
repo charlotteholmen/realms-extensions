@@ -348,7 +348,7 @@ def _transfer(
 ) -> Async[dict]:
     """
     Perform an ICRC-1 transfer from the vault.
-    
+
     Args:
         to_principal: Recipient's principal ID
         amount: Amount to transfer in smallest units (satoshis for ckBTC)
@@ -379,7 +379,7 @@ def _transfer(
         to_subaccount = None
         if to_subaccount_hex:
             to_subaccount = list(bytes.fromhex(to_subaccount_hex))
-        
+
         from_subaccount = None
         if from_subaccount_hex:
             from_subaccount = bytes.fromhex(from_subaccount_hex)
@@ -388,7 +388,9 @@ def _transfer(
         ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
         result = yield ledger.icrc1_transfer(
             TransferArg(
-                to=Account(owner=Principal.from_str(to_principal), subaccount=to_subaccount),
+                to=Account(
+                    owner=Principal.from_str(to_principal), subaccount=to_subaccount
+                ),
                 fee=None,
                 memo=None,
                 from_subaccount=from_subaccount,
@@ -513,19 +515,19 @@ def _refresh_subaccount(
 ) -> Async[dict]:
     """
     Refresh transactions for a specific subaccount.
-    
+
     Args:
         indexer_principal: Principal of the indexer canister
         vault_principal: Principal of the vault canister
         max_results: Maximum number of transactions to fetch
         subaccount_bytes: Subaccount as list of bytes (for indexer query)
         subaccount_hex: Subaccount as hex string (for logging/storage)
-    
+
     Returns:
         Dict with new_tx_count and any errors
     """
     from ggg import Invoice
-    
+
     try:
         response = yield get_account_transactions(
             canister_id=indexer_principal,
@@ -534,29 +536,31 @@ def _refresh_subaccount(
             subaccount=subaccount_bytes,
             start_tx_id=None,
         )
-        
+
         # Handle both attribute and dict-style access for kybra Records
-        if hasattr(response, 'transactions'):
+        if hasattr(response, "transactions"):
             transactions = response.transactions
-        elif isinstance(response, dict) and 'transactions' in response:
-            transactions = response['transactions']
+        elif isinstance(response, dict) and "transactions" in response:
+            transactions = response["transactions"]
         else:
             transactions = []
-        logger.info(f"Retrieved {len(transactions)} transactions for subaccount {subaccount_hex or 'default'}")
-        
+        logger.info(
+            f"Retrieved {len(transactions)} transactions for subaccount {subaccount_hex or 'default'}"
+        )
+
         sorted_transactions = sorted(transactions, key=lambda tx: tx["id"])
         new_tx_count = 0
-        
+
         for account_tx in sorted_transactions:
             tx_id = str(account_tx["id"])
             tx = account_tx["transaction"]
             logger.info(f"Processing tx_id={tx_id}, kind={tx.get('kind')}")
-            
+
             # Skip if already exists (lookup by 'id' field, not '_id')
             if Transfer["id", tx_id]:
                 logger.info(f"Skipping tx_id={tx_id} - already exists")
                 continue
-            
+
             # Handle transfer transactions
             if "transfer" in tx and tx["transfer"]:
                 transfer_data = tx["transfer"]
@@ -574,21 +578,21 @@ def _refresh_subaccount(
             else:
                 # Skip other transaction types (burn, approve)
                 continue
-            
+
             tx_subaccount_hex = None
             matched_invoice = None
-            
+
             if to_subaccount:
                 subaccount_bytes_tx = bytes(to_subaccount)
                 tx_subaccount_hex = subaccount_bytes_tx.hex()
-                
+
                 # Check if this deposit matches a pending invoice
                 if principal_to == vault_principal:
                     invoice = Invoice.from_subaccount(subaccount_bytes_tx)
-                    
+
                     if invoice and invoice.status == "Pending":
                         amount_required = int(invoice.amount * 100_000_000)
-                        
+
                         if amount >= amount_required:
                             invoice.status = "Paid"
                             invoice.paid_at = str(ic.time())
@@ -597,7 +601,7 @@ def _refresh_subaccount(
                                 f"Invoice {invoice.id} marked as Paid via tx {tx_id} "
                                 f"(received: {amount}, required: {amount_required})"
                             )
-            
+
             # Create transaction record
             transfer = Transfer(
                 id=tx_id,
@@ -609,26 +613,36 @@ def _refresh_subaccount(
             )
             if matched_invoice:
                 transfer.invoice = matched_invoice
-            logger.info(f"Created transfer record for tx {tx_id}: {transfer.serialize()}")
+            logger.info(
+                f"Created transfer record for tx {tx_id}: {transfer.serialize()}"
+            )
 
             # Update balances
             if principal_to == vault_principal:
-                balance = Balance[principal_from] or Balance(id=principal_from, amount=0)
+                balance = Balance[principal_from] or Balance(
+                    id=principal_from, amount=0
+                )
                 balance.amount += amount
             elif principal_from == vault_principal:
                 balance = Balance[principal_to] or Balance(id=principal_to, amount=0)
                 balance.amount -= amount
-            
+
             new_tx_count += 1
-        
+
         return {
             "new_tx_count": new_tx_count,
             "oldest_tx_id": response.get("oldest_tx_id"),
-            "highest_tx_id": max((int(tx["id"]) for tx in sorted_transactions), default=0) if sorted_transactions else 0,
+            "highest_tx_id": (
+                max((int(tx["id"]) for tx in sorted_transactions), default=0)
+                if sorted_transactions
+                else 0
+            ),
         }
-        
+
     except Exception as e:
-        logger.error(f"Error refreshing subaccount {subaccount_hex or 'default'}: {str(e)}")
+        logger.error(
+            f"Error refreshing subaccount {subaccount_hex or 'default'}: {str(e)}"
+        )
         return {"new_tx_count": 0, "error": str(e)}
 
 
@@ -681,12 +695,12 @@ def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
             return {"success": False, "error": "ckBTC indexer not configured"}
 
         logger.info(f"Using indexer canister: {indexer_canister.principal}")
-        
+
         vault_principal = ic.id().to_str()
         max_results = app.max_results or 20
         total_new_tx_count = 0
         subaccounts_refreshed = []
-        
+
         # Build list of subaccounts to refresh
         if subaccount_hex:
             # Refresh only the specified subaccount
@@ -699,7 +713,7 @@ def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
                 sa_hex = known_sa.subaccount_hex
                 sa_bytes = bytes.fromhex(sa_hex)
                 subaccounts_to_refresh.append((sa_hex, sa_bytes))
-        
+
         # Refresh each subaccount
         for sa_hex, sa_bytes in subaccounts_to_refresh:
             result = yield _refresh_subaccount(
@@ -709,10 +723,10 @@ def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
                 subaccount_bytes=sa_bytes,
                 subaccount_hex=sa_hex,
             )
-            
+
             total_new_tx_count += result.get("new_tx_count", 0)
             subaccounts_refreshed.append(sa_hex or "default")
-            
+
             # Update KnownSubaccount scan position if applicable
             if sa_hex and result.get("highest_tx_id", 0) > 0:
                 known_sa = KnownSubaccount[sa_hex]
@@ -720,12 +734,14 @@ def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
                     highest = result["highest_tx_id"]
                     if highest > (known_sa.scan_end_tx_id or 0):
                         known_sa.scan_end_tx_id = highest
-        
+
         # Update default subaccount tracking in app_data
         if not subaccount_hex:  # Only update app-level tracking for full refresh
             app.last_refresh_time = ic.time()
 
-        logger.info(f"Successfully synced {total_new_tx_count} new transactions across {len(subaccounts_refreshed)} subaccounts")
+        logger.info(
+            f"Successfully synced {total_new_tx_count} new transactions across {len(subaccounts_refreshed)} subaccounts"
+        )
         return {
             "success": True,
             "data": {
@@ -746,7 +762,7 @@ def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
 def refresh(args: str) -> Async[str]:
     """
     Refresh transactions from ICRC ledger.
-    
+
     Args:
         args: JSON string with optional parameters:
             - force: bool - Skip cooldown check
@@ -756,7 +772,7 @@ def refresh(args: str) -> Async[str]:
         params = json.loads(args) if args else {}
         force = params.get("force", False)
         subaccount_hex = params.get("subaccount")
-        
+
         result = yield _refresh(force=force, subaccount_hex=subaccount_hex)
         return json.dumps(result)
     except Exception as e:
@@ -767,34 +783,36 @@ def refresh(args: str) -> Async[str]:
 def refresh_invoice(args: str) -> Async[str]:
     """
     Refresh transactions for a specific invoice's subaccount.
-    
+
     This is called when a user clicks the "Refresh" button next to an invoice
     to check if payment has been received.
-    
+
     Args:
         args: JSON string with:
             - invoice_id: str - The invoice ID to refresh
-    
+
     Returns:
         JSON string with refresh result and updated invoice status
     """
     from ggg import Invoice
-    
+
     try:
         params = json.loads(args) if args else {}
         invoice_id = params.get("invoice_id")
-        
+
         if not invoice_id:
             return json.dumps({"success": False, "error": "invoice_id is required"})
-        
+
         # Get the invoice
         invoice = Invoice[invoice_id]
         if not invoice:
-            return json.dumps({"success": False, "error": f"Invoice {invoice_id} not found"})
-        
+            return json.dumps(
+                {"success": False, "error": f"Invoice {invoice_id} not found"}
+            )
+
         # Get the subaccount from the invoice using its method
         subaccount_hex = invoice.get_subaccount_hex()
-        
+
         # Ensure this subaccount is registered as known
         if not KnownSubaccount[subaccount_hex]:
             KnownSubaccount(
@@ -803,26 +821,28 @@ def refresh_invoice(args: str) -> Async[str]:
                 source="invoice",
                 invoice_id=invoice_id,
             )
-        
+
         # Refresh this specific subaccount (skip cooldown)
         result = yield _refresh(force=True, subaccount_hex=subaccount_hex)
-        
+
         # Re-fetch invoice to get updated status
         invoice = Invoice[invoice_id]
-        
-        return json.dumps({
-            "success": True,
-            "data": {
-                "refresh_result": result.get("data", {}),
-                "invoice": {
-                    "id": invoice.id,
-                    "status": invoice.status,
-                    "amount": invoice.amount,
-                    "paid_at": getattr(invoice, "paid_at", None),
-                }
+
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "refresh_result": result.get("data", {}),
+                    "invoice": {
+                        "id": invoice.id,
+                        "status": invoice.status,
+                        "amount": invoice.amount,
+                        "paid_at": getattr(invoice, "paid_at", None),
+                    },
+                },
             }
-        })
-        
+        )
+
     except Exception as e:
         logger.error(f"Error in refresh_invoice: {str(e)}\n{traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})

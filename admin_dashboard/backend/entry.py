@@ -181,7 +181,8 @@ def import_data(args):
             # Handle base64 encoded args to avoid shell escaping issues
             if args.startswith("base64:"):
                 import base64
-                args = base64.b64decode(args[7:]).decode('utf-8')
+
+                args = base64.b64decode(args[7:]).decode("utf-8")
             args = json.loads(args)
 
         data_format = args.get("format", "json")

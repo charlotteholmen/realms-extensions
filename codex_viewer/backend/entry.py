@@ -32,7 +32,9 @@ def extension_sync_call(method_name: str, args: dict):
     except Exception as e:
         logger.error(f"Error calling {method_name}: {str(e)}")
         logger.error(traceback.format_exc())
-        return json.dumps({"success": False, "error": f"Error calling {method_name}: {str(e)}"})
+        return json.dumps(
+            {"success": False, "error": f"Error calling {method_name}: {str(e)}"}
+        )
 
 
 def get_all_codexes(args: str = "{}"):
@@ -45,10 +47,20 @@ def get_all_codexes(args: str = "{}"):
             codex_data = {
                 "_id": str(codex._id),
                 "name": codex.name if hasattr(codex, "name") else "",
-                "description": codex.description if hasattr(codex, "description") else "",
-                "created_at": codex.created_at if hasattr(codex, "created_at") else None,
-                "updated_at": codex.updated_at if hasattr(codex, "updated_at") else None,
-                "code_preview": (codex.code[:200] + "..." if len(codex.code) > 200 else codex.code) if hasattr(codex, "code") and codex.code else "",
+                "description": (
+                    codex.description if hasattr(codex, "description") else ""
+                ),
+                "created_at": (
+                    codex.created_at if hasattr(codex, "created_at") else None
+                ),
+                "updated_at": (
+                    codex.updated_at if hasattr(codex, "updated_at") else None
+                ),
+                "code_preview": (
+                    (codex.code[:200] + "..." if len(codex.code) > 200 else codex.code)
+                    if hasattr(codex, "code") and codex.code
+                    else ""
+                ),
             }
             codexes.append(codex_data)
 
@@ -73,12 +85,18 @@ def get_codex_details(args):
         # Find codex
         codex = None
         for c in Codex.instances():
-            if str(c._id) == codex_id or str(c._id).startswith(codex_id) or c.name == codex_id:
+            if (
+                str(c._id) == codex_id
+                or str(c._id).startswith(codex_id)
+                or c.name == codex_id
+            ):
                 codex = c
                 break
 
         if not codex:
-            return json.dumps({"success": False, "error": f"Codex {codex_id} not found"})
+            return json.dumps(
+                {"success": False, "error": f"Codex {codex_id} not found"}
+            )
 
         codex_data = {
             "_id": str(codex._id),

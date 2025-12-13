@@ -185,19 +185,21 @@ def get_account_transactions(
         A GetAccountTransactionsResponse object containing balance and transactions
     """
     try:
-        logger.info(f"QUERY PARAMS: canister_id={canister_id}, owner={owner_principal}, subaccount={subaccount.hex() if subaccount else None}, start={start_tx_id}, max={max_results}")
-        
+        logger.info(
+            f"QUERY PARAMS: canister_id={canister_id}, owner={owner_principal}, subaccount={subaccount.hex() if subaccount else None}, start={start_tx_id}, max={max_results}"
+        )
+
         indexer = ICRCIndexer(Principal.from_str(canister_id))
         account = Account(
             owner=Principal.from_str(owner_principal), subaccount=subaccount
         )
-        
+
         request = GetAccountTransactionsRequest(
             account=account,
             start=start_tx_id,
             max_results=max_results,
         )
-        
+
         result = yield indexer.get_account_transactions(request)
 
         logger.info(f"Indexer raw result type: {type(result)}")

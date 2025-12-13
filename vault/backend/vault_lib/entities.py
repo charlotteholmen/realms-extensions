@@ -54,10 +54,10 @@ class Category(Entity, TimestampedMixin):
 
 class KnownSubaccount(Entity, TimestampedMixin):
     """Tracks subaccounts that should be monitored during refresh.
-    
+
     When an invoice is created or a user manually adds a subaccount,
     it is registered here so that refresh operations can query it.
-    
+
     The _id should be the subaccount_hex (64-char hex string) for easy lookup.
     """
 

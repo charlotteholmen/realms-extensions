@@ -43,7 +43,9 @@ def extension_sync_call(method_name: str, args: dict):
     except Exception as e:
         logger.error(f"Error calling {method_name}: {str(e)}")
         logger.error(traceback.format_exc())
-        return json.dumps({"success": False, "error": f"Error calling {method_name}: {str(e)}"})
+        return json.dumps(
+            {"success": False, "error": f"Error calling {method_name}: {str(e)}"}
+        )
 
 
 def get_all_tasks(args: str = "{}"):
@@ -233,12 +235,14 @@ def get_task_executions(args):
                     }
                 )
 
-        return json.dumps({
-            "success": True,
-            "executions": executions,
-            "count": len(executions),
-            "task_name": task.name,
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "executions": executions,
+                "count": len(executions),
+                "task_name": task.name,
+            }
+        )
     except Exception as e:
         logger.error(f"Error getting task executions: {str(e)}")
         logger.error(traceback.format_exc())
@@ -267,19 +271,23 @@ def toggle_schedule(args):
                 break
 
         if not schedule:
-            return json.dumps({"success": False, "error": f"Schedule {schedule_id} not found"})
+            return json.dumps(
+                {"success": False, "error": f"Schedule {schedule_id} not found"}
+            )
 
         schedule.disabled = disabled
         logger.info(
             f"Schedule {schedule.name} ({'disabled' if disabled else 'enabled'})"
         )
 
-        return json.dumps({
-            "success": True,
-            "message": f"Schedule {'disabled' if disabled else 'enabled'}",
-            "schedule_id": str(schedule._id),
-            "disabled": disabled,
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "message": f"Schedule {'disabled' if disabled else 'enabled'}",
+                "schedule_id": str(schedule._id),
+                "disabled": disabled,
+            }
+        )
     except Exception as e:
         logger.error(f"Error toggling schedule: {str(e)}")
         logger.error(traceback.format_exc())
@@ -328,11 +336,13 @@ def run_task_now(args):
 
         logger.info(f"Task {task.name} triggered manually")
 
-        return json.dumps({
-            "success": True,
-            "message": f"Task {task.name} started",
-            "task_id": str(task._id),
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "message": f"Task {task.name} started",
+                "task_id": str(task._id),
+            }
+        )
     except Exception as e:
         logger.error(f"Error running task: {str(e)}")
         logger.error(traceback.format_exc())
@@ -386,11 +396,13 @@ def delete_task(args):
 
         logger.info(f"Task {task_name} deleted")
 
-        return json.dumps({
-            "success": True,
-            "message": f"Task {task_name} deleted successfully",
-            "task_id": task_id,
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "message": f"Task {task_name} deleted successfully",
+                "task_id": task_id,
+            }
+        )
     except Exception as e:
         logger.error(f"Error deleting task: {str(e)}")
         logger.error(traceback.format_exc())
@@ -422,11 +434,13 @@ def get_task_logs(args):
     except Exception as e:
         # Fallback if get_logs doesn't exist
         logger.error(f"Error getting task logs: {str(e)}")
-        return json.dumps({
-            "success": False,
-            "error": "Log retrieval not available",
-            "message": "Check TaskExecution records for execution logs",
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": "Log retrieval not available",
+                "message": "Check TaskExecution records for execution logs",
+            }
+        )
 
 
 def extension_async_call(method_name: str, args: dict):

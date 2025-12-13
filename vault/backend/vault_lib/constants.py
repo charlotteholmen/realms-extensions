@@ -3,6 +3,7 @@
 # Import canister IDs from central config (updated during deployment)
 try:
     from config import CANISTER_IDS
+
     _ckbtc_ledger = CANISTER_IDS.get("ckbtc_ledger", "mxzaz-hqaaa-aaaar-qaada-cai")
     _ckbtc_indexer = CANISTER_IDS.get("ckbtc_indexer", "n5wcd-faaaa-aaaar-qaaea-cai")
 except ImportError:

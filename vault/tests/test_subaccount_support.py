@@ -10,20 +10,21 @@ These tests verify:
 """
 
 import json
+
 import pytest
 
 
 class TestKnownSubaccount:
     """Tests for KnownSubaccount entity."""
-    
+
     def test_create_known_subaccount(self):
         """Test creating a KnownSubaccount entity."""
         # This would be run in the canister context
         # For now, we document the expected behavior
-        
+
         # Expected:
         # from vault_lib.entities import KnownSubaccount
-        # 
+        #
         # subaccount_hex = "696e765f6661626572" + "00" * 23  # 64 chars
         # sa = KnownSubaccount(
         #     _id=subaccount_hex,
@@ -31,13 +32,13 @@ class TestKnownSubaccount:
         #     source="invoice",
         #     invoice_id="inv_123",
         # )
-        # 
+        #
         # assert sa.subaccount_hex == subaccount_hex
         # assert sa.source == "invoice"
         # assert sa.scan_end_tx_id == 0
         # assert sa.balance == 0
         pass
-    
+
     def test_known_subaccount_lookup(self):
         """Test looking up a KnownSubaccount by its hex ID."""
         # Expected:
@@ -48,7 +49,7 @@ class TestKnownSubaccount:
 
 class TestRefreshWithSubaccount:
     """Tests for refresh functionality with subaccounts."""
-    
+
     def test_refresh_default_subaccount(self):
         """Test that refresh queries the default subaccount."""
         # Expected behavior:
@@ -56,7 +57,7 @@ class TestRefreshWithSubaccount:
         # - Should query transactions for the default (None) subaccount
         # - Should also query all registered KnownSubaccounts
         pass
-    
+
     def test_refresh_specific_subaccount(self):
         """Test refreshing a specific subaccount."""
         # Expected behavior:
@@ -64,7 +65,7 @@ class TestRefreshWithSubaccount:
         # - Should only query that specific subaccount
         # - Should update KnownSubaccount.scan_end_tx_id
         pass
-    
+
     def test_refresh_registers_subaccount_from_invoice(self):
         """Test that refresh_invoice registers the invoice's subaccount."""
         # Expected behavior:
@@ -76,21 +77,21 @@ class TestRefreshWithSubaccount:
 
 class TestTransferWithSubaccount:
     """Tests for transfer functionality with subaccounts."""
-    
+
     def test_transfer_to_subaccount(self):
         """Test transferring to a specific subaccount."""
         # Expected behavior:
         # - Call transfer with to_subaccount parameter
         # - The ICRC transfer should include the subaccount in the 'to' Account
         pass
-    
+
     def test_transfer_from_subaccount(self):
         """Test transferring from a specific vault subaccount."""
         # Expected behavior:
         # - Call transfer with from_subaccount parameter
         # - The ICRC transfer should include from_subaccount in TransferArg
         pass
-    
+
     def test_transfer_with_both_subaccounts(self):
         """Test transferring from vault subaccount to recipient subaccount."""
         # Expected behavior:
@@ -101,14 +102,14 @@ class TestTransferWithSubaccount:
 
 class TestPaginationTracking:
     """Tests for pagination tracking with scan_end_tx_id."""
-    
+
     def test_scan_end_tx_id_updated_after_refresh(self):
         """Test that scan_end_tx_id is updated after processing transactions."""
         # Expected behavior:
         # - After refresh, app_data().scan_end_tx_id should be set to
         #   the highest transaction ID processed
         pass
-    
+
     def test_known_subaccount_scan_position_updated(self):
         """Test that KnownSubaccount.scan_end_tx_id is updated per-subaccount."""
         # Expected behavior:
@@ -119,20 +120,20 @@ class TestPaginationTracking:
 
 class TestSubaccountHexValidation:
     """Tests for subaccount hex string validation."""
-    
+
     def test_valid_64_char_hex(self):
         """Test that valid 64-character hex strings are accepted."""
         valid_hex = "0" * 64
         # Should not raise
         bytes.fromhex(valid_hex)
         assert len(bytes.fromhex(valid_hex)) == 32
-    
+
     def test_invalid_hex_raises(self):
         """Test that invalid hex strings raise ValueError."""
         invalid_hex = "not_a_hex_string"
         with pytest.raises(ValueError):
             bytes.fromhex(invalid_hex)
-    
+
     def test_wrong_length_hex(self):
         """Test behavior with wrong-length hex strings."""
         short_hex = "00" * 16  # 32 chars = 16 bytes
@@ -144,7 +145,7 @@ class TestSubaccountHexValidation:
 # Integration test examples (would need canister deployment)
 class TestIntegration:
     """Integration tests requiring deployed canisters."""
-    
+
     @pytest.mark.skip(reason="Requires deployed canister")
     def test_end_to_end_invoice_payment_flow(self):
         """
@@ -155,7 +156,7 @@ class TestIntegration:
         4. Verify invoice status updated to Paid
         """
         pass
-    
+
     @pytest.mark.skip(reason="Requires deployed canister")
     def test_transfer_from_subaccount_to_recover_funds(self):
         """
