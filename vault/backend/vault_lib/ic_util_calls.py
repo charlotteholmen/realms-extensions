@@ -42,7 +42,7 @@ def set_account_mock_transaction(
     try:
         # Get current test mode data and increment transaction ID
         test_data = test_mode_data()
-        tx_id = test_data.tx_id
+        tx_id = f"demo_{test_data.tx_id}"  # Prefix with demo_ to avoid collision with real tx IDs
         test_data.tx_id += 1
 
         # Use current time if timestamp not provided
