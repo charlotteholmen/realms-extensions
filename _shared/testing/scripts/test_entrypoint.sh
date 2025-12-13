@@ -141,6 +141,14 @@ if [ "$REALM_RANDOM" = "true" ]; then
 fi
 eval "$REALM_CMD"
 
+# Find the created realm folder (most recent in .realms/)
+REALM_FOLDER=$(ls -td .realms/realm_* 2>/dev/null | head -1)
+if [ -z "$REALM_FOLDER" ]; then
+    echo "[ERROR] No realm folder found in .realms/"
+    exit 1
+fi
+echo "[INFO] Using realm folder: $REALM_FOLDER"
+
 # Stop previous dfx instances and clean up
 echo '[INFO] Stopping previous dfx instances...'
 if [ -f /.dockerenv ]; then
@@ -178,7 +186,7 @@ if [ "$TEST_CANISTERS_ENABLED" = "true" ]; then
     fi
     
     if [ -f "$MERGE_SCRIPT" ] && [ -f "$TEST_DFX_PATH" ]; then
-        python3 "$MERGE_SCRIPT" "$TEST_DFX_PATH" dfx.json
+        python3 "$MERGE_SCRIPT" "$TEST_DFX_PATH" "$REALM_FOLDER/dfx.json"
     else
         echo "[WARNING] Merge script or test dfx.json not found, skipping merge"
     fi
@@ -186,7 +194,7 @@ fi
 
 # Deploy realm
 echo '[INFO] Deploying realm...'
-realms realm deploy --folder ".realm"
+realms realm deploy --folder "$REALM_FOLDER"
 
 # Deploy test canisters if enabled
 if [ "$TEST_CANISTERS_ENABLED" = "true" ] && [ -n "$TEST_CANISTERS_DEPLOY" ]; then
