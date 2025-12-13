@@ -15,6 +15,7 @@ Prerequisites:
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -23,9 +24,17 @@ import time
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
-# Change to realms root for dfx commands
-REALMS_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
-os.chdir(REALMS_ROOT)
+# Determine working directory: use REALM_DIR env var, or current directory if it has dfx.json
+REALM_DIR = os.environ.get("REALM_DIR", os.getcwd())
+if not os.path.exists(os.path.join(REALM_DIR, "dfx.json")):
+    # Fallback: check if we're in a realm subdirectory
+    if os.path.exists("dfx.json"):
+        REALM_DIR = os.getcwd()
+    else:
+        print("ERROR: Must run from a realm directory with dfx.json or set REALM_DIR")
+        sys.exit(1)
+os.chdir(REALM_DIR)
+print(f"Working directory: {REALM_DIR}")
 
 from test_utils import (
     call_realm_extension,
@@ -58,23 +67,38 @@ def execute_on_canister(code: str) -> dict:
         return {"raw": result, "parse_error": str(e)}
 
 
+def invoice_id_to_subaccount_hex(invoice_id: str) -> str:
+    """Convert invoice ID to 32-byte hex subaccount (padded with null bytes)."""
+    return invoice_id.encode().ljust(32, b'\x00').hex()
+
+
 def icw_transfer(
-    recipient: str, amount: float, subaccount: str, ledger_id: str
+    recipient: str, amount: str, subaccount_hex: str, ledger_id: str
 ) -> bool:
-    """Transfer tokens using icw CLI to a specific subaccount."""
+    """Transfer tokens using icw CLI to a specific subaccount (hex format)."""
+    # Find icw in PATH or use the realms venv
+    icw_path = shutil.which("icw")
+    if not icw_path:
+        # Try realms venv
+        realms_root = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
+        icw_path = os.path.join(realms_root, "venv", "bin", "icw")
+        if not os.path.exists(icw_path):
+            print_error(f"icw not found in PATH or {icw_path}")
+            return False
+    
     cmd = [
-        "icw",
+        icw_path,
         "-n",
         "local",
         "transfer",
         recipient,
         str(amount),
         "-s",
-        subaccount,
+        subaccount_hex,
         "--ledger",
         ledger_id,
         "--fee",
-        "10",
+        "0",
     ]
     print(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -107,48 +131,51 @@ def test_invoice_payment():
     import uuid
 
     invoice_id = f"inv_{uuid.uuid4().hex[:12]}"
-    create_code = f'from ggg import Invoice; inv = Invoice(id="{invoice_id}", amount=0.0001, currency="ckBTC", status="Pending", due_date="2025-12-31", metadata="test"); print(inv.id)'
+    # Amount in ckBTC - 0.00000001 = 1 satoshi
+    invoice_amount = "0.00000001"
+    create_code = f'from ggg import Invoice; inv = Invoice(id="{invoice_id}", amount={invoice_amount}, currency="ckBTC", status="Pending", due_date="2025-12-31", metadata="test"); print(inv.id)'
     result = execute_on_canister(create_code)
     if invoice_id not in result.get("raw", ""):
         print_error(f"Failed to create invoice: {result}")
         return False
     print_ok(f"Created invoice: {invoice_id}")
 
-    # Step 2: Transfer to invoice subaccount (subaccount = invoice_id padded)
+    # Step 2: Transfer to invoice subaccount (hex-encoded)
     print("\n--- Step 2: Transfer ckBTC ---")
-    if not icw_transfer(vault_id, 0.0001, invoice_id, ledger_id):
+    subaccount_hex = invoice_id_to_subaccount_hex(invoice_id)
+    print(f"Subaccount hex: {subaccount_hex}")
+    if not icw_transfer(vault_id, "0.00000001", subaccount_hex, ledger_id):
         print_error("Transfer failed")
         return False
     print_ok("Transfer successful")
 
-    # Step 3: Wait for indexer and check invoice payment
-    print("\n--- Step 3: Check Invoice Payment ---")
+    # Step 3: Wait for indexer to sync
+    print("\n--- Step 3: Wait for Indexer ---")
     time.sleep(2)
 
-    # Call check_invoice_payment which queries the subaccount balance directly
-    check_args = json.dumps({"invoice_id": invoice_id})
-    check_result = call_realm_extension(
-        "member_dashboard", "check_invoice_payment", check_args
-    )
-
-    if not check_result:
-        print_error("check_invoice_payment call failed")
+    # Step 4: Call vault.refresh_invoice to sync this invoice's subaccount
+    print("\n--- Step 4: Vault Refresh Invoice ---")
+    refresh_args = json.dumps({"invoice_id": invoice_id})
+    refresh_result = call_realm_extension("vault", "refresh_invoice", refresh_args)
+    if not refresh_result:
+        print_error("vault.refresh_invoice call failed")
         return False
+    print(f"Refresh result: {refresh_result}")
+    
+    # Wait for async refresh to complete
+    time.sleep(3)
 
-    print(f"Check result: {check_result}")
+    # Step 5: Check invoice status using realms CLI
+    print("\n--- Step 5: Check Invoice Status ---")
+    check_cmd = f"realms db get Invoice {invoice_id}"
+    result = run_command(check_cmd)
+    print(f"Invoice data: {result}")
 
-    if check_result.get("success"):
-        data = check_result.get("data", {})
-        if data.get("paid") or data.get("already_paid"):
-            print_ok("✅ Invoice correctly marked as Paid!")
-            return True
-        else:
-            print_error(
-                f"❌ Invoice not paid. Shortfall: {data.get('shortfall_satoshis')} satoshis"
-            )
-            return False
+    if result and '"status": "Paid"' in result:
+        print_ok("✅ Invoice correctly marked as Paid!")
+        return True
     else:
-        print_error(f"❌ Check failed: {check_result.get('error')}")
+        print_error(f"❌ Invoice not paid.")
         return False
 
 

@@ -552,8 +552,8 @@ def _refresh_subaccount(
             tx = account_tx["transaction"]
             logger.info(f"Processing tx_id={tx_id}, kind={tx.get('kind')}")
             
-            # Skip if already exists
-            if Transfer[tx_id]:
+            # Skip if already exists (lookup by 'id' field, not '_id')
+            if Transfer["id", tx_id]:
                 logger.info(f"Skipping tx_id={tx_id} - already exists")
                 continue
             
@@ -609,7 +609,8 @@ def _refresh_subaccount(
             )
             if matched_invoice:
                 transfer.invoice = matched_invoice
-            
+            logger.info(f"Created transfer record for tx {tx_id}: {transfer.serialize()}")
+
             # Update balances
             if principal_to == vault_principal:
                 balance = Balance[principal_from] or Balance(id=principal_from, amount=0)
