@@ -383,6 +383,67 @@ def check_invoice_payment(args: str) -> Async[str]:
         return json.dumps({"success": False, "error": str(e)})
 
 
+def demo_mark_invoice_paid(args: str) -> str:
+    """
+    [DEMO FEATURE] Mark an invoice as paid without actual payment.
+    This is for demonstration purposes only.
+
+    Args:
+        args: JSON string with {"invoice_id": "..."}
+
+    Returns:
+        JSON string with updated invoice status
+    """
+    try:
+        logger.info(f"demo_mark_invoice_paid called with args: {args}")
+        params = json.loads(args) if args else {}
+        invoice_id = params.get("invoice_id")
+
+        if not invoice_id:
+            return json.dumps({"success": False, "error": "invoice_id is required"})
+
+        # Find the invoice
+        invoice = Invoice[invoice_id]
+        if not invoice:
+            return json.dumps({"success": False, "error": "Invoice not found"})
+
+        if invoice.status == "Paid":
+            return json.dumps(
+                {
+                    "success": True,
+                    "data": {
+                        "already_paid": True,
+                        "invoice_id": invoice_id,
+                        "message": "Invoice was already paid",
+                    },
+                }
+            )
+
+        # Mark as paid (demo)
+        invoice.status = "Paid"
+        invoice.paid_at = datetime.utcnow().isoformat()
+
+        logger.info(f"[DEMO] Invoice {invoice_id} marked as Paid")
+
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "invoice_id": invoice_id,
+                    "status": "Paid",
+                    "paid_at": invoice.paid_at,
+                    "message": "Invoice marked as paid (demo)",
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Error in demo_mark_invoice_paid: {str(e)}\n{traceback.format_exc()}"
+        )
+        return json.dumps({"success": False, "error": str(e)})
+
+
 def get_personal_data(args: str) -> str:
     """
     Get personal data for the member.

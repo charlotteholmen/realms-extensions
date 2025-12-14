@@ -22,6 +22,9 @@
 	// Refresh state
 	let refreshingInvoiceId: string | null = null;
 	
+	// Demo feature state
+	let demoPayingInvoiceId: string | null = null;
+	
 	// Calculate percentages for the distribution bar
 	$: totalAmount = taxData ? (taxData.summary.total_paid + taxData.summary.total_pending + taxData.summary.total_overdue) : 0;
 	$: paidPercentage = totalAmount > 0 ? (taxData.summary.total_paid / totalAmount) * 100 : 0;
@@ -177,6 +180,32 @@
 			console.error('Error refreshing invoice:', err);
 		} finally {
 			refreshingInvoiceId = null;
+		}
+	}
+	
+	// Demo: Mark invoice as paid without actual payment
+	async function demoMarkAsPaid(record) {
+		demoPayingInvoiceId = record.id;
+		try {
+			const response = await backend.extension_sync_call({
+				extension_name: "member_dashboard",
+				function_name: "demo_mark_invoice_paid",
+				args: JSON.stringify({ invoice_id: record.id })
+			});
+			
+			console.log('Demo mark as paid response:', response);
+			
+			if (response.success) {
+				const data = JSON.parse(response.response);
+				if (data.success) {
+					// Refresh the entire tax data to get updated summary
+					await getTaxInformation();
+				}
+			}
+		} catch (err) {
+			console.error('Error marking invoice as paid (demo):', err);
+		} finally {
+			demoPayingInvoiceId = null;
 		}
 	}
 	
@@ -338,6 +367,19 @@
 										>
 											<CreditCardOutline class="w-3.5 h-3.5 mr-1.5" />
 											Pay
+										</Button>
+										<Button 
+											size="xs" 
+											color="blue"
+											outline
+											class="px-3 py-1.5 text-xs"
+											disabled={demoPayingInvoiceId === record.id}
+											on:click={() => demoMarkAsPaid(record)}
+										>
+											{#if demoPayingInvoiceId === record.id}
+												<Spinner size="3" class="mr-1" />
+											{/if}
+											Demo Feature
 										</Button>
 									</div>
 								{:else}
