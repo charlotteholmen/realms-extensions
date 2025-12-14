@@ -379,7 +379,7 @@
 											{#if demoPayingInvoiceId === record.id}
 												<Spinner size="3" class="mr-1" />
 											{/if}
-											Demo Feature
+											Demo: Set as paid
 										</Button>
 									</div>
 								{:else}
