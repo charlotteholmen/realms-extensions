@@ -49,8 +49,8 @@
 	const isLocalhost = false;
 	console.log("isLocalhost", isLocalhost);
 	
-	// Production server host (CNAME points to current RunPod pod)
-	const SERVER_HOST = 'https://ashoka.realmsgos.ch/';
+	// Production API host via Cloudflare Tunnel
+	const PRODUCTION_API_HOST = 'https://ashoka-api.realmsgos.dev/';
 	
 	// Determine API URL based on environment
 	let API_URL = '';
@@ -62,8 +62,8 @@
 			API_URL = "http://localhost:5000/api/ask";
 			SUGGESTIONS_API_URL = "http://localhost:5000/suggestions";
 		} else {
-			API_URL = `${SERVER_HOST}api/ask`;
-			SUGGESTIONS_API_URL = `${SERVER_HOST}suggestions`;
+			API_URL = `${PRODUCTION_API_HOST}api/ask`;
+			SUGGESTIONS_API_URL = `${PRODUCTION_API_HOST}suggestions`;
 		}
 		console.log("API_URL set to:", API_URL);
 		console.log("SUGGESTIONS_API_URL set to:", SUGGESTIONS_API_URL);
@@ -82,7 +82,7 @@
 		}
 		
 		// Initialize API URL
-		await initializeApiUrl();
+		initializeApiUrl();
 		
 		// Fetch initial suggestions
 		await fetchSuggestions();
