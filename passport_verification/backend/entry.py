@@ -112,7 +112,10 @@ def get_verification_link(args: str) -> Async[str]:
             "method": {"post": None},
             "headers": [{"name": "Content-Type", "value": "application/json"}],
             "body": json.dumps(payload).encode("utf-8"),
-            "transform": None,
+            "transform": {
+                "function": (ic.id(), "http_transform"),
+                "context": bytes(),
+            },
         }
     ).with_cycles(100_000_000)
 
@@ -160,7 +163,10 @@ def check_verification_status(args: str) -> Async[str]:
             "method": {"get": None},
             "headers": [],
             "body": bytes(),
-            "transform": None,
+            "transform": {
+                "function": (ic.id(), "http_transform"),
+                "context": bytes(),
+            },
         }
     ).with_cycles(100_000_000)
 
