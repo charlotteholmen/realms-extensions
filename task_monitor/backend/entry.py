@@ -418,7 +418,7 @@ def get_task_logs(args):
         if isinstance(args, str):
             args = json.loads(args)
         task_id = args.get("task_id")
-        limit = args.get("limit", 100)
+        limit = int(args.get("limit", 100))
 
         if not task_id:
             return json.dumps({"success": False, "error": "task_id is required"})
