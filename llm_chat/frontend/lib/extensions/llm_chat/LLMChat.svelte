@@ -277,7 +277,7 @@
 
 		} catch (err) {
 			console.error("Error calling LLM:", err);
-			error = "Failed to get response from LLM. Please try again.";
+			error = `AI service unavailable: ${response?.status ? `HTTP ${response.status}` : 'Connection failed'}. Please try again in a moment.`;
 			
 			// Remove the AI message if there was an error and it exists
 			if (messages.length > 0 && !messages[messages.length - 1].isUser) {
