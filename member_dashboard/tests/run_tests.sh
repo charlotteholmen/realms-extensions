@@ -18,7 +18,7 @@ if command -v realms &> /dev/null; then
     realms run --file extensions/member_dashboard/tests/test_member_dashboard.py --wait
 else
     echo "⚠️  Warning: 'realms' command not found. Skipping integration tests."
-    echo "   Install realms-cli or run these tests after deployment."
+    echo "   Install realms-gos or run these tests after deployment."
 fi
 
 echo ""

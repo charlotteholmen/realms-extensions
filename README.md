@@ -213,11 +213,11 @@ From the project root directory:
 
 ```bash
 # List all installed extensions
-realms-cli extension list
+realms extension list
 
 # Install all extensions from source
-realms-cli extension install-from-source
+realms extension install-from-source
 
 # Create a new realm with demo data for testing
-realms-cli create --members 25 --organizations 3 --transactions 50
+realms create --members 25 --organizations 3 --transactions 50
 ```
