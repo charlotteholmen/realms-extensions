@@ -85,28 +85,6 @@ fi
 echo '[INFO] Installing realms cli...'
 pip install -e cli/ --force
 
-# Save core extensions before cleanup (they exist in the Docker image from realms repo)
-echo '[INFO] Saving core extensions before cleanup...'
-CORE_EXTENSIONS=("admin_dashboard")
-for CORE_EXT in "${CORE_EXTENSIONS[@]}"; do
-    if [ -d "extensions/$CORE_EXT" ]; then
-        echo "[INFO] Backing up core extension: $CORE_EXT"
-        cp -r "extensions/$CORE_EXT" "/tmp/${CORE_EXT}_backup"
-    fi
-done
-
-rm -rf extensions
-
-# Restore core extensions after cleanup
-echo '[INFO] Restoring core extensions...'
-mkdir -p extensions
-for CORE_EXT in "${CORE_EXTENSIONS[@]}"; do
-    if [ -d "/tmp/${CORE_EXT}_backup" ]; then
-        echo "[INFO] Restoring core extension: $CORE_EXT"
-        cp -r "/tmp/${CORE_EXT}_backup" "extensions/$CORE_EXT"
-    fi
-done
-
 # Download test artifacts if script exists
 if [ -f /.dockerenv ]; then
     DOWNLOAD_SCRIPT="/app/extension-root/tests/download_test_artifacts.sh"
