@@ -205,7 +205,10 @@ if [ "$TEST_CANISTERS_ENABLED" = "true" ] && [ -n "$TEST_CANISTERS_DEPLOY" ]; th
     fi
     
     if [ -f "$DEPLOY_SCRIPT" ]; then
+        # Run from realm folder where dfx.json exists
+        pushd "$REALM_FOLDER" > /dev/null
         python3 "$DEPLOY_SCRIPT"
+        popd > /dev/null
     else
         echo "[WARNING] Test canisters deploy script not found: $DEPLOY_SCRIPT"
     fi
