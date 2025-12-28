@@ -1,45 +1,23 @@
 {
   "name": "Bienvenido",
-  "description": "Página de bienvenida para Realms GOS",
+  "description": "Página de bienvenida del Reino",
   "sidebar": "Bienvenido",
-  "title": "Realms GOS",
-  "page_title": "Realms GOS",
+  "title": "Bienvenido",
+  "page_title": "Bienvenido",
+  "loading": "Cargando...",
   "hero": {
-    "title": "Realms GOS - El Sistema Operativo de Gobernanza",
-    "subtitle_1": "• Lanza una administración pública completa en segundos",
-    "subtitle_2": "• Completamente auditable. Completamente transparente. Impulsado por IA",
-    "subtitle_3": "• Diseñado para eliminar la corrupción e ineficiencias",
-    "try_sandbox": "Prueba el sandbox"
+    "welcome_to": "Bienvenido a",
+    "this_realm": "este Reino",
+    "join_realm": "Unirse a este Reino",
+    "login": "Iniciar sesión",
+    "enter_realm": "Entrar al Reino"
   },
   "built_with": {
     "text": "Construido en el",
     "with_love": "con ❤️ desde 🇨🇭"
   },
-  "mission": {
-    "title": "Gobernanza Como Debería Ser",
-    "description": "<b>Realms</b> es una plataforma de software descentralizada para la administración pública — un Sistema Operativo de Gobernanza (GOS) diseñado para entregar servicios públicos esenciales como justicia, bienestar social, registros de propiedad, y más. Desde pequeños pueblos hasta naciones enteras, empodera a las comunidades para diseñar, ejecutar y evolucionar sus propios sistemas de gobernanza — libres de la corrupción e ineficiencias de la burocracia tradicional."
-  },
-  "principles": {
-    "title": "Principios de diseño",
-    "transparency": {
-      "title": "Transparencia",
-      "description": "La transparencia construye confianza entre el gobierno y el público, ya que los usuarios pueden ver cómo se ejecutan los procesos y dónde se asignan los recursos, como el dinero de los impuestos. La transparencia también ayuda a prevenir la corrupción y fortalece la legitimidad de las instituciones."
-    },
-    "efficiency": {
-      "title": "Eficiencia",
-      "description": "La eficiencia implica entregar servicios de manera efectiva mientras se minimizan los costos y se reduce el desperdicio. Esto fomenta un fuerte sentido de justicia, reforzando la confianza pública en el sistema de gobernanza. Como resultado, los usuarios son más propensos a apoyar y cumplir con las obligaciones fiscales, reduciendo la evasión fiscal y promoviendo una mayor responsabilidad cívica."
-    },
-    "diversity": {
-      "title": "Diversidad",
-      "description": "La diversidad en la gobernanza asegura que se represente una amplia gama de perspectivas. Esto lleva a políticas más inclusivas y equitativas que atienden diferentes necesidades sociales, fomentando la cohesión social y reduciendo la marginación."
-    },
-    "resilience": {
-      "title": "Resistencia",
-      "description": "La resistencia permite a los sistemas de gobernanza responder a crisis, adaptarse a cambios y recuperarse de contratiempos, como choques económicos o desastres naturales. Un sistema de gobernanza resistente asegura estabilidad y continuidad, incluso en tiempos de estrés, protegiendo el bienestar social a largo plazo."
-    }
-  },
   "alt_text": {
-    "background": "Fondo {index}",
+    "background": "Imagen de fondo del Reino",
     "internet_computer_logo": "Logo de Internet Computer",
     "realms_logo": "Logo de Realms"
   }
