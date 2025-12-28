@@ -34,11 +34,11 @@ def _proposal_to_dict(proposal: Proposal) -> Dict[str, Any]:
             proposal.voting_deadline if proposal.voting_deadline else None
         ),
         "votes": {
-            "yes": int(proposal.votes_yes),
-            "no": int(proposal.votes_no),
-            "abstain": int(proposal.votes_abstain),
+            "yes": int(proposal.votes_yes or 0),
+            "no": int(proposal.votes_no or 0),
+            "abstain": int(proposal.votes_abstain or 0),
         },
-        "total_voters": int(proposal.total_voters),
+        "total_voters": int(proposal.total_voters or 0),
         "required_threshold": proposal.required_threshold,
     }
 

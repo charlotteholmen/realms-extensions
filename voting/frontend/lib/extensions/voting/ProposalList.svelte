@@ -48,25 +48,25 @@
 	</div>
 {:else}
 	<!-- Desktop Table View -->
-		<div class="hidden lg:block">
-			<Table hoverable={true} class="w-full">
+		<div class="hidden lg:block overflow-x-auto">
+			<Table hoverable={true} class="w-full table-fixed">
 				<TableHead>
-					<TableHeadCell class="w-1/4">{$_('extensions.voting.table.title')}</TableHeadCell>
-					<TableHeadCell class="w-1/6">{$_('extensions.voting.table.status')}</TableHeadCell>
-					<TableHeadCell class="w-1/6">{$_('extensions.voting.table.proposer')}</TableHeadCell>
-					<TableHeadCell class="w-1/6">{$_('extensions.voting.table.created')}</TableHeadCell>
-					<TableHeadCell class="w-1/6">{$_('extensions.voting.table.votes')}</TableHeadCell>
-					<TableHeadCell class="w-1/6">{$_('extensions.voting.table.actions')}</TableHeadCell>
+					<TableHeadCell class="w-[28%]">{$_('extensions.voting.table.title')}</TableHeadCell>
+					<TableHeadCell class="w-[10%]">{$_('extensions.voting.table.status')}</TableHeadCell>
+					<TableHeadCell class="w-[12%]">{$_('extensions.voting.table.proposer')}</TableHeadCell>
+					<TableHeadCell class="w-[10%]">{$_('extensions.voting.table.created')}</TableHeadCell>
+					<TableHeadCell class="w-[12%]">{$_('extensions.voting.table.votes')}</TableHeadCell>
+					<TableHeadCell class="w-[28%]">{$_('extensions.voting.table.actions')}</TableHeadCell>
 				</TableHead>
 				<TableBody>
 					{#each proposals as proposal}
 						<TableBodyRow class="hover:bg-gray-50">
-							<TableBodyCell class="font-medium">
-								<div>
-									<h3 class="text-sm font-semibold text-gray-900 mb-1">
+							<TableBodyCell class="font-medium max-w-0">
+								<div class="truncate">
+									<h3 class="text-sm font-semibold text-gray-900 mb-1 truncate">
 										{proposal.title}
 									</h3>
-									<p class="text-xs text-gray-600 line-clamp-2">
+									<p class="text-xs text-gray-600 truncate">
 										{proposal.description}
 									</p>
 								</div>
@@ -102,7 +102,7 @@
 								{/if}
 							</TableBodyCell>
 							<TableBodyCell>
-								<div class="flex gap-2">
+								<div class="flex flex-wrap gap-1">
 									<Button 
 										size="xs" 
 										color="light"
