@@ -1,0 +1,23 @@
+{
+  "name": "zone_selector",
+  "version": "1.0.0",
+  "description": "Allow users to set their zones of influence via geolocation or map selection",
+  "permissions": [],
+  "entry_points": [
+    "get_my_zones",
+    "add_zone",
+    "remove_zone",
+    "get_all_zones"
+  ],
+  "profiles": [
+    "member",
+    "admin"
+  ],
+  "categories": [
+    "public_services"
+  ],
+  "icon": "map",
+  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/zone_selector",
+  "url_path": null,
+  "show_in_sidebar": true
+}
