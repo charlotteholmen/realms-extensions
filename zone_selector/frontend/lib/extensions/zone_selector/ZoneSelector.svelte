@@ -32,8 +32,8 @@
         args: JSON.stringify({ user_id: userId })
       });
       
-      if (result && result.success && result.data) {
-        const response = JSON.parse(result.data);
+      if (result && result.success && result.response) {
+        const response = JSON.parse(result.response);
         if (response.success) {
           zones = response.data || [];
         } else {
@@ -119,8 +119,8 @@
         })
       });
 
-      if (result && result.success && result.data) {
-        const response = JSON.parse(result.data);
+      if (result && result.success && result.response) {
+        const response = JSON.parse(result.response);
         if (response.success) {
           success = 'Zone added successfully!';
           await loadMyZones();
@@ -155,8 +155,8 @@
         })
       });
 
-      if (result && result.success && result.data) {
-        const response = JSON.parse(result.data);
+      if (result && result.success && result.response) {
+        const response = JSON.parse(result.response);
         if (response.success) {
           success = 'Zone removed successfully!';
           await loadMyZones();
