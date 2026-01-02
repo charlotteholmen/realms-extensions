@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { backend } from '$lib/canisters';
-  import { authStore } from '$lib/stores/auth';
+  import { principal } from '$lib/stores/auth';
   import { _ } from 'svelte-i18n';
   import SafeText from '$lib/components/SafeText.svelte';
   import ZoneMap from './ZoneMap.svelte';
@@ -17,7 +17,7 @@
   let geoError = null;
   let currentLocation = null;
 
-  $: userId = $authStore?.identity?.getPrincipal()?.toString() || null;
+  $: userId = $principal || null;
 
   async function loadMyZones() {
     if (!userId) return;
