@@ -284,12 +284,6 @@ def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
             failed += 1
             errors.append(f"Record {record}: {str(e)}")
 
-    # Phase 2: Resolve all pending relations after all entities are imported
-    # This establishes bidirectional relationships (e.g., TaskSchedule.task -> Task)
-    logger.info("Resolving pending relations for all imported entities...")
-    Entity.resolve_pending_relations()
-    logger.info("Pending relations resolved successfully")
-
     return {
         "successful": successful,
         "failed": failed,
