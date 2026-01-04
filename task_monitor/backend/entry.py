@@ -433,7 +433,7 @@ def get_task_logs(args):
         return json.dumps({"success": True, "logs": logs, "count": len(logs)})
     except Exception as e:
         # Fallback if get_logs doesn't exist
-        logger.error(f"Error getting task logs: {str(e)}")
+        logger.error(f"Error getting task logs: {traceback.format_exc()}")
         return json.dumps(
             {
                 "success": False,
