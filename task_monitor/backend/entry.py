@@ -426,11 +426,41 @@ def get_task_logs(args):
         # Import the logging module to access logs
         from kybra_simple_logging import get_logs
 
-        # Get logs for this task
-        logger_name = f"task_{task_id}"
-        logs = get_logs(logger_name, limit)
+        # Get logs for this task - logs are stored with pattern task_{task_id}_{execution_id}
+        # We need to search for all logs that start with task_{task_id}_
+        logger_prefix = f"task_{task_id}_"
+        
+        # Get all logs and filter by prefix
+        # get_logs signature: (from_entry, max_entries, min_level, logger_name)
+        all_logs = get_logs(max_entries=limit * 10)  # Get more to filter
+        task_logs = [
+            log for log in all_logs 
+            if log.get("logger_name", "").startswith(logger_prefix)
+        ][:limit]
 
-        return json.dumps({"success": True, "logs": logs, "count": len(logs)})
+        # Format as raw logs string for display
+        raw_lines = []
+        for log in task_logs:
+            timestamp = log.get("timestamp", 0)
+            # Convert nanoseconds to readable format
+            from datetime import datetime
+            try:
+                dt = datetime.fromtimestamp(timestamp / 1_000_000_000)
+                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                time_str = str(timestamp)
+            level = log.get("level", "INFO")
+            message = log.get("message", "")
+            raw_lines.append(f"[{time_str}] [{level}] {message}")
+        
+        raw_logs = "\n".join(raw_lines)
+
+        return json.dumps({
+            "success": True, 
+            "logs": raw_logs,
+            "parsed_logs": task_logs,
+            "count": len(task_logs)
+        })
     except Exception as e:
         # Fallback if get_logs doesn't exist
         logger.error(f"Error getting task logs: {traceback.format_exc()}")
