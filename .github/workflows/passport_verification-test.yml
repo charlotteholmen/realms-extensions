@@ -4,12 +4,12 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'passport_verification/**'
+      - 'extensions/passport_verification/**'
       - '.github/workflows/passport_verification-test.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'passport_verification/**'
+      - 'extensions/passport_verification/**'
       - '.github/workflows/passport_verification-test.yml'
 
 jobs:
@@ -32,14 +32,14 @@ jobs:
         
     - name: Install extension dependencies
       run: |
-        cd passport_verification
+        cd extensions/passport_verification
         if [ -f requirements.txt ]; then
           pip install -r requirements.txt
         fi
         
     - name: Run linters
       run: |
-        cd passport_verification
+        cd extensions/passport_verification
         if [ -d backend ]; then
           echo "Running black..."
           black backend --check || echo "⚠️  Black check failed or no Python files found"
@@ -51,7 +51,7 @@ jobs:
         
     - name: Run tests
       run: |
-        cd passport_verification
+        cd extensions/passport_verification
         if [ -f run_tests.sh ]; then
           bash run_tests.sh
         else

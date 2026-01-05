@@ -4,14 +4,14 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'vault/**'
-      - '_shared/**'
+      - 'extensions/vault/**'
+      - 'extensions/_shared/**'
       - '.github/workflows/vault-test.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'vault/**'
-      - '_shared/**'
+      - 'extensions/vault/**'
+      - 'extensions/_shared/**'
       - '.github/workflows/vault-test.yml'
   workflow_dispatch:
 
@@ -37,18 +37,18 @@ jobs:
         
     - name: Install dependencies
       run: |
-        cd vault
+        cd extensions/vault
         pip install -r requirements.txt
         pip install black isort flake8
         
     - name: Run linters
       run: |
-        cd vault
+        cd extensions/vault
         bash ../_shared/testing/scripts/run_linters.sh --config .flake8
         
     - name: Run unit tests
       run: |
-        cd vault
+        cd extensions/vault
         bash ../_shared/testing/scripts/run_tests.sh
         
     - name: Upload test logs
@@ -56,7 +56,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: vault-unit-test-logs
-        path: vault/test-logs/
+        path: extensions/vault/test-logs/
         retention-days: 7
         if-no-files-found: warn
     
@@ -66,8 +66,8 @@ jobs:
       with:
         name: vault-e2e-test-results
         path: |
-          vault/tests/e2e/test-results/
-          vault/tests/e2e/playwright-report/
+          extensions/vault/tests/e2e/test-results/
+          extensions/vault/tests/e2e/playwright-report/
         retention-days: 7
         if-no-files-found: warn
     
@@ -77,9 +77,9 @@ jobs:
       with:
         name: vault-canister-logs
         path: |
-          vault/dfx.log
-          vault/dfx2.log
-          vault/realms_cli.log
+          extensions/vault/dfx.log
+          extensions/vault/dfx2.log
+          extensions/vault/realms_cli.log
         retention-days: 7
         if-no-files-found: warn
 

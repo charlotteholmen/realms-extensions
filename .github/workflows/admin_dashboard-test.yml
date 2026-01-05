@@ -4,14 +4,14 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'admin_dashboard/**'
-      - '_shared/**'
+      - 'extensions/admin_dashboard/**'
+      - 'extensions/_shared/**'
       - '.github/workflows/admin_dashboard-test.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'admin_dashboard/**'
-      - '_shared/**'
+      - 'extensions/admin_dashboard/**'
+      - 'extensions/_shared/**'
       - '.github/workflows/admin_dashboard-test.yml'
   workflow_dispatch:
 
@@ -35,14 +35,14 @@ jobs:
         
     - name: Install extension dependencies
       run: |
-        cd admin_dashboard
+        cd extensions/admin_dashboard
         if [ -f requirements.txt ]; then
           pip install -r requirements.txt
         fi
         
     - name: Run linters
       run: |
-        cd admin_dashboard
+        cd extensions/admin_dashboard
         if [ -d backend ]; then
           echo "Running black..."
           black backend --check || echo "⚠️  Black check failed or no Python files found"
@@ -54,7 +54,7 @@ jobs:
         
     - name: Run tests
       run: |
-        cd admin_dashboard
+        cd extensions/admin_dashboard
         if [ -f run_tests.sh ]; then
           bash run_tests.sh
         else

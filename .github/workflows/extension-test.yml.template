@@ -15,12 +15,12 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - '{EXTENSION_NAME}/**'
+      - 'extensions/{EXTENSION_NAME}/**'
       - '.github/workflows/{EXTENSION_NAME}-test.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - '{EXTENSION_NAME}/**'
+      - 'extensions/{EXTENSION_NAME}/**'
       - '.github/workflows/{EXTENSION_NAME}-test.yml'
 
 jobs:
@@ -44,13 +44,13 @@ jobs:
         
     - name: Install dependencies
       run: |
-        cd {EXTENSION_NAME}
+        cd extensions/{EXTENSION_NAME}
         pip install -r requirements.txt
         pip install black isort flake8
         
     - name: Run linters
       run: |
-        cd {EXTENSION_NAME}
+        cd extensions/{EXTENSION_NAME}
         echo "Running black..."
         black backend tests --check
         echo "Running isort..."
@@ -61,7 +61,7 @@ jobs:
         
     - name: Run tests
       run: |
-        cd {EXTENSION_NAME}
+        cd extensions/{EXTENSION_NAME}
         bash run_tests.sh
         
     - name: Upload test logs
@@ -69,6 +69,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: {EXTENSION_NAME}-test-logs
-        path: {EXTENSION_NAME}/test-logs/
+        path: extensions/{EXTENSION_NAME}/test-logs/
         retention-days: 7
         if-no-files-found: warn

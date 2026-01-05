@@ -47,8 +47,8 @@ jobs:
     - name: Discover extensions
       id: discover
       run: |
-        # Find all directories with manifest.json
-        EXTENSIONS=$(find . -maxdepth 2 -name "manifest.json" -type f | sed 's|./||' | sed 's|/manifest.json||' | sort)
+        # Find all directories with manifest.json in extensions/
+        EXTENSIONS=$(find ./extensions -maxdepth 2 -name "manifest.json" -type f | sed 's|./||' | sed 's|/manifest.json||' | sort)
         echo "Found extensions:"
         echo "$EXTENSIONS"
         
