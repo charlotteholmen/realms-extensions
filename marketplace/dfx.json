@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "canisters": {
+    "marketplace_backend": {
+      "type": "custom",
+      "candid": "marketplace_backend/marketplace_backend.did",
+      "build": "python -m kybra marketplace_backend marketplace_backend/main.py marketplace_backend/marketplace_backend.did",
+      "wasm": ".kybra/marketplace_backend/marketplace_backend.wasm",
+      "gzip": true,
+      "declarations": {
+        "node_compatibility": true
+      },
+      "metadata": [
+        {
+          "name": "candid:service"
+        }
+      ]
+    },
+    "marketplace_frontend": {
+      "type": "assets",
+      "source": ["marketplace_frontend/dist"],
+      "dependencies": ["marketplace_backend"]
+    },
+    "internet_identity": {
+      "type": "pull",
+      "id": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral",
+      "replica": {
+        "subnet_type": "system"
+      }
+    },
+    "ic": {
+      "providers": ["https://ic0.app"],
+      "type": "persistent"
+    }
+  }
+}

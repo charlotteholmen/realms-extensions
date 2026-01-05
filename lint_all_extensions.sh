@@ -13,7 +13,7 @@
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LINTER_SCRIPT="$SCRIPT_DIR/_shared/testing/scripts/run_linters.sh"
+LINTER_SCRIPT="$SCRIPT_DIR/extensions/_shared/testing/scripts/run_linters.sh"
 
 # Check if linter script exists
 if [ ! -f "$LINTER_SCRIPT" ]; then
@@ -41,7 +41,7 @@ done
 # Get list of extensions (directories with backend/ or tests/ subdirectories)
 if [ -n "$TARGET_EXTENSION" ]; then
     # Check specific extension
-    if [ ! -d "$SCRIPT_DIR/$TARGET_EXTENSION" ]; then
+    if [ ! -d "$SCRIPT_DIR/extensions/$TARGET_EXTENSION" ]; then
         echo "❌ Extension '$TARGET_EXTENSION' not found"
         exit 1
     fi
@@ -49,7 +49,7 @@ if [ -n "$TARGET_EXTENSION" ]; then
 else
     # Find all extensions (exclude _shared and hidden directories)
     EXTENSIONS=()
-    for dir in "$SCRIPT_DIR"/*/; do
+    for dir in "$SCRIPT_DIR"/extensions/*/; do
         dir_name=$(basename "$dir")
         # Skip _shared and hidden directories
         if [[ "$dir_name" != _* ]] && [[ "$dir_name" != .* ]]; then
