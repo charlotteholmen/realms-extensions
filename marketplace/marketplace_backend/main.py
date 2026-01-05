@@ -45,6 +45,7 @@ from api.marketplace import (
 from core.candid_types import (
     DeveloperLicense,
     DeveloperStats,
+    ExtensionInput,
     ExtensionListing,
     ExtensionListResult,
     ExtensionResult,
@@ -117,33 +118,24 @@ def buy_developer_license() -> GenericResult:
 # =============================================================================
 
 @update
-def create_extension(
-    extension_id: text,
-    name: text,
-    description: text,
-    version: text,
-    price_e8s: nat64,
-    download_url: text,
-    icon: text,
-    categories: text
-) -> GenericResult:
+def create_extension(ext: ExtensionInput) -> GenericResult:
     """Publish a new extension (caller must have developer license)"""
     try:
         caller = str(ic.caller())
-        cats = categories.split(",") if categories else []
+        cats = ext["categories"].split(",") if ext["categories"] else []
         result = publish_extension(
             developer=caller,
-            extension_id=extension_id,
-            name=name,
-            description=description,
-            version=version,
-            price_e8s=int(price_e8s),
-            download_url=download_url,
-            icon=icon,
+            extension_id=ext["extension_id"],
+            name=ext["name"],
+            description=ext["description"],
+            version=ext["version"],
+            price_e8s=int(ext["price_e8s"]),
+            download_url=ext["download_url"],
+            icon=ext["icon"],
             categories=cats
         )
         if result["success"]:
-            return {"Ok": f"Extension {extension_id} published"}
+            return {"Ok": f"Extension {ext['extension_id']} published"}
         return {"Err": result["error"]}
     except Exception as e:
         logger.error(f"Error in create_extension: {e}")
@@ -151,33 +143,24 @@ def create_extension(
 
 
 @update
-def update_extension(
-    extension_id: text,
-    name: text,
-    description: text,
-    version: text,
-    price_e8s: nat64,
-    download_url: text,
-    icon: text,
-    categories: text
-) -> GenericResult:
+def update_extension(ext: ExtensionInput) -> GenericResult:
     """Update an existing extension"""
     try:
         caller = str(ic.caller())
-        cats = categories.split(",") if categories else []
+        cats = ext["categories"].split(",") if ext["categories"] else []
         result = publish_extension(
             developer=caller,
-            extension_id=extension_id,
-            name=name,
-            description=description,
-            version=version,
-            price_e8s=int(price_e8s),
-            download_url=download_url,
-            icon=icon,
+            extension_id=ext["extension_id"],
+            name=ext["name"],
+            description=ext["description"],
+            version=ext["version"],
+            price_e8s=int(ext["price_e8s"]),
+            download_url=ext["download_url"],
+            icon=ext["icon"],
             categories=cats
         )
         if result["success"]:
-            return {"Ok": f"Extension {extension_id} updated"}
+            return {"Ok": f"Extension {ext['extension_id']} updated"}
         return {"Err": result["error"]}
     except Exception as e:
         logger.error(f"Error in update_extension: {e}")

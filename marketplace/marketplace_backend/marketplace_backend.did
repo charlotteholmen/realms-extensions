@@ -1,119 +1,91 @@
 type DeveloperLicense = record {
-    principal: text;
-    created_at: nat64;
-    expires_at: nat64;
-    is_active: bool;
+  "principal" : text;
+  created_at : nat64;
+  is_active : bool;
+  expires_at : nat64;
 };
-
-type ExtensionListing = record {
-    extension_id: text;
-    developer: text;
-    name: text;
-    description: text;
-    version: text;
-    price_e8s: nat64;
-    download_url: text;
-    icon: text;
-    categories: text;
-    created_at: nat64;
-    updated_at: nat64;
-    downloads: nat64;
-    is_active: bool;
-};
-
-type Purchase = record {
-    purchase_id: text;
-    realm_principal: text;
-    extension_id: text;
-    developer: text;
-    price_paid_e8s: nat64;
-    purchased_at: nat64;
-};
-
 type DeveloperStats = record {
-    total_extensions: nat64;
-    total_downloads: nat64;
-    total_sales: nat64;
-    total_revenue_e8s: nat64;
-    pending_payout_e8s: nat64;
+  total_sales : nat64;
+  total_downloads : nat64;
+  pending_payout_e8s : nat64;
+  total_extensions : nat64;
+  total_revenue_e8s : nat64;
 };
-
-type PayoutRecord = record {
-    payout_id: text;
-    developer: text;
-    amount_e8s: nat64;
-    requested_at: nat64;
-    processed_at: opt nat64;
-    status: text;
-    tx_id: opt text;
+type ExtensionInput = record {
+  categories : text;
+  extension_id : text;
+  icon : text;
+  name : text;
+  download_url : text;
+  description : text;
+  version : text;
+  price_e8s : nat64;
 };
-
-type MarketplaceStats = record {
-    total_developers: nat64;
-    total_extensions: nat64;
-    total_purchases: nat64;
-    total_revenue_e8s: nat64;
-    platform_earnings_e8s: nat64;
-};
-
 type ExtensionListResult = record {
-    listings: vec ExtensionListing;
-    total_count: nat64;
-    page: nat64;
-    per_page: nat64;
+  per_page : nat64;
+  listings : vec ExtensionListing;
+  page : nat64;
+  total_count : nat64;
 };
-
-type GenericResult = variant {
-    Ok: text;
-    Err: text;
+type ExtensionListing = record {
+  categories : text;
+  updated_at : nat64;
+  extension_id : text;
+  icon : text;
+  name : text;
+  download_url : text;
+  description : text;
+  created_at : nat64;
+  version : text;
+  is_active : bool;
+  price_e8s : nat64;
+  downloads : nat64;
+  developer : text;
 };
-
-type LicenseResult = variant {
-    Ok: DeveloperLicense;
-    Err: text;
+type ExtensionResult = variant { Ok : ExtensionListing; Err : text };
+type GenericResult = variant { Ok : text; Err : text };
+type LicenseResult = variant { Ok : DeveloperLicense; Err : text };
+type MarketplaceStats = record {
+  total_developers : nat64;
+  total_extensions : nat64;
+  total_purchases : nat64;
+  platform_earnings_e8s : nat64;
+  total_revenue_e8s : nat64;
 };
-
-type ExtensionResult = variant {
-    Ok: ExtensionListing;
-    Err: text;
+type PayoutRecord = record {
+  status : text;
+  tx_id : opt text;
+  requested_at : nat64;
+  amount_e8s : nat64;
+  payout_id : text;
+  processed_at : opt nat64;
+  developer : text;
 };
-
-type StatsResult = variant {
-    Ok: DeveloperStats;
-    Err: text;
+type PayoutResult = variant { Ok : PayoutRecord; Err : text };
+type Purchase = record {
+  extension_id : text;
+  purchased_at : nat64;
+  purchase_id : text;
+  realm_principal : text;
+  price_paid_e8s : nat64;
+  developer : text;
 };
-
-type PayoutResult = variant {
-    Ok: PayoutRecord;
-    Err: text;
-};
-
-service : {
-    // Developer License
-    check_license: (text) -> (LicenseResult) query;
-    buy_developer_license: () -> (GenericResult);
-    
-    // Extension Listing
-    create_extension: (text, text, text, text, nat64, text, text, text) -> (GenericResult);
-    update_extension: (text, text, text, text, nat64, text, text, text) -> (GenericResult);
-    delist_extension: (text) -> (GenericResult);
-    get_extension_details: (text) -> (ExtensionResult) query;
-    list_marketplace_extensions: (nat64, nat64) -> (ExtensionListResult) query;
-    search_marketplace: (text) -> (vec ExtensionListing) query;
-    
-    // Purchases
-    buy_extension: (text) -> (GenericResult);
-    has_purchased: (text, text) -> (bool) query;
-    get_my_purchases: () -> (vec Purchase) query;
-    
-    // Developer Dashboard
-    get_my_developer_stats: () -> (StatsResult) query;
-    get_my_extensions: () -> (vec ExtensionListing) query;
-    withdraw_earnings: () -> (PayoutResult);
-    
-    // Marketplace Stats
-    marketplace_stats: () -> (MarketplaceStats) query;
-    
-    // Testing
-    greet: (text) -> (text) query;
+type StatsResult = variant { Ok : DeveloperStats; Err : text };
+service : () -> {
+  buy_developer_license : () -> (GenericResult);
+  buy_extension : (text) -> (GenericResult);
+  check_license : (text) -> (LicenseResult) query;
+  create_extension : (ExtensionInput) -> (GenericResult);
+  delist_extension : (text) -> (GenericResult);
+  get_extension_details : (text) -> (ExtensionResult) query;
+  get_my_developer_stats : () -> (StatsResult) query;
+  get_my_extensions : () -> (vec ExtensionListing) query;
+  get_my_purchases : () -> (vec Purchase) query;
+  greet : (text) -> (text) query;
+  has_purchased : (text, text) -> (bool) query;
+  list_marketplace_extensions : (nat64, nat64) -> (ExtensionListResult) query;
+  marketplace_stats : () -> (MarketplaceStats) query;
+  search_marketplace : (text) -> (vec ExtensionListing) query;
+  update_extension : (ExtensionInput) -> (GenericResult);
+  withdraw_earnings : () -> (PayoutResult);
 }

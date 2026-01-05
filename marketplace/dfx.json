@@ -4,7 +4,7 @@
     "marketplace_backend": {
       "type": "custom",
       "candid": "marketplace_backend/marketplace_backend.did",
-      "build": "python -m kybra marketplace_backend marketplace_backend/main.py marketplace_backend/marketplace_backend.did",
+      "build": "python -m kybra marketplace_backend marketplace_backend/main.py",
       "wasm": ".kybra/marketplace_backend/marketplace_backend.wasm",
       "gzip": true,
       "declarations": {
@@ -22,8 +22,15 @@
       "dependencies": ["marketplace_backend"]
     },
     "internet_identity": {
-      "type": "pull",
-      "id": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "frontend": {},
+      "remote": {
+        "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      },
+      "type": "custom",
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
     }
   },
   "defaults": {
