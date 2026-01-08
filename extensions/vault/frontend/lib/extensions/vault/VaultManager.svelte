@@ -25,14 +25,38 @@ let vaultPrincipal: string = '';
 let lastRefreshTime: Date | null = null;
 let copiedPrincipal: string = '';
 let copiedTimestamp: string = '';
-let vaultTotalBalance: number = 0;
 let vaultBalanceLoading: boolean = false;
 
 // Ledger canister principals from backend constants
-const LEDGER_CANISTERS = {
-	ckBTC_ledger: 'mxzaz-hqaaa-aaaar-qaada-cai',
-	ckBTC_indexer: 'n5wcd-faaaa-aaaar-qaaea-cai'
+const LEDGER_CANISTERS: Record<string, {ledger: string, indexer: string, decimals: number, symbol: string}> = {
+	ckBTC: {
+		ledger: 'mxzaz-hqaaa-aaaar-qaada-cai',
+		indexer: 'n5wcd-faaaa-aaaar-qaaea-cai',
+		decimals: 8,
+		symbol: 'ckBTC'
+	},
+	REALMS: {
+		ledger: 'xbkkh-syaaa-aaaah-qq3ya-cai',
+		indexer: 'xbkkh-syaaa-aaaah-qq3ya-cai',  // Same canister provides both
+		decimals: 8,
+		symbol: 'REALMS'
+	}
 };
+
+// Selected tokens (checkboxes) - default all selected
+let selectedTokens: Record<string, boolean> = {
+	ckBTC: true,
+	REALMS: true
+};
+
+// Per-token vault balances
+let tokenBalances: Record<string, number> = {
+	ckBTC: 0,
+	REALMS: 0
+};
+
+// Selected token for transfer
+let transferToken: string = 'REALMS';
 
 async function loadBalance() {
 loading = true;
@@ -110,8 +134,9 @@ console.log('Objects array length:', objectsData.objects?.length);
 
 // Parse each JSON string in the objects array
 // Show ALL transfers since the vault tracks all transactions to/from the canister
-transactions = objectsData.objects.map((objStr: string) => JSON.parse(objStr));
-console.log('Parsed transactions:', transactions);
+const parsed = objectsData.objects.map((objStr: string) => JSON.parse(objStr));
+transactions = [...parsed]; // Force new array reference for Svelte reactivity
+console.log('Parsed transactions for page', page, ':', transactions);
 } else {
 console.warn('No objectsListPaginated in response');
 transactions = [];
@@ -124,13 +149,13 @@ loading = false;
 }
 }
 
-async function loadVaultBalance() {
+async function loadVaultBalance(token: string = 'REALMS') {
 try {
-// Call the vault extension's get_vault_balance function
+// Call the vault extension's get_vault_balance function with token
 const result = await backend.extension_sync_call({
 extension_name: 'vault',
 function_name: 'get_vault_balance',
-args: '{}'
+args: JSON.stringify({ token })
 });
 
 // Parse the response
@@ -144,7 +169,8 @@ return;
 
 // Update vault balance and principal from response
 if (response.success && response.data?.Balance) {
-vaultTotalBalance = response.data.Balance.amount || 0;
+tokenBalances[token] = response.data.Balance.amount || 0;
+tokenBalances = tokenBalances; // Trigger reactivity
 vaultPrincipal = response.data.Balance.principal_id || '';
 }
 } catch (e: any) {
@@ -152,7 +178,15 @@ console.error('Failed to load vault balance:', e);
 }
 }
 
-async function refreshVaultBalance() {
+async function loadAllVaultBalances() {
+for (const token of Object.keys(LEDGER_CANISTERS)) {
+if (selectedTokens[token]) {
+await loadVaultBalance(token);
+}
+}
+}
+
+async function refreshVaultBalance(token: string) {
 vaultBalanceLoading = true;
 error = '';
 try {
@@ -160,7 +194,7 @@ try {
 const result = await backend.extension_async_call({
 extension_name: 'vault',
 function_name: 'refresh_vault_balance',
-args: '{}'
+args: JSON.stringify({ token })
 });
 
 // Parse the inner JSON response from the extension
@@ -176,11 +210,10 @@ return;
 if (innerResponse.success) {
 // Update vault balance from response
 if (innerResponse.data?.Balance) {
-vaultTotalBalance = innerResponse.data.Balance.amount || 0;
+tokenBalances[token] = innerResponse.data.Balance.amount || 0;
+tokenBalances = tokenBalances; // Trigger reactivity
 }
 lastRefreshTime = new Date();
-// Also reload to ensure we have the latest cached value
-await loadVaultBalance();
 } else {
 error = innerResponse.error || 'Failed to refresh vault balance';
 }
@@ -190,6 +223,17 @@ error = e.message || 'Failed to refresh vault balance';
 } finally {
 vaultBalanceLoading = false;
 }
+}
+
+async function refreshAllVaultBalances() {
+vaultBalanceLoading = true;
+for (const token of Object.keys(LEDGER_CANISTERS)) {
+if (selectedTokens[token]) {
+await refreshVaultBalance(token);
+}
+}
+vaultBalanceLoading = false;
+lastRefreshTime = new Date();
 }
 
 async function refreshVault() {
@@ -342,26 +386,26 @@ return new Date();
 }
 
 // Pagination helpers
-function goToPage(page: number) {
+async function goToPage(page: number) {
 currentPage = page;
-loadTransactions(page);
+await loadTransactions(page);
 }
 
-function nextPage() {
+async function nextPage() {
 if (transferPagination && currentPage < Number(transferPagination.total_pages) - 1) {
-goToPage(currentPage + 1);
+await goToPage(currentPage + 1);
 }
 }
 
-function previousPage() {
+async function previousPage() {
 if (currentPage > 0) {
-goToPage(currentPage - 1);
+await goToPage(currentPage - 1);
 }
 }
 
 onMount(async () => {
 await loadBalance();
-await loadVaultBalance();
+await loadAllVaultBalances();
 await loadTransactions(0);
 });
 </script>
@@ -371,47 +415,47 @@ await loadTransactions(0);
 <div class="flex justify-between items-center">
 <h1 class="text-3xl font-bold">{$_('extensions.vault.title')}</h1>
 <button
-on:click={refreshVault}
-disabled={loading}
-class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+on:click={refreshAllVaultBalances}
+disabled={loading || vaultBalanceLoading}
+class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
 >
-{loading ? 'Refreshing...' : 'Refresh'}
-</button>
-</div>
-
-<!-- Vault Total Balance Card -->
-<div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-6">
-<div class="flex items-start justify-between">
-<div class="flex-1">
-<h3 class="text-sm font-semibold text-blue-800 mb-2">{$_('extensions.vault.vault_balance.title')}</h3>
-<div class="text-4xl font-bold text-blue-900 mb-1">
-{vaultTotalBalance.toLocaleString()} <span class="text-2xl font-medium text-blue-700">{$_('extensions.vault.vault_balance.satoshis')}</span>
-</div>
-<div class="text-lg text-blue-700">
-≈ {(vaultTotalBalance / 100000000).toFixed(8)} ckBTC
-</div>
-<div class="mt-3 text-xs text-blue-600">
-<span class="font-medium">{$_('extensions.vault.vault_balance.description')}</span>
-</div>
-</div>
-<button
-on:click={refreshVaultBalance}
-disabled={vaultBalanceLoading}
-class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-title={$_('extensions.vault.vault_balance.refresh_tooltip')}
->
-{#if vaultBalanceLoading}
+{#if loading || vaultBalanceLoading}
 <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 </svg>
-{:else}
-<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-</svg>
 {/if}
-<span>{vaultBalanceLoading ? $_('extensions.vault.vault_balance.querying') : $_('extensions.vault.vault_balance.refresh')}</span>
+{loading || vaultBalanceLoading ? 'Refreshing...' : 'Refresh'}
 </button>
+</div>
+
+<!-- Vault Balances Card -->
+<div class="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-6">
+<h3 class="text-sm font-semibold text-blue-800 mb-4">{$_('extensions.vault.vault_balance.title')}</h3>
+<div class="space-y-3">
+{#each Object.keys(LEDGER_CANISTERS) as token}
+{#if selectedTokens[token]}
+<div class="flex items-center justify-between bg-white/50 rounded-lg p-3">
+<div class="flex items-center gap-3">
+<span class="text-lg font-semibold text-blue-900">{LEDGER_CANISTERS[token].symbol}</span>
+</div>
+<div class="text-right">
+<div class="text-2xl font-bold text-blue-900">
+{(tokenBalances[token] / Math.pow(10, LEDGER_CANISTERS[token].decimals)).toFixed(LEDGER_CANISTERS[token].decimals)}
+</div>
+<div class="text-xs text-blue-600">
+{tokenBalances[token].toLocaleString()} {$_('extensions.vault.vault_balance.units')}
+</div>
+</div>
+</div>
+{/if}
+{/each}
+{#if !Object.values(selectedTokens).some(v => v)}
+<div class="text-sm text-gray-500 italic">{$_('extensions.vault.vault_balance.no_tokens_selected')}</div>
+{/if}
+</div>
+<div class="mt-3 text-xs text-blue-600">
+<span class="font-medium">{$_('extensions.vault.vault_balance.description')}</span>
 </div>
 </div>
 
@@ -443,36 +487,54 @@ title="Click to copy"
 </div>
 </div>
 
+<!-- Token Selector (Checkboxes) -->
+<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+<h3 class="text-sm font-semibold text-gray-700">{$_('extensions.vault.token_selector.title')}</h3>
+<div class="flex flex-wrap gap-4">
+{#each Object.keys(LEDGER_CANISTERS) as token}
+<label class="flex items-center gap-2 cursor-pointer">
+<input
+type="checkbox"
+bind:checked={selectedTokens[token]}
+class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+/>
+<span class="text-sm font-medium text-gray-700">{LEDGER_CANISTERS[token].symbol}</span>
+</label>
+{/each}
+</div>
+</div>
+
 <!-- Ledger Canisters Info Card -->
 <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
 <h3 class="text-sm font-semibold text-gray-700">{$_('extensions.vault.ledger_canisters.title')}</h3>
-<div class="space-y-2">
-<div class="flex items-center justify-between">
-<span class="text-sm font-medium text-gray-600">{$_('extensions.vault.ledger_canisters.ckbtc_ledger')}:</span>
+<div class="space-y-3">
+{#each Object.keys(LEDGER_CANISTERS) as token}
+{#if selectedTokens[token]}
+<div class="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
+<div class="text-xs font-semibold text-gray-500 mb-1">{LEDGER_CANISTERS[token].symbol}</div>
+<div class="flex items-center justify-between text-xs">
+<span class="text-gray-600">Ledger:</span>
 <button
-on:click={() => copyToClipboard(LEDGER_CANISTERS.ckBTC_ledger)}
-class="ml-2 font-mono text-xs text-blue-600 hover:text-blue-800 underline"
+on:click={() => copyToClipboard(LEDGER_CANISTERS[token].ledger)}
+class="font-mono text-blue-600 hover:text-blue-800 underline"
 title={$_('extensions.vault.ledger_canisters.copy_tooltip')}
 >
-{LEDGER_CANISTERS.ckBTC_ledger}
+{LEDGER_CANISTERS[token].ledger}
 </button>
-{#if copiedPrincipal === LEDGER_CANISTERS.ckBTC_ledger}
-<span class="ml-2 text-xs text-green-600">✓ Copied!</span>
-{/if}
 </div>
-<div class="flex items-center justify-between">
-<span class="text-sm font-medium text-gray-600">{$_('extensions.vault.ledger_canisters.ckbtc_indexer')}:</span>
+<div class="flex items-center justify-between text-xs mt-1">
+<span class="text-gray-600">Indexer:</span>
 <button
-on:click={() => copyToClipboard(LEDGER_CANISTERS.ckBTC_indexer)}
-class="ml-2 font-mono text-xs text-blue-600 hover:text-blue-800 underline"
+on:click={() => copyToClipboard(LEDGER_CANISTERS[token].indexer)}
+class="font-mono text-blue-600 hover:text-blue-800 underline"
 title={$_('extensions.vault.ledger_canisters.copy_tooltip')}
 >
-{LEDGER_CANISTERS.ckBTC_indexer}
+{LEDGER_CANISTERS[token].indexer}
 </button>
-{#if copiedPrincipal === LEDGER_CANISTERS.ckBTC_indexer}
-<span class="ml-2 text-xs text-green-600">✓ Copied!</span>
-{/if}
 </div>
+</div>
+{/if}
+{/each}
 </div>
 </div>
 
@@ -515,11 +577,23 @@ Admin
 {#if activeTab === 'balance'}
 <div class="bg-white rounded-lg shadow p-6">
 <h2 class="text-xl font-semibold mb-4">Your Balance</h2>
-<div class="text-4xl font-bold text-blue-600">
-{balance.toLocaleString()} satoshis
+<div class="space-y-3">
+{#each Object.keys(LEDGER_CANISTERS) as token}
+{#if selectedTokens[token]}
+<div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+<span class="text-lg font-semibold text-gray-700">{LEDGER_CANISTERS[token].symbol}</span>
+<div class="text-right">
+<div class="text-2xl font-bold text-blue-600">
+{(balance / Math.pow(10, LEDGER_CANISTERS[token].decimals)).toFixed(LEDGER_CANISTERS[token].decimals)}
 </div>
-<div class="text-gray-600 mt-2">
-≈ {(balance / 100000000).toFixed(8)} ckBTC
+<div class="text-xs text-gray-500">{balance.toLocaleString()} units</div>
+</div>
+</div>
+{/if}
+{/each}
+{#if !Object.values(selectedTokens).some(v => v)}
+<div class="text-sm text-gray-500 italic">Select at least one token to view balances</div>
+{/if}
 </div>
 {#if balanceObject}
 <div class="mt-4 p-4 bg-gray-50 rounded">
@@ -540,6 +614,7 @@ Showing {allBalances.length} balance(s) (Page {Number(balancePagination.page_num
 <thead class="bg-gray-50">
 <tr>
 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Token</th>
 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">From</th>
 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">To</th>
 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
@@ -548,9 +623,14 @@ Showing {allBalances.length} balance(s) (Page {Number(balancePagination.page_num
 </tr>
 </thead>
 <tbody class="divide-y divide-gray-200">
-{#each transactions as tx}
+{#each transactions as tx (tx._id || tx.id)}
 <tr>
 <td class="px-6 py-4 text-sm">{tx._id || tx.id}</td>
+<td class="px-6 py-4 text-sm">
+<span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+{tx.token || 'ckBTC'}
+</span>
+</td>
 <td class="px-6 py-4 text-sm font-mono text-xs">
 {#if tx.principal_from}
 <button
@@ -605,7 +685,7 @@ title="Click to copy: {txDate.toLocaleString()}"
 </tr>
 {:else}
 <tr>
-<td colspan="6" class="px-6 py-4 text-center text-gray-500">No transactions found</td>
+<td colspan="7" class="px-6 py-4 text-center text-gray-500">No transactions found</td>
 </tr>
 {/each}
 </tbody>
@@ -654,10 +734,25 @@ Next →
 <h2 class="text-xl font-semibold mb-4">Transfer Tokens (Admin Only)</h2>
 <form on:submit|preventDefault={performTransfer} class="space-y-4">
 <div>
-<label class="block text-sm font-medium text-gray-700 mb-2">
+<label for="transfer-token" class="block text-sm font-medium text-gray-700 mb-2">
+Token
+</label>
+<select
+id="transfer-token"
+bind:value={transferToken}
+class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+>
+{#each Object.keys(LEDGER_CANISTERS) as token}
+<option value={token}>{LEDGER_CANISTERS[token].symbol}</option>
+{/each}
+</select>
+</div>
+<div>
+<label for="transfer-recipient" class="block text-sm font-medium text-gray-700 mb-2">
 Recipient Principal
 </label>
 <input
+id="transfer-recipient"
 type="text"
 bind:value={transferTo}
 placeholder="xxxxx-xxxxx-xxxxx-xxxxx-xxx"
@@ -665,10 +760,11 @@ class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-b
 />
 </div>
 <div>
-<label class="block text-sm font-medium text-gray-700 mb-2">
-Amount (satoshis)
+<label for="transfer-amount" class="block text-sm font-medium text-gray-700 mb-2">
+Amount ({LEDGER_CANISTERS[transferToken].symbol} units)
 </label>
 <input
+id="transfer-amount"
 type="number"
 bind:value={transferAmount}
 placeholder="100000000"
@@ -676,10 +772,11 @@ class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-b
 />
 </div>
 <div>
-<label class="block text-sm font-medium text-gray-700 mb-2">
+<label for="transfer-to-subaccount" class="block text-sm font-medium text-gray-700 mb-2">
 To Subaccount (optional, 64-char hex)
 </label>
 <input
+id="transfer-to-subaccount"
 type="text"
 bind:value={transferToSubaccount}
 placeholder="0000000000000000000000000000000000000000000000000000000000000000"
@@ -687,10 +784,11 @@ class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-b
 />
 </div>
 <div>
-<label class="block text-sm font-medium text-gray-700 mb-2">
+<label for="transfer-from-subaccount" class="block text-sm font-medium text-gray-700 mb-2">
 From Subaccount (optional, 64-char hex)
 </label>
 <input
+id="transfer-from-subaccount"
 type="text"
 bind:value={transferFromSubaccount}
 placeholder="0000000000000000000000000000000000000000000000000000000000000000"

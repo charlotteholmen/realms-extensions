@@ -43,7 +43,7 @@
     "title": "Account Balances",
     "no_accounts": "No accounts found.",
     "principal_id": "Principal ID",
-    "balance": "Balance (ckBTC)"
+    "balance": "Balance"
   },
   "loading": "Loading...",
   "loading_vault": "Loading vault data...",
@@ -55,11 +55,17 @@
     "copy_tooltip": "Click to copy"
   },
   "vault_balance": {
-    "title": "Vault Total Balance",
+    "title": "Vault Balances",
     "refresh": "Refresh",
     "querying": "Querying...",
-    "refresh_tooltip": "Query ledger for current balance",
-    "description": "This is the vault's total balance on the ckBTC ledger",
-    "satoshis": "satoshis"
+    "refresh_tooltip": "Query ledgers for current balances",
+    "description": "Vault balances across all selected tokens",
+    "units": "units",
+    "no_tokens_selected": "Select at least one token to view balances"
+  },
+  "token_selector": {
+    "title": "Tokens to Display",
+    "realms": "REALMS",
+    "ckbtc": "ckBTC"
   }
 }

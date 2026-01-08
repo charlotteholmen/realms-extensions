@@ -18,6 +18,7 @@ from .vault_lib import entities as vault_entities
 from .vault_lib.candid_types import Account, ICRCLedger, TransferArg
 from .vault_lib.constants import (
     CANISTER_PRINCIPALS,
+    DEFAULT_TOKEN,
     MAX_ITERATION_COUNT,
     MAX_RESULTS,
     REFRESH_COOLDOWN,
@@ -94,27 +95,30 @@ def register_entities():
 def initialize(args: str):
     logger.info("Initializing vault...")
 
-    if not Canisters["ckBTC ledger"]:
-        logger.info(
-            f"Creating canister record 'ckBTC ledger' with principal: {CANISTER_PRINCIPALS['ckBTC']['ledger']}"
-        )
-        Canisters(_id="ckBTC ledger", principal=CANISTER_PRINCIPALS["ckBTC"]["ledger"])
-    else:
-        logger.info(
-            f"Canister record 'ckBTC ledger' already exists with principal: {Canisters['ckBTC ledger'].principal}"
-        )
+    # Initialize all supported tokens from CANISTER_PRINCIPALS
+    for token_name, token_config in CANISTER_PRINCIPALS.items():
+        ledger_id = f"{token_name} ledger"
+        indexer_id = f"{token_name} indexer"
+        
+        if not Canisters[ledger_id]:
+            logger.info(
+                f"Creating canister record '{ledger_id}' with principal: {token_config['ledger']}"
+            )
+            Canisters(_id=ledger_id, principal=token_config["ledger"])
+        else:
+            logger.info(
+                f"Canister record '{ledger_id}' already exists with principal: {Canisters[ledger_id].principal}"
+            )
 
-    if not Canisters["ckBTC indexer"]:
-        logger.info(
-            f"Creating canister record 'ckBTC indexer' with principal: {CANISTER_PRINCIPALS['ckBTC']['indexer']}"
-        )
-        Canisters(
-            _id="ckBTC indexer", principal=CANISTER_PRINCIPALS["ckBTC"]["indexer"]
-        )
-    else:
-        logger.info(
-            f"Canister record 'ckBTC indexer' already exists with principal: {Canisters['ckBTC indexer'].principal}"
-        )
+        if not Canisters[indexer_id]:
+            logger.info(
+                f"Creating canister record '{indexer_id}' with principal: {token_config['indexer']}"
+            )
+            Canisters(_id=indexer_id, principal=token_config["indexer"])
+        else:
+            logger.info(
+                f"Canister record '{indexer_id}' already exists with principal: {Canisters[indexer_id].principal}"
+            )
 
     # TODO: remove, not needed anymore
     # if not app_data().admin_principal:
@@ -345,24 +349,31 @@ def _transfer(
     amount: int,
     to_subaccount_hex: str = None,
     from_subaccount_hex: str = None,
+    token: str = None,
 ) -> Async[dict]:
     """
     Perform an ICRC-1 transfer from the vault.
 
     Args:
         to_principal: Recipient's principal ID
-        amount: Amount to transfer in smallest units (satoshis for ckBTC)
+        amount: Amount to transfer in smallest units (e.g., satoshis for ckBTC)
         to_subaccount_hex: Optional 64-char hex string for recipient's subaccount
         from_subaccount_hex: Optional 64-char hex string for vault's source subaccount
+        token: Token symbol (e.g., "ckBTC", "REALM"). Defaults to DEFAULT_TOKEN.
     """
     try:
+        token = token or DEFAULT_TOKEN
         logger.info(
             f"vault._transfer called with to_principal: {to_principal}, amount: {amount}, "
-            f"to_subaccount: {to_subaccount_hex}, from_subaccount: {from_subaccount_hex}"
+            f"to_subaccount: {to_subaccount_hex}, from_subaccount: {from_subaccount_hex}, token: {token}"
         )
 
         if not to_principal or amount is None:
             return {"success": False, "error": "to_principal and amount are required"}
+
+        # Validate token
+        if token not in CANISTER_PRINCIPALS:
+            return {"success": False, "error": f"Unknown token: {token}. Supported: {list(CANISTER_PRINCIPALS.keys())}"}
 
         # Check admin
         app = app_data()
@@ -370,10 +381,11 @@ def _transfer(
         if app.admin_principal and caller != app.admin_principal:
             return {"success": False, "error": "Only admin can transfer"}
 
-        # Get ledger canister
-        ledger_canister = Canisters["ckBTC ledger"]
+        # Get ledger canister for the specified token
+        ledger_id = f"{token} ledger"
+        ledger_canister = Canisters[ledger_id]
         if not ledger_canister:
-            return {"success": False, "error": "ckBTC ledger not configured"}
+            return {"success": False, "error": f"{token} ledger not configured"}
 
         # Convert subaccount hex strings to byte lists if provided
         to_subaccount = None
@@ -479,6 +491,7 @@ def transfer(args: str) -> Async[str]:
             - amount: int - Amount in smallest units (required)
             - to_subaccount: str - Optional 64-char hex subaccount for recipient
             - from_subaccount: str - Optional 64-char hex subaccount to send from
+            - token: str - Token symbol (e.g., "ckBTC", "REALM"). Defaults to DEFAULT_TOKEN.
 
     Returns:
         JSON string with transaction ID
@@ -492,12 +505,14 @@ def transfer(args: str) -> Async[str]:
         amount = params.get("amount")
         to_subaccount_hex = params.get("to_subaccount")
         from_subaccount_hex = params.get("from_subaccount")
+        token = params.get("token")
 
         result = yield _transfer(
             to_principal,
             amount,
             to_subaccount_hex=to_subaccount_hex,
             from_subaccount_hex=from_subaccount_hex,
+            token=token,
         )
         return json.dumps(result)
 
@@ -646,7 +661,7 @@ def _refresh_subaccount(
         return {"new_tx_count": 0, "error": str(e)}
 
 
-def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
+def _refresh(force: bool = False, subaccount_hex: str = None, token: str = None) -> Async[dict]:
     """
     Sync transaction history from ICRC ledger.
 
@@ -654,11 +669,13 @@ def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
         force: Skip cooldown check
         subaccount_hex: Optional specific subaccount to refresh (64-char hex string).
                        If None, refreshes default subaccount + all known subaccounts.
+        token: Token symbol (e.g., "ckBTC", "REALM"). Defaults to DEFAULT_TOKEN.
 
     Returns:
         Dict with sync summary
     """
-    logger.info(f"vault.refresh called (force={force}, subaccount={subaccount_hex})")
+    token = token or DEFAULT_TOKEN
+    logger.info(f"vault.refresh called (force={force}, subaccount={subaccount_hex}, token={token})")
 
     try:
         app = app_data()
@@ -689,10 +706,15 @@ def _refresh(force: bool = False, subaccount_hex: str = None) -> Async[dict]:
                     "cached": True,
                 }
 
-        indexer_canister = Canisters["ckBTC indexer"]
+        # Validate token
+        if token not in CANISTER_PRINCIPALS:
+            return {"success": False, "error": f"Unknown token: {token}. Supported: {list(CANISTER_PRINCIPALS.keys())}"}
+
+        indexer_id = f"{token} indexer"
+        indexer_canister = Canisters[indexer_id]
 
         if not indexer_canister:
-            return {"success": False, "error": "ckBTC indexer not configured"}
+            return {"success": False, "error": f"{token} indexer not configured"}
 
         logger.info(f"Using indexer canister: {indexer_canister.principal}")
 
@@ -767,13 +789,15 @@ def refresh(args: str) -> Async[str]:
         args: JSON string with optional parameters:
             - force: bool - Skip cooldown check
             - subaccount: str - Optional 64-char hex subaccount to refresh
+            - token: str - Token symbol (e.g., "ckBTC", "REALM"). Defaults to DEFAULT_TOKEN.
     """
     try:
         params = json.loads(args) if args else {}
         force = params.get("force", False)
         subaccount_hex = params.get("subaccount")
+        token = params.get("token")
 
-        result = yield _refresh(force=force, subaccount_hex=subaccount_hex)
+        result = yield _refresh(force=force, subaccount_hex=subaccount_hex, token=token)
         return json.dumps(result)
     except Exception as e:
         logger.error(f"Error in refresh: {str(e)}")
@@ -881,14 +905,31 @@ def get_vault_balance(args: str) -> str:
 
 
 def refresh_vault_balance(args: str) -> Async[str]:
-    logger.info("vault.refresh_vault_balance called")
+    """
+    Refresh the vault's balance from the ledger.
 
+    Args:
+        args: JSON string with optional parameters:
+            - token: str - Token symbol (e.g., "ckBTC", "REALM"). Defaults to DEFAULT_TOKEN.
+    """
     try:
-        # Get ledger canister
-        ledger_canister = Canisters["ckBTC ledger"]
+        params = json.loads(args) if args else {}
+        token = params.get("token") or DEFAULT_TOKEN
+        
+        logger.info(f"vault.refresh_vault_balance called for token: {token}")
+
+        # Validate token
+        if token not in CANISTER_PRINCIPALS:
+            return json.dumps(
+                {"success": False, "error": f"Unknown token: {token}. Supported: {list(CANISTER_PRINCIPALS.keys())}"}
+            )
+
+        # Get ledger canister for the specified token
+        ledger_id = f"{token} ledger"
+        ledger_canister = Canisters[ledger_id]
         if not ledger_canister:
             return json.dumps(
-                {"success": False, "error": "ckBTC ledger not configured"}
+                {"success": False, "error": f"{token} ledger not configured"}
             )
 
         # Query vault's balance from ledger using utility function
@@ -899,17 +940,19 @@ def refresh_vault_balance(args: str) -> Async[str]:
             ledger_canister.principal, vault_principal
         )
 
-        # Update or create Balance entity
-        balance = Balance[vault_principal_str]
+        # Update or create Balance entity (use token-specific key)
+        balance_key = f"{vault_principal_str}:{token}"
+        balance = Balance[balance_key]
         if not balance:
-            logger.info("Creating vault balance record")
-            Balance(_id=vault_principal_str, amount=balance_amount_int)
+            logger.info(f"Creating vault balance record for {token}")
+            Balance(_id=balance_key, amount=balance_amount_int)
         else:
             balance.amount = balance_amount_int
 
-        logger.info(f"Vault balance updated: {balance_amount_int} satoshis")
+        logger.info(f"Vault {token} balance updated: {balance_amount_int}")
         balance_dict = {
             "principal_id": vault_principal_str,
+            "token": token,
             "amount": balance_amount_int,
         }
         return json.dumps({"success": True, "data": {"Balance": balance_dict}})
