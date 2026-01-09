@@ -2,6 +2,7 @@
 import { onMount } from 'svelte';
 import { backend } from '$lib/canisters';
 import { _ } from 'svelte-i18n';
+import { CONFIG } from '$lib/config';
 
 let balance = 0;
 let balanceObject: any = null;
@@ -27,36 +28,39 @@ let copiedPrincipal: string = '';
 let copiedTimestamp: string = '';
 let vaultBalanceLoading: boolean = false;
 
-// Ledger canister principals from backend constants
+// Get realm token symbol from config, fallback to REALMS
+const realmTokenSymbol = CONFIG.realm_token_symbol || 'REALMS';
+
+// Ledger canister principals - use CONFIG values with fallback to mainnet/staging defaults
 const LEDGER_CANISTERS: Record<string, {ledger: string, indexer: string, decimals: number, symbol: string}> = {
 	ckBTC: {
-		ledger: 'mxzaz-hqaaa-aaaar-qaada-cai',
-		indexer: 'n5wcd-faaaa-aaaar-qaaea-cai',
+		ledger: CONFIG.ckbtc_ledger_canister_id || 'mxzaz-hqaaa-aaaar-qaada-cai',
+		indexer: CONFIG.ckbtc_indexer_canister_id || 'n5wcd-faaaa-aaaar-qaaea-cai',
 		decimals: 8,
 		symbol: 'ckBTC'
 	},
-	REALMS: {
-		ledger: 'xbkkh-syaaa-aaaah-qq3ya-cai',
-		indexer: 'xbkkh-syaaa-aaaah-qq3ya-cai',  // Same canister provides both
+	[realmTokenSymbol]: {
+		ledger: CONFIG.token_backend_canister_id || 'xbkkh-syaaa-aaaah-qq3ya-cai',
+		indexer: CONFIG.token_backend_canister_id || 'xbkkh-syaaa-aaaah-qq3ya-cai',  // Same canister provides both
 		decimals: 8,
-		symbol: 'REALMS'
+		symbol: realmTokenSymbol
 	}
 };
 
 // Selected tokens (checkboxes) - default all selected
 let selectedTokens: Record<string, boolean> = {
 	ckBTC: true,
-	REALMS: true
+	[realmTokenSymbol]: true
 };
 
 // Per-token vault balances
 let tokenBalances: Record<string, number> = {
 	ckBTC: 0,
-	REALMS: 0
+	[realmTokenSymbol]: 0
 };
 
 // Selected token for transfer
-let transferToken: string = 'REALMS';
+let transferToken: string = realmTokenSymbol;
 
 async function loadBalance() {
 loading = true;
