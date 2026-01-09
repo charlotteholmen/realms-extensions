@@ -2,7 +2,6 @@
 import { onMount } from 'svelte';
 import { backend } from '$lib/canisters';
 import { _ } from 'svelte-i18n';
-import { CONFIG } from '$lib/config';
 
 let balance = 0;
 let balanceObject: any = null;
@@ -27,40 +26,60 @@ let lastRefreshTime: Date | null = null;
 let copiedPrincipal: string = '';
 let copiedTimestamp: string = '';
 let vaultBalanceLoading: boolean = false;
+let tokensLoaded: boolean = false;
 
-// Get realm token symbol from config, fallback to REALMS
-const realmTokenSymbol = CONFIG.realm_token_symbol || 'REALMS';
-
-// Ledger canister principals - use CONFIG values with fallback to mainnet/staging defaults
-const LEDGER_CANISTERS: Record<string, {ledger: string, indexer: string, decimals: number, symbol: string}> = {
-	ckBTC: {
-		ledger: CONFIG.ckbtc_ledger_canister_id || 'mxzaz-hqaaa-aaaar-qaada-cai',
-		indexer: CONFIG.ckbtc_indexer_canister_id || 'n5wcd-faaaa-aaaar-qaaea-cai',
-		decimals: 8,
-		symbol: 'ckBTC'
-	},
-	[realmTokenSymbol]: {
-		ledger: CONFIG.token_backend_canister_id || 'xbkkh-syaaa-aaaah-qq3ya-cai',
-		indexer: CONFIG.token_backend_canister_id || 'xbkkh-syaaa-aaaah-qq3ya-cai',  // Same canister provides both
-		decimals: 8,
-		symbol: realmTokenSymbol
-	}
-};
+// Ledger canister principals - loaded dynamically from Token entity
+let LEDGER_CANISTERS: Record<string, {ledger: string, indexer: string, decimals: number, symbol: string, name: string}> = {};
 
 // Selected tokens (checkboxes) - default all selected
-let selectedTokens: Record<string, boolean> = {
-	ckBTC: true,
-	[realmTokenSymbol]: true
-};
+let selectedTokens: Record<string, boolean> = {};
 
 // Per-token vault balances
-let tokenBalances: Record<string, number> = {
-	ckBTC: 0,
-	[realmTokenSymbol]: 0
-};
+let tokenBalances: Record<string, number> = {};
 
 // Selected token for transfer
-let transferToken: string = realmTokenSymbol;
+let transferToken: string = '';
+
+// Load tokens from Token entity
+async function loadTokens() {
+	try {
+		const response = await backend.get_objects_paginated('Token', 0n, 100n, 'asc');
+		if (response.success && response.data?.objectsListPaginated) {
+			const tokens = response.data.objectsListPaginated.objects.map((objStr: string) => JSON.parse(objStr));
+			
+			// Build LEDGER_CANISTERS from Token entities
+			LEDGER_CANISTERS = {};
+			selectedTokens = {};
+			tokenBalances = {};
+			
+			for (const token of tokens) {
+				if (token.enabled === 'true') {
+					LEDGER_CANISTERS[token.symbol] = {
+						ledger: token.ledger_canister_id,
+						indexer: token.indexer_canister_id,
+						decimals: token.decimals || 8,
+						symbol: token.symbol,
+						name: token.name
+					};
+					selectedTokens[token.symbol] = true;
+					tokenBalances[token.symbol] = 0;
+				}
+			}
+			
+			// Set default transfer token to first available
+			const tokenSymbols = Object.keys(LEDGER_CANISTERS);
+			if (tokenSymbols.length > 0 && !transferToken) {
+				transferToken = tokenSymbols[0];
+			}
+			
+			tokensLoaded = true;
+			console.log('Loaded tokens:', LEDGER_CANISTERS);
+		}
+	} catch (e: any) {
+		console.error('Failed to load tokens:', e);
+		// Tokens will remain empty, UI will show "No tokens configured"
+	}
+}
 
 async function loadBalance() {
 loading = true;
@@ -408,6 +427,7 @@ await goToPage(currentPage - 1);
 }
 
 onMount(async () => {
+await loadTokens();  // Load tokens first from Token entity
 await loadBalance();
 await loadAllVaultBalances();
 await loadTransactions(0);
