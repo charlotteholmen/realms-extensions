@@ -11,22 +11,23 @@ logger = get_logger("notifications.entry")
 
 def _notification_to_dict(notification: Notification) -> Dict[str, Any]:
     """Convert Notification entity to dictionary format"""
-    # Handle timestamp - it could be string or datetime object
-    timestamp = notification.timestamp_created
+    # Handle timestamp - try multiple attribute names
+    timestamp = getattr(notification, "timestamp_created", None) or getattr(notification, "created_at", None) or ""
     if hasattr(timestamp, "strftime"):
         timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     else:
         timestamp_str = str(timestamp) if timestamp else ""
 
     return {
-        "id": notification.notification_id,
-        "title": notification.title,
-        "message": notification.message,
+        "id": notification._id,
+        "topic": getattr(notification, "topic", "") or "",
+        "title": getattr(notification, "title", "") or "",
+        "message": getattr(notification, "message", "") or "",
         "timestamp": timestamp_str,
-        "read": notification.read,
-        "icon": notification.icon,
-        "href": notification.href,
-        "color": notification.color,
+        "read": getattr(notification, "read", False) or False,
+        "icon": getattr(notification, "icon", "bell") or "bell",
+        "href": getattr(notification, "href", "/notifications") or "/notifications",
+        "color": getattr(notification, "color", "blue") or "blue",
     }
 
 
@@ -37,14 +38,20 @@ def get_notifications(args: str = "{}"):
 
         params = json.loads(args) if args else {}
         user_id = params.get("user_id")
+        logger.info(f"Looking for notifications for user_id: {user_id}")
 
         # Get all notifications from database
         notifications = Notification.instances()
+        logger.info(f"Total notifications in DB: {len(notifications)}")
 
-        # Filter by user if user_id provided
+        # Filter by user if user_id provided (could be principal or _id)
         if user_id:
             notifications = [
-                n for n in notifications if n.user and n.user.id == user_id
+                n for n in notifications if n.user and (
+                    getattr(n.user, "principal", None) == user_id or 
+                    n.user.id == user_id or
+                    n.user._id == user_id
+                )
             ]
 
         # Convert to dict format
@@ -73,34 +80,32 @@ def get_notifications(args: str = "{}"):
 
 
 def mark_as_read(args: str):
-    """Mark a notification as read"""
+    """Mark a notification as read or unread (toggle)"""
     try:
         args_dict = json.loads(args) if args else {}
-        notification_id = args_dict.get("notification_id")
+        notification_id = args_dict.get("id")
+        # Allow explicit read value, default to True for backwards compatibility
+        read_value = args_dict.get("read", True)
 
         if not notification_id:
-            return json.dumps({"error": "notification_id is required"})
+            return json.dumps({"error": "id is required"})
 
-        logger.info(f"Marking notification {notification_id} as read")
+        logger.info(f"Setting notification {notification_id} read={read_value}")
 
-        # Find notification in database
-        notification = None
-        for n in Notification.instances():
-            if n.notification_id == notification_id:
-                notification = n
-                break
+        # Find notification in database by _id
+        notification = Notification.get(notification_id)
 
         if notification:
-            notification.read = True
+            notification.read = read_value
             notification.save()
-            logger.info(f"Successfully marked notification {notification_id} as read")
-            return json.dumps({"success": True, "notification_id": notification_id})
+            logger.info(f"Successfully set notification {notification_id} read={read_value}")
+            return json.dumps({"success": True, "id": notification_id, "read": read_value})
 
         logger.warning(f"Notification {notification_id} not found")
         return json.dumps({"error": f"Notification {notification_id} not found"})
 
     except Exception as e:
-        error_msg = f"Error marking notification as read: {e}\n{traceback.format_exc()}"
+        error_msg = f"Error updating notification read status: {e}\n{traceback.format_exc()}"
         logger.error(error_msg)
         return json.dumps({"error": error_msg})
 
@@ -115,10 +120,6 @@ def create_notification(args: str):
             if field not in args_dict:
                 return json.dumps({"error": f"{field} is required"})
 
-        # Generate notification ID
-        existing_notifications = Notification.instances()
-        notification_id = f"notif_{len(existing_notifications) + 1:03d}"
-
         # Get user if user_id provided
         user = None
         user_id = args_dict.get("user_id")
@@ -130,7 +131,7 @@ def create_notification(args: str):
 
         # Create notification entity
         new_notification = Notification(
-            notification_id=notification_id,
+            topic=args_dict.get("topic", "general"),
             title=args_dict["title"],
             message=args_dict["message"],
             user=user,
@@ -141,8 +142,8 @@ def create_notification(args: str):
             metadata=args_dict.get("metadata", "{}"),
         )
 
-        logger.info(f"Created new notification: {notification_id}")
-        return json.dumps({"success": True, "notification_id": notification_id})
+        logger.info(f"Created new notification: {new_notification._id}")
+        return json.dumps({"success": True, "id": new_notification._id})
 
     except Exception as e:
         error_msg = f"Error creating notification: {e}\n{traceback.format_exc()}"

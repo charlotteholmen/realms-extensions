@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { Card, Spinner, Alert, Tabs, TabItem, Button } from 'flowbite-svelte';
 	import { UserCircleOutline, FileDocOutline, DollarOutline, WalletOutline, ClockOutline, ExclamationCircleOutline, ChevronRightOutline, CalendarMonthOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
@@ -10,11 +11,29 @@
 	import PersonalData from './PersonalData.svelte';
 	import PaymentAccounts from './PaymentAccounts.svelte';
 	
+	// Tab name to index mapping
+	const tabMap: Record<string, number> = {
+		'public_services': 0,
+		'my_taxes': 1,
+		'personal_data': 2,
+		'payment_accounts': 3
+	};
+	
 	// Component state
 	let loading = true;
 	let error = '';
 	let summaryData = null;
 	let activeTab = 0;
+	
+	// Check URL hash and set active tab
+	function setTabFromHash() {
+		if (browser && window.location.hash) {
+			const hash = window.location.hash.substring(1); // Remove #
+			if (hash in tabMap) {
+				activeTab = tabMap[hash];
+			}
+		}
+	}
 	
 	// Get greeting based on time of day
 	function getGreeting(): string {
@@ -82,6 +101,7 @@
 	
 	// Initialize component
 	onMount(async () => {
+		setTabFromHash();
 		await getDashboardSummary();
 	});
 </script>
