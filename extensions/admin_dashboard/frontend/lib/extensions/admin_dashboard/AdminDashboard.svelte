@@ -4,9 +4,10 @@
   import GenericEntityTable from '$lib/components/ggg/GenericEntityTable.svelte';
   import { ClipboardListOutline } from 'flowbite-svelte-icons';
   
-  let selectedType = 'users';
+  let selectedType = 'User';
   let items = [];
   let loading = false;
+  let loadingTypes = true;
   let expandedItem = null;
   
   // Pagination state
@@ -15,58 +16,81 @@
   let totalItems = 0;
   let totalPages = 0;
   
-  // Entity types configuration - all GGG entities
-  const entityTypes = [
-    // Core Entities
-    { value: 'users', label: '👤 Users', className: 'User' },
-    { value: 'citizens', label: '🙋 Citizens', className: 'Citizen' },
-    { value: 'humans', label: '🧑 Humans', className: 'Human' },
-    { value: 'identities', label: '🆔 Identities', className: 'Identity' },
-    { value: 'user_profiles', label: '📋 User Profiles', className: 'UserProfile' },
-    
-    // Organizations & Realms
-    { value: 'organizations', label: '🏢 Organizations', className: 'Organization' },
-    { value: 'realms', label: '🏛️ Realms', className: 'Realm' },
-    
-    // Governance
-    { value: 'mandates', label: '📜 Mandates', className: 'Mandate' },
-    { value: 'proposals', label: '🗳️ Proposals', className: 'Proposal' },
-    { value: 'votes', label: '✅ Votes', className: 'Vote' },
-    { value: 'codexes', label: '📚 Codexes', className: 'Codex' },
-    
-    // Financial
-    { value: 'instruments', label: '💰 Instruments', className: 'Instrument' },
-    { value: 'transfers', label: '🔄 Transfers', className: 'Transfer' },
-    { value: 'balances', label: '💵 Balances', className: 'Balance' },
-    { value: 'treasuries', label: '🏦 Treasuries', className: 'Treasury' },
-    { value: 'tax_records', label: '📊 Tax Records', className: 'TaxRecord' },
-    
-    // Assets & Resources
-    { value: 'lands', label: '🏞️ Lands', className: 'Land' },
-    { value: 'licenses', label: '📃 Licenses', className: 'License' },
-    
-    // Contracts & Agreements
-    { value: 'contracts', label: '📝 Contracts', className: 'Contract' },
-    { value: 'trades', label: '🤝 Trades', className: 'Trade' },
-    { value: 'services', label: '⚙️ Services', className: 'Service' },
-    
-    // Tasks & Operations
-    { value: 'tasks', label: '📋 Tasks', className: 'Task' },
-    { value: 'task_schedules', label: '⏰ Task Schedules', className: 'TaskSchedule' },
-    { value: 'task_executions', label: '▶️ Task Executions', className: 'TaskExecution' },
-    
-    // Disputes & Notifications
-    { value: 'disputes', label: '⚖️ Disputes', className: 'Dispute' },
-    { value: 'notifications', label: '🔔 Notifications', className: 'Notification' },
-    
-    // Permissions
-    { value: 'permissions', label: '🔐 Permissions', className: 'Permission' }
-  ];
+  // Entity types - loaded dynamically from backend
+  let entityTypes = [];
+  
+  // Icon mapping for entity types
+  const entityIcons = {
+    'Balance': '💵',
+    'Call': '📞',
+    'Codex': '📚',
+    'Contract': '📝',
+    'Dispute': '⚖️',
+    'Human': '🧑',
+    'Identity': '🆔',
+    'Instrument': '💰',
+    'Invoice': '🧾',
+    'Land': '🏞️',
+    'License': '📃',
+    'Mandate': '📜',
+    'Member': '👥',
+    'Notification': '🔔',
+    'Organization': '🏢',
+    'PaymentAccount': '💳',
+    'Permission': '🔐',
+    'Proposal': '🗳️',
+    'Realm': '🏛️',
+    'Registry': '📋',
+    'Service': '⚙️',
+    'Task': '📋',
+    'TaskExecution': '▶️',
+    'TaskSchedule': '⏰',
+    'TaskStep': '📌',
+    'Token': '🪙',
+    'Trade': '🤝',
+    'Transfer': '🔄',
+    'Treasury': '🏦',
+    'User': '👤',
+    'UserProfile': '📋',
+    'Vote': '✅',
+    'Zone': '🗺️',
+  };
+  
+  function getEntityIcon(className) {
+    return entityIcons[className] || '📊';
+  }
+  
+  function formatLabel(className) {
+    // Convert PascalCase to spaced words
+    return className.replace(/([A-Z])/g, ' $1').trim();
+  }
+  
+  async function loadEntityTypes() {
+    try {
+      const result = await backend.extension_call('admin_dashboard', 'get_entity_types', '{}');
+      if (result.success && result.data) {
+        const data = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+        const classes = data.data || data;
+        entityTypes = classes.map(className => ({
+          value: className,
+          label: `${getEntityIcon(className)} ${formatLabel(className)}`,
+          className: className
+        }));
+        console.log(`✅ Loaded ${entityTypes.length} entity types`);
+      }
+    } catch (error) {
+      console.error('❌ Error loading entity types:', error);
+      // Fallback to User if loading fails
+      entityTypes = [{ value: 'User', label: '👤 User', className: 'User' }];
+    } finally {
+      loadingTypes = false;
+    }
+  }
   
   async function loadData() {
     loading = true;
     expandedItem = null;
-    const entityConfig = entityTypes.find(t => t.value === selectedType);
+    const entityConfig = entityTypes.find(t => t.value === selectedType) || { className: selectedType, label: selectedType };
     
     console.log(`📥 Loading ${entityConfig.label} - Page ${currentPage + 1}...`);
     
@@ -137,8 +161,8 @@
   }
   
   onMount(() => {
-    console.log('🚀 Simple AdminDashboard mounted');
-    // Don't auto-load data - let user explicitly click Load Data button
+    console.log('🚀 AdminDashboard mounted');
+    loadEntityTypes();
   });
 </script>
 
