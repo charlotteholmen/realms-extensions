@@ -20,6 +20,14 @@ from .models import RegistrationCode
 logger = get_logger("extensions.admin_dashboard")
 
 
+def get_entity_types():
+    """Return available GGG entity types for the admin dashboard dropdown."""
+    return {
+        "success": True,
+        "data": ggg.classes()
+    }
+
+
 def extension_sync_call(method_name: str, args: dict):
     """
     Synchronous extension API calls for admin operations
@@ -31,6 +39,7 @@ def extension_sync_call(method_name: str, args: dict):
         "generate_registration_url": (generate_registration_url, True),
         "validate_registration_code": (validate_registration_code, True),
         "get_registration_codes": (get_registration_codes, True),
+        "get_entity_types": (get_entity_types, False),
     }
 
     if method_name not in methods:
@@ -67,37 +76,8 @@ def export_data(args):
         all_entities = []
         codexes = []
 
-        # List of known entity types in the system
-        entity_classes = [
-            "User",
-            "Human",
-            "Member",
-            "Organization",
-            "Realm",
-            "Treasury",
-            "Instrument",
-            "Transfer",
-            "Balance",
-            "Mandate",
-            "Contract",
-            "Trade",
-            "Dispute",
-            "License",
-            "Task",
-            "Codex",
-            "TaskSchedule",
-            "TaskExecution",
-            "Land",
-            "Registry",
-            "Service",
-            "Proposal",
-            "Vote",
-            "Invoice",
-            "Notification",
-            "Identity",
-            "UserProfile",
-            "Permission",
-        ]
+        # Get entity classes dynamically from ggg module
+        entity_classes = ggg.classes()
 
         # Filter entity classes if specific types requested
         if entity_types:
