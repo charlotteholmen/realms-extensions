@@ -67,7 +67,7 @@
   
   async function loadEntityTypes() {
     try {
-      const result = await backend.extension_call('admin_dashboard', 'get_entity_types', '{}');
+      const result = await backend.extension_call({ extension_name: 'admin_dashboard', function_name: 'get_entity_types', args: '{}' });
       if (result.success && result.response) {
         const data = typeof result.response === 'string' ? JSON.parse(result.response) : result.response;
         const classes = data.data || data;
