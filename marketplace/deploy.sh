@@ -41,10 +41,26 @@ fi
 
 echo "🚀 Deploying Marketplace to $NETWORK network..."
 
-# Check if venv exists
+# Kybra requires Python 3.10 (imp module removed in 3.12+)
+PYTHON_BIN="python3.10"
+if ! command -v $PYTHON_BIN &> /dev/null; then
+    echo "❌ Python 3.10 is required for Kybra but not found."
+    echo "   Install with: sudo apt install python3.10 python3.10-venv"
+    exit 1
+fi
+
+# Check if venv exists and uses correct Python version
+if [ -d "venv" ]; then
+    VENV_PYTHON_VERSION=$(./venv/bin/python --version 2>&1 | grep -oP '\d+\.\d+')
+    if [[ "$VENV_PYTHON_VERSION" != "3.10" ]]; then
+        echo "⚠️  Existing venv uses Python $VENV_PYTHON_VERSION, recreating with 3.10..."
+        rm -rf venv
+    fi
+fi
+
 if [ ! -d "venv" ]; then
-    echo "📦 Creating Python virtual environment..."
-    python3 -m venv venv
+    echo "📦 Creating Python virtual environment with Python 3.10..."
+    $PYTHON_BIN -m venv venv
 fi
 
 # Activate venv

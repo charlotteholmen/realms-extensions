@@ -47,8 +47,12 @@
         "subnet_type": "system"
       }
     },
+    "staging": {
+      "providers": ["https://icp0.io"],
+      "type": "persistent"
+    },
     "ic": {
-      "providers": ["https://ic0.app"],
+      "providers": ["https://icp0.io"],
       "type": "persistent"
     }
   }
