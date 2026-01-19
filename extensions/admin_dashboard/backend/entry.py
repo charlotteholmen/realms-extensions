@@ -20,7 +20,7 @@ from .models import RegistrationCode
 logger = get_logger("extensions.admin_dashboard")
 
 
-def get_entity_types():
+def get_entity_types(args=None):
     """Return available GGG entity types for the admin dashboard dropdown."""
     return {
         "success": True,
