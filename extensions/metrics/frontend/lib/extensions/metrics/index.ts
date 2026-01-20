@@ -1,4 +1,7 @@
 import Metrics from './Metrics.svelte';
+import FinancialStatements from './FinancialStatements.svelte';
+
+export { FinancialStatements };
 
 export const metadata = {
   "name": "metrics",

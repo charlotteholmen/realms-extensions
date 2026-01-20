@@ -3,8 +3,12 @@
   import AssetPortfolioChart from './AssetPortfolioChart.svelte';
   import TaxContributionTreemap from './TaxContributionTreemap.svelte';
   import MonthlyCashFlow from './MonthlyCashFlow.svelte';
+  import FinancialStatements from './FinancialStatements.svelte';
   import { _ } from 'svelte-i18n';
   import SafeText from '$lib/components/SafeText.svelte';
+
+  // Active tab for switching between views
+  let activeTab = 'accounting';
 
   // Budget visualization data with translation keys (charts need string values)
   $: budgetData = {
@@ -44,24 +48,55 @@
 </script>
 
 <div class="charts-extension">
-  <!-- Budget Visualization Charts -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-    <!-- Tax Allocation Pie Chart -->
-    <TaxAllocationChart data={budgetData.taxAllocation} />
+  <!-- Tab Navigation -->
+  <div class="mb-6 border-b border-gray-200">
+    <nav class="flex space-x-8" aria-label="Tabs">
+      <button
+        on:click={() => activeTab = 'accounting'}
+        class="py-4 px-1 border-b-2 font-medium text-sm transition-colors {
+          activeTab === 'accounting' 
+            ? 'border-blue-500 text-blue-600' 
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+        }"
+      >
+        📊 {$_('extensions.metrics.financial_statements') || 'Financial Statements'}
+      </button>
+      <button
+        on:click={() => activeTab = 'visualizations'}
+        class="py-4 px-1 border-b-2 font-medium text-sm transition-colors {
+          activeTab === 'visualizations' 
+            ? 'border-blue-500 text-blue-600' 
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+        }"
+      >
+        📈 {$_('extensions.metrics.budget_visualizations') || 'Budget Visualizations'}
+      </button>
+    </nav>
+  </div>
+
+  {#if activeTab === 'accounting'}
+    <!-- Financial Statements (Real Accounting Data) -->
+    <FinancialStatements />
+  {:else}
+    <!-- Budget Visualization Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <!-- Tax Allocation Pie Chart -->
+      <TaxAllocationChart data={budgetData.taxAllocation} />
+      
+      <!-- Asset Portfolio Donut Chart -->
+      <AssetPortfolioChart data={budgetData.assetPortfolio} />
+    </div>
     
-    <!-- Asset Portfolio Donut Chart -->
-    <AssetPortfolioChart data={budgetData.assetPortfolio} />
-  </div>
-  
-  <!-- Tax Contribution Treemap -->
-  <div class="mt-6">
-    <TaxContributionTreemap data={budgetData.taxContributions} />
-  </div>
-  
-  <!-- Monthly Cash Flow -->
-  <div class="mt-6">
-    <MonthlyCashFlow />
-  </div>
+    <!-- Tax Contribution Treemap -->
+    <div class="mt-6">
+      <TaxContributionTreemap data={budgetData.taxContributions} />
+    </div>
+    
+    <!-- Monthly Cash Flow -->
+    <div class="mt-6">
+      <MonthlyCashFlow />
+    </div>
+  {/if}
 </div>
 
 <style>
