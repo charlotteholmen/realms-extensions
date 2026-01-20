@@ -9,8 +9,34 @@
   import { onMount } from 'svelte';
   import { backend } from '$lib/canisters';
 
+  // Tab definitions with hash slugs
+  const tabs = [
+    { id: 'accounting', hash: 'accounting', icon: '📊', labelKey: 'extensions.metrics.financial_statements' },
+    { id: 'visualizations', hash: 'budget', icon: '📈', labelKey: 'extensions.metrics.budget_visualizations' }
+  ];
+
   // Active tab for switching between views
   let activeTab = 'accounting';
+
+  // Read hash from URL and set active tab
+  function initTabFromHash() {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.slice(1);
+      const matchingTab = tabs.find(t => t.hash === hash);
+      if (matchingTab) {
+        activeTab = matchingTab.id;
+      }
+    }
+  }
+
+  // Update URL hash when tab changes
+  function setTab(tabId) {
+    activeTab = tabId;
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab && typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${tab.hash}`);
+    }
+  }
   
   // Data loading state
   let loading = true;
@@ -53,20 +79,21 @@
   }
 
   onMount(() => {
+    initTabFromHash();
     fetchData();
   });
 
-  // Colors for different categories
+  // Colors for different categories (elegant blue theme)
   const categoryColors = {
-    'tax': '#3B82F6',
-    'fee': '#10B981',
-    'personnel': '#F59E0B',
-    'capital': '#8B5CF6',
-    'grant': '#EF4444',
-    'operating': '#6B7280',
-    'general': '#3B82F6',
-    'special_revenue': '#10B981',
-    'capital_projects': '#8B5CF6'
+    'tax': '#1E40AF',
+    'fee': '#1D4ED8',
+    'personnel': '#2563EB',
+    'capital': '#3B82F6',
+    'grant': '#60A5FA',
+    'operating': '#93C5FD',
+    'general': '#1E40AF',
+    'special_revenue': '#2563EB',
+    'capital_projects': '#60A5FA'
   };
 
   // Process budgets for Tax Allocation chart (expense budgets by category)
@@ -75,7 +102,7 @@
     .map((b, i) => ({
       category: b.name || b.category || 'Other',
       amount: b.actual_amount || 0,
-      color: categoryColors[b.category] || `hsl(${i * 60}, 70%, 50%)`
+      color: categoryColors[b.category] || `hsl(217, 91%, ${30 + i * 10}%)`
     }));
 
   // Process funds for Asset Portfolio chart
@@ -171,26 +198,18 @@
   <!-- Tab Navigation -->
   <div class="mb-6 border-b border-gray-200">
     <nav class="flex space-x-8" aria-label="Tabs">
-      <button
-        on:click={() => activeTab = 'accounting'}
-        class="py-4 px-1 border-b-2 font-medium text-sm transition-colors {
-          activeTab === 'accounting' 
-            ? 'border-blue-500 text-blue-600' 
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-        }"
-      >
-        📊 {$_('extensions.metrics.financial_statements') || 'Financial Statements'}
-      </button>
-      <button
-        on:click={() => activeTab = 'visualizations'}
-        class="py-4 px-1 border-b-2 font-medium text-sm transition-colors {
-          activeTab === 'visualizations' 
-            ? 'border-blue-500 text-blue-600' 
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-        }"
-      >
-        📈 {$_('extensions.metrics.budget_visualizations') || 'Budget Visualizations'}
-      </button>
+      {#each tabs as tab}
+        <button
+          on:click={() => setTab(tab.id)}
+          class="py-4 px-1 border-b-2 font-medium text-sm transition-colors {
+            activeTab === tab.id 
+              ? 'border-blue-500 text-blue-600' 
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }"
+        >
+          {tab.icon} {$_(tab.labelKey) || tab.labelKey.split('.').pop()}
+        </button>
+      {/each}
     </nav>
   </div>
 

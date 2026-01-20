@@ -35,7 +35,7 @@
       toolbar: { show: false }
     },
     series: groupedData,
-    colors: ['#3B82F6', '#10B981'],
+    colors: ['#1E40AF', '#3B82F6'],
     plotOptions: {
       treemap: {
         enableShades: true,
@@ -43,10 +43,10 @@
         reverseNegativeShade: true,
         colorScale: {
           ranges: [
-            { from: 0, to: 10000, color: '#E0F2FE' },
-            { from: 10001, to: 20000, color: '#7DD3FC' },
-            { from: 20001, to: 30000, color: '#38BDF8' },
-            { from: 30001, to: 50000, color: '#0EA5E9' }
+            { from: 0, to: 10000, color: '#DBEAFE' },
+            { from: 10001, to: 20000, color: '#93C5FD' },
+            { from: 20001, to: 30000, color: '#3B82F6' },
+            { from: 30001, to: 50000, color: '#1E40AF' }
           ]
         }
       }

@@ -21,8 +21,8 @@
     <!-- Income -->
     <div class="bg-white rounded-lg p-3 border">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-medium text-green-700">📈 {$_('extensions.metrics.income')}</span>
-        <span class="text-lg font-bold text-green-600">+{totalIncome.toLocaleString()} ckBTC</span>
+        <span class="text-sm font-medium text-blue-700">📈 {$_('extensions.metrics.income')}</span>
+        <span class="text-lg font-bold text-blue-800">+{totalIncome.toLocaleString()} ckBTC</span>
       </div>
       <div class="text-xs text-gray-600 space-y-1">
         {#each income as item}
@@ -37,8 +37,8 @@
     <!-- Expenses -->
     <div class="bg-white rounded-lg p-3 border">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-medium text-red-700">📉 {$_('extensions.metrics.expenses')}</span>
-        <span class="text-lg font-bold text-red-600">-{totalExpenses.toLocaleString()} ckBTC</span>
+        <span class="text-sm font-medium text-red-600">📉 {$_('extensions.metrics.expenses')}</span>
+        <span class="text-lg font-bold text-red-500">-{totalExpenses.toLocaleString()} ckBTC</span>
       </div>
       <div class="text-xs text-gray-600 space-y-1">
         {#each expenses as item}
@@ -54,7 +54,7 @@
     <div class="bg-blue-50 rounded-lg p-3 border border-blue-200">
       <div class="flex items-center justify-between">
         <span class="text-sm font-medium text-blue-700">💰 {$_('extensions.metrics.net_monthly_flow')}</span>
-        <span class="text-lg font-bold {netFlow >= 0 ? 'text-blue-600' : 'text-red-600'}">
+        <span class="text-lg font-bold {netFlow >= 0 ? 'text-blue-800' : 'text-red-600'}">
           {netFlow >= 0 ? '+' : ''}{netFlow.toLocaleString()} ckBTC
         </span>
       </div>

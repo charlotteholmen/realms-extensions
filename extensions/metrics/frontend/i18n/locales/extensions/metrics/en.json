@@ -45,5 +45,22 @@
   "operating_activities": "Operating Activities",
   "investing_activities": "Investing Activities",
   "financing_activities": "Financing Activities",
-  "net_change_in_cash": "Net Change in Cash"
+  "net_change_in_cash": "Net Change in Cash",
+  "assets": "Assets",
+  "liabilities": "Liabilities",
+  "fund_balance": "Fund Balance",
+  "surplus": "Surplus",
+  "deficit": "Deficit",
+  "day_to_day_operations": "Day-to-day operations",
+  "capital_expenditures": "Capital expenditures",
+  "bonds_and_debt": "Bonds and debt",
+  "no_description": "No description",
+  "category": "Category",
+  "planned": "Planned",
+  "actual": "Actual",
+  "variance": "Variance",
+  "status": "Status",
+  "loading_data": "Loading data...",
+  "error_loading": "Failed to load data",
+  "showing_entries": "Showing {entries} ledger entries • {funds} funds • {budgets} budgets"
 }

@@ -17,24 +17,24 @@
   let incomeStatement = { revenues: {}, expenses: {}, totalRevenues: 0, totalExpenses: 0, netIncome: 0 };
   let cashFlowStatement = { operating: 0, investing: 0, financing: 0, netChange: 0 };
 
-  // Category colors for charts
+  // Category colors for charts (elegant blue theme)
   const categoryColors: Record<string, string> = {
-    cash: '#10B981',
-    receivable: '#3B82F6',
-    equipment: '#8B5CF6',
-    land: '#F59E0B',
-    bond: '#EF4444',
-    payable: '#F97316',
-    deferred_revenue: '#EC4899',
-    fund_balance: '#6366F1',
-    tax: '#22C55E',
-    fee: '#14B8A6',
-    grant: '#0EA5E9',
-    personnel: '#F43F5E',
-    supplies: '#A855F7',
-    services: '#F59E0B',
-    debt: '#DC2626',
-    capital: '#7C3AED'
+    cash: '#1E40AF',
+    receivable: '#1D4ED8',
+    equipment: '#2563EB',
+    land: '#3B82F6',
+    bond: '#60A5FA',
+    payable: '#1D4ED8',
+    deferred_revenue: '#2563EB',
+    fund_balance: '#1E40AF',
+    tax: '#1E40AF',
+    fee: '#1D4ED8',
+    grant: '#2563EB',
+    personnel: '#3B82F6',
+    supplies: '#60A5FA',
+    services: '#1D4ED8',
+    debt: '#2563EB',
+    capital: '#1E40AF'
   };
 
   // Fetch all accounting data
@@ -189,32 +189,32 @@
       <span class="ml-3 text-gray-600">{$_('extensions.metrics.loading_accounting_data') || 'Loading accounting data...'}</span>
     </div>
   {:else if error}
-    <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+    <div class="bg-gray-50 border border-gray-300 rounded-lg p-4 text-gray-700">
       {error}
     </div>
   {:else if ledgerEntries.length === 0}
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-      <p class="text-blue-700 font-medium">{$_('extensions.metrics.no_accounting_data') || 'No accounting data available yet.'}</p>
-      <p class="text-blue-600 text-sm mt-2">{$_('extensions.metrics.accounting_data_hint') || 'Financial data will appear here once transactions are recorded.'}</p>
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+      <p class="text-gray-700 font-medium">{$_('extensions.metrics.no_accounting_data') || 'No accounting data available yet.'}</p>
+      <p class="text-gray-500 text-sm mt-2">{$_('extensions.metrics.accounting_data_hint') || 'Financial data will appear here once transactions are recorded.'}</p>
     </div>
   {:else}
     <!-- Summary Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border border-green-200">
-        <div class="text-green-600 text-sm font-medium mb-1">Total Assets</div>
-        <div class="text-2xl font-bold text-green-700">{formatCurrency(balanceSheet.totalAssets)}</div>
+      <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+        <div class="text-gray-500 text-sm font-medium mb-1">Total Assets</div>
+        <div class="text-2xl font-bold text-gray-800">{formatCurrency(balanceSheet.totalAssets)}</div>
       </div>
-      <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border border-red-200">
-        <div class="text-red-600 text-sm font-medium mb-1">Total Liabilities</div>
-        <div class="text-2xl font-bold text-red-700">{formatCurrency(balanceSheet.totalLiabilities)}</div>
+      <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+        <div class="text-gray-500 text-sm font-medium mb-1">Total Liabilities</div>
+        <div class="text-2xl font-bold text-gray-600">{formatCurrency(balanceSheet.totalLiabilities)}</div>
       </div>
-      <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
-        <div class="text-blue-600 text-sm font-medium mb-1">Net Position</div>
-        <div class="text-2xl font-bold text-blue-700">{formatCurrency(balanceSheet.netPosition)}</div>
+      <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+        <div class="text-gray-500 text-sm font-medium mb-1">Net Position</div>
+        <div class="text-2xl font-bold text-gray-800">{formatCurrency(balanceSheet.netPosition)}</div>
       </div>
-      <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200">
-        <div class="text-purple-600 text-sm font-medium mb-1">Net Income</div>
-        <div class="text-2xl font-bold {incomeStatement.netIncome >= 0 ? 'text-purple-700' : 'text-red-700'}">
+      <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+        <div class="text-gray-500 text-sm font-medium mb-1">Net Income</div>
+        <div class="text-2xl font-bold {incomeStatement.netIncome >= 0 ? 'text-gray-800' : 'text-gray-500'}">
           {incomeStatement.netIncome >= 0 ? '+' : ''}{formatCurrency(incomeStatement.netIncome)}
         </div>
       </div>
@@ -231,9 +231,9 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <!-- Assets -->
           <div>
-            <h4 class="font-semibold text-green-700 mb-3 flex items-center">
-              <span class="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-              Assets
+            <h4 class="font-semibold text-blue-800 mb-3 flex items-center">
+              <span class="w-3 h-3 bg-blue-800 rounded-full mr-2"></span>
+              {$_('extensions.metrics.assets') || 'Assets'}
             </h4>
             <div class="space-y-2">
               {#each Object.entries(balanceSheet.assets) as [category, amount]}
@@ -243,17 +243,17 @@
                 </div>
               {/each}
               <div class="border-t pt-2 mt-2 flex justify-between font-semibold">
-                <span>Total Assets</span>
-                <span class="text-green-600">{formatCurrency(balanceSheet.totalAssets)}</span>
+                <span>{$_('extensions.metrics.total_assets') || 'Total Assets'}</span>
+                <span class="text-blue-800">{formatCurrency(balanceSheet.totalAssets)}</span>
               </div>
             </div>
           </div>
 
           <!-- Liabilities -->
           <div>
-            <h4 class="font-semibold text-red-700 mb-3 flex items-center">
+            <h4 class="font-semibold text-red-600 mb-3 flex items-center">
               <span class="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
-              Liabilities
+              {$_('extensions.metrics.liabilities') || 'Liabilities'}
             </h4>
             <div class="space-y-2">
               {#each Object.entries(balanceSheet.liabilities) as [category, amount]}
@@ -263,7 +263,7 @@
                 </div>
               {/each}
               <div class="border-t pt-2 mt-2 flex justify-between font-semibold">
-                <span>Total Liabilities</span>
+                <span>{$_('extensions.metrics.total_liabilities') || 'Total Liabilities'}</span>
                 <span class="text-red-600">{formatCurrency(balanceSheet.totalLiabilities)}</span>
               </div>
             </div>
@@ -272,8 +272,8 @@
           <!-- Equity / Fund Balance -->
           <div>
             <h4 class="font-semibold text-blue-700 mb-3 flex items-center">
-              <span class="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
-              Fund Balance
+              <span class="w-3 h-3 bg-blue-400 rounded-full mr-2"></span>
+              {$_('extensions.metrics.fund_balance') || 'Fund Balance'}
             </h4>
             <div class="space-y-2">
               {#each Object.entries(balanceSheet.equity) as [category, amount]}
@@ -283,8 +283,8 @@
                 </div>
               {/each}
               <div class="border-t pt-2 mt-2 flex justify-between font-semibold">
-                <span>Net Position</span>
-                <span class="text-blue-600">{formatCurrency(balanceSheet.netPosition)}</span>
+                <span>{$_('extensions.metrics.net_position') || 'Net Position'}</span>
+                <span class="text-blue-800">{formatCurrency(balanceSheet.netPosition)}</span>
               </div>
             </div>
           </div>
@@ -303,39 +303,39 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Revenues -->
           <div>
-            <h4 class="font-semibold text-green-700 mb-3 flex items-center">
-              <span class="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-              Revenues
+            <h4 class="font-semibold text-blue-800 mb-3 flex items-center">
+              <span class="w-3 h-3 bg-blue-800 rounded-full mr-2"></span>
+              {$_('extensions.metrics.revenues') || 'Revenues'}
             </h4>
             <div class="space-y-2">
               {#each Object.entries(incomeStatement.revenues) as [category, amount]}
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">{formatCategory(category)}</span>
-                  <span class="font-medium text-green-600">+{formatCurrency(amount)}</span>
+                  <span class="font-medium text-blue-700">+{formatCurrency(amount)}</span>
                 </div>
               {/each}
               <div class="border-t pt-2 mt-2 flex justify-between font-semibold">
-                <span>Total Revenues</span>
-                <span class="text-green-600">{formatCurrency(incomeStatement.totalRevenues)}</span>
+                <span>{$_('extensions.metrics.revenues') || 'Total Revenues'}</span>
+                <span class="text-blue-800">{formatCurrency(incomeStatement.totalRevenues)}</span>
               </div>
             </div>
           </div>
 
           <!-- Expenses -->
           <div>
-            <h4 class="font-semibold text-red-700 mb-3 flex items-center">
+            <h4 class="font-semibold text-red-600 mb-3 flex items-center">
               <span class="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
-              Expenses
+              {$_('extensions.metrics.expenses') || 'Expenses'}
             </h4>
             <div class="space-y-2">
               {#each Object.entries(incomeStatement.expenses) as [category, amount]}
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">{formatCategory(category)}</span>
-                  <span class="font-medium text-red-600">-{formatCurrency(amount)}</span>
+                  <span class="font-medium text-red-500">-{formatCurrency(amount)}</span>
                 </div>
               {/each}
               <div class="border-t pt-2 mt-2 flex justify-between font-semibold">
-                <span>Total Expenses</span>
+                <span>{$_('extensions.metrics.expenses') || 'Total Expenses'}</span>
                 <span class="text-red-600">{formatCurrency(incomeStatement.totalExpenses)}</span>
               </div>
             </div>
@@ -343,12 +343,12 @@
         </div>
 
         <!-- Net Income -->
-        <div class="mt-6 p-4 rounded-lg {incomeStatement.netIncome >= 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}">
+        <div class="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
           <div class="flex justify-between items-center">
-            <span class="font-semibold {incomeStatement.netIncome >= 0 ? 'text-green-700' : 'text-red-700'}">
-              Net Income ({incomeStatement.netIncome >= 0 ? 'Surplus' : 'Deficit'})
+            <span class="font-semibold text-blue-700">
+              {$_('extensions.metrics.net_income') || 'Net Income'} ({incomeStatement.netIncome >= 0 ? $_('extensions.metrics.surplus') || 'Surplus' : $_('extensions.metrics.deficit') || 'Deficit'})
             </span>
-            <span class="text-xl font-bold {incomeStatement.netIncome >= 0 ? 'text-green-700' : 'text-red-700'}">
+            <span class="text-xl font-bold {incomeStatement.netIncome >= 0 ? 'text-blue-800' : 'text-red-600'}">
               {incomeStatement.netIncome >= 0 ? '+' : ''}{formatCurrency(incomeStatement.netIncome)}
             </span>
           </div>
@@ -367,34 +367,34 @@
         <div class="space-y-4">
           <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
             <div>
-              <span class="font-medium text-gray-700">Operating Activities</span>
-              <p class="text-xs text-gray-500">Day-to-day operations</p>
+              <span class="font-medium text-gray-700">{$_('extensions.metrics.operating_activities') || 'Operating Activities'}</span>
+              <p class="text-xs text-gray-500">{$_('extensions.metrics.day_to_day_operations') || 'Day-to-day operations'}</p>
             </div>
-            <span class="text-lg font-semibold {cashFlowStatement.operating >= 0 ? 'text-green-600' : 'text-red-600'}">
+            <span class="text-lg font-semibold {cashFlowStatement.operating >= 0 ? 'text-blue-800' : 'text-red-600'}">
               {cashFlowStatement.operating >= 0 ? '+' : ''}{formatCurrency(cashFlowStatement.operating)}
             </span>
           </div>
           <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
             <div>
-              <span class="font-medium text-gray-700">Investing Activities</span>
-              <p class="text-xs text-gray-500">Capital expenditures</p>
+              <span class="font-medium text-gray-700">{$_('extensions.metrics.investing_activities') || 'Investing Activities'}</span>
+              <p class="text-xs text-gray-500">{$_('extensions.metrics.capital_expenditures') || 'Capital expenditures'}</p>
             </div>
-            <span class="text-lg font-semibold {cashFlowStatement.investing >= 0 ? 'text-green-600' : 'text-red-600'}">
+            <span class="text-lg font-semibold {cashFlowStatement.investing >= 0 ? 'text-blue-800' : 'text-red-600'}">
               {cashFlowStatement.investing >= 0 ? '+' : ''}{formatCurrency(cashFlowStatement.investing)}
             </span>
           </div>
           <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
             <div>
-              <span class="font-medium text-gray-700">Financing Activities</span>
-              <p class="text-xs text-gray-500">Bonds and debt</p>
+              <span class="font-medium text-gray-700">{$_('extensions.metrics.financing_activities') || 'Financing Activities'}</span>
+              <p class="text-xs text-gray-500">{$_('extensions.metrics.bonds_and_debt') || 'Bonds and debt'}</p>
             </div>
-            <span class="text-lg font-semibold {cashFlowStatement.financing >= 0 ? 'text-green-600' : 'text-red-600'}">
+            <span class="text-lg font-semibold {cashFlowStatement.financing >= 0 ? 'text-blue-800' : 'text-red-600'}">
               {cashFlowStatement.financing >= 0 ? '+' : ''}{formatCurrency(cashFlowStatement.financing)}
             </span>
           </div>
           <div class="border-t pt-4 flex justify-between items-center">
-            <span class="font-semibold text-gray-800">Net Change in Cash</span>
-            <span class="text-xl font-bold {cashFlowStatement.netChange >= 0 ? 'text-blue-600' : 'text-red-600'}">
+            <span class="font-semibold text-gray-800">{$_('extensions.metrics.net_change_in_cash') || 'Net Change in Cash'}</span>
+            <span class="text-xl font-bold {cashFlowStatement.netChange >= 0 ? 'text-blue-800' : 'text-red-600'}">
               {cashFlowStatement.netChange >= 0 ? '+' : ''}{formatCurrency(cashFlowStatement.netChange)}
             </span>
           </div>
@@ -418,7 +418,7 @@
                   <span class="font-semibold text-gray-800">{fund.name || fund.code}</span>
                   <span class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">{fund.fund_type || 'general'}</span>
                 </div>
-                <p class="text-sm text-gray-600">{fund.description || 'No description'}</p>
+                <p class="text-sm text-gray-600">{fund.description || $_('extensions.metrics.no_description') || 'No description'}</p>
               </div>
             {/each}
           </div>
@@ -439,11 +439,11 @@
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-gray-200">
-                  <th class="text-left py-3 px-4 font-semibold text-gray-700">Category</th>
-                  <th class="text-right py-3 px-4 font-semibold text-gray-700">Planned</th>
-                  <th class="text-right py-3 px-4 font-semibold text-gray-700">Actual</th>
-                  <th class="text-right py-3 px-4 font-semibold text-gray-700">Variance</th>
-                  <th class="text-center py-3 px-4 font-semibold text-gray-700">Status</th>
+                  <th class="text-left py-3 px-4 font-semibold text-gray-700">{$_('extensions.metrics.category') || 'Category'}</th>
+                  <th class="text-right py-3 px-4 font-semibold text-gray-700">{$_('extensions.metrics.planned') || 'Planned'}</th>
+                  <th class="text-right py-3 px-4 font-semibold text-gray-700">{$_('extensions.metrics.actual') || 'Actual'}</th>
+                  <th class="text-right py-3 px-4 font-semibold text-gray-700">{$_('extensions.metrics.variance') || 'Variance'}</th>
+                  <th class="text-center py-3 px-4 font-semibold text-gray-700">{$_('extensions.metrics.status') || 'Status'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -457,14 +457,14 @@
                     </td>
                     <td class="py-3 px-4 text-right text-gray-600">{formatCurrency(budget.planned_amount || 0)}</td>
                     <td class="py-3 px-4 text-right text-gray-800 font-medium">{formatCurrency(budget.actual_amount || 0)}</td>
-                    <td class="py-3 px-4 text-right {variance >= 0 ? 'text-green-600' : 'text-red-600'}">
+                    <td class="py-3 px-4 text-right {variance >= 0 ? 'text-blue-700' : 'text-blue-500'}">
                       {variance >= 0 ? '+' : ''}{formatCurrency(variance)} ({variancePercent}%)
                     </td>
                     <td class="py-3 px-4 text-center">
                       <span class="px-2 py-1 text-xs rounded-full {
-                        budget.status === 'adopted' ? 'bg-green-100 text-green-700' :
-                        budget.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
+                        budget.status === 'adopted' ? 'bg-blue-100 text-blue-800' :
+                        budget.status === 'draft' ? 'bg-blue-50 text-blue-600' :
+                        'bg-gray-50 text-gray-500'
                       }">
                         {budget.status || 'draft'}
                       </span>
@@ -480,7 +480,7 @@
 
     <!-- Data Summary -->
     <div class="text-center text-sm text-gray-500 py-4">
-      Showing {ledgerEntries.length} ledger entries • {funds.length} funds • {budgets.length} budgets
+      {$_('extensions.metrics.showing_entries', { values: { entries: ledgerEntries.length, funds: funds.length, budgets: budgets.length }}) || `Showing ${ledgerEntries.length} ledger entries • ${funds.length} funds • ${budgets.length} budgets`}
     </div>
   {/if}
 </div>

@@ -45,5 +45,22 @@
   "operating_activities": "经营活动",
   "investing_activities": "投资活动",
   "financing_activities": "筹资活动",
-  "net_change_in_cash": "现金净变动"
+  "net_change_in_cash": "现金净变动",
+  "assets": "资产",
+  "liabilities": "负债",
+  "fund_balance": "基金余额",
+  "surplus": "盈余",
+  "deficit": "赤字",
+  "day_to_day_operations": "日常运营",
+  "capital_expenditures": "资本支出",
+  "bonds_and_debt": "债券和债务",
+  "no_description": "无描述",
+  "category": "类别",
+  "planned": "计划",
+  "actual": "实际",
+  "variance": "差异",
+  "status": "状态",
+  "loading_data": "正在加载数据...",
+  "error_loading": "加载数据失败",
+  "showing_entries": "显示 {entries} 条分录 • {funds} 个基金 • {budgets} 条预算"
 }
