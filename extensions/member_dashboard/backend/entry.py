@@ -32,14 +32,21 @@ def _invoice_to_dict(
     """Convert Invoice entity to dictionary format with optional deposit address."""
     vault_principal = ic.id().to_str()
 
+    # Get recipient name from relationship if available
+    recipient_name = None
+    if hasattr(invoice, 'recipient') and invoice.recipient:
+        recipient_name = getattr(invoice.recipient, 'id', None)
+
     result = {
         "id": invoice.id,
+        "recipient": recipient_name,
         "amount": invoice.amount,
         "currency": getattr(invoice, "currency", "ckBTC") or "ckBTC",
-        "due_date": invoice.due_date,
-        "status": invoice.status,
-        "paid_at": getattr(invoice, "paid_at", None),
+        "due_on": getattr(invoice, "due_on", None) or getattr(invoice, "due_date", None),
+        "type": getattr(invoice, "type", None),
         "metadata": invoice.metadata,
+        "status": invoice.status,
+        "paid_on": getattr(invoice, "paid_on", None) or getattr(invoice, "paid_at", None),
     }
 
     if include_deposit_address:
@@ -189,7 +196,7 @@ def get_tax_information(args: str) -> str:
 
         response = {
             "success": True,
-            "data": {"tax_records": invoices_list, "summary": summary},
+            "data": {"invoices": invoices_list, "summary": summary},
         }
 
         logger.info(f"get_tax_information successful for user: {user_id}")
@@ -199,6 +206,20 @@ def get_tax_information(args: str) -> str:
             f"Error in get_tax_information: {str(e)}\n{traceback.format_exc()}"
         )
         return json.dumps({"success": False, "error": str(e)})
+
+
+def get_invoice_information(args: str) -> str:
+    """
+    Get invoice information for the member.
+    Alias for get_tax_information with updated naming.
+
+    Args:
+        args (str): JSON string containing user_id
+
+    Returns:
+        str: JSON string with invoice information data
+    """
+    return get_tax_information(args)
 
 
 def get_vault_address(args: str) -> str:

@@ -169,26 +169,26 @@
 				{/if}
 			</div>
 			
-			<!-- Tax Records Card -->
-			<div class="group relative bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/40 dark:to-emerald-800/30 
-						rounded-2xl p-6 border border-emerald-200/50 dark:border-emerald-700/50 
+			<!-- Invoices Card -->
+			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
+						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
 						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
 				 on:click={() => activeTab = 1} on:keypress={() => activeTab = 1} role="button" tabindex="0">
 				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-emerald-500 rounded-xl shadow-lg shadow-emerald-500/30">
-						<DollarOutline class="w-6 h-6 text-white" />
+					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
+						<DollarOutline class="w-6 h-6 text-white dark:text-gray-900" />
 					</div>
-					<ChevronRightOutline class="w-5 h-5 text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
 				</div>
 				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{summaryData.tax_records || 0}</h3>
-				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{$_('extensions.member_dashboard.tabs.my_taxes')}</p>
+				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Invoices</p>
 				{#if summaryData.tax_overdue > 0}
-					<div class="flex items-center text-red-600 dark:text-red-400 text-sm font-medium bg-red-100 dark:bg-red-900/30 px-3 py-1.5 rounded-full w-fit">
+					<div class="flex items-center text-gray-700 dark:text-gray-300 text-sm font-medium bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-full w-fit">
 						<ExclamationCircleOutline class="w-4 h-4 mr-1.5" />
 						{summaryData.tax_overdue} overdue
 					</div>
 				{:else}
-					<div class="flex items-center text-green-600 dark:text-green-400 text-sm font-medium">
+					<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
 						✓ No overdue payments
 					</div>
 				{/if}
@@ -244,7 +244,7 @@
 					<ServicesList userId={$principal || 'demo-user'} />
 				</TabItem>
 				
-				<TabItem open={activeTab === 1} title={$_('extensions.member_dashboard.tabs.my_taxes')} class="p-4">
+				<TabItem open={activeTab === 1} title="Invoices" class="p-4">
 					<TaxInformation userId={$principal || 'demo-user'} />
 				</TabItem>
 				
