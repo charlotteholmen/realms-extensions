@@ -109,27 +109,9 @@
 <div class="w-full max-w-none px-4 py-6">
 	<!-- Hero Header Section -->
 	<div class="mb-8">
-		<div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-			<div>
-				<h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-					{getGreeting()}, <span class="text-blue-600 dark:text-blue-400">{summaryData?.user_name || 'Member'}</span>
-				</h1>
-				<p class="text-gray-500 dark:text-gray-400 flex items-center">
-					<CalendarMonthOutline class="w-4 h-4 mr-2" />
-					{formatCurrentDate()}
-				</p>
-			</div>
-			<div class="mt-4 lg:mt-0 flex items-center space-x-3">
-				<Button color="light" size="sm" class="flex items-center">
-					<ClockOutline class="w-4 h-4 mr-2" />
-					View History
-				</Button>
-				<Button color="blue" size="sm" class="flex items-center">
-					Quick Actions
-					<ChevronRightOutline class="w-4 h-4 ml-2" />
-				</Button>
-			</div>
-		</div>
+		<h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+			{getGreeting()}, <span class="text-gray-600 dark:text-gray-400">{summaryData?.user_name || 'Member'}</span>
+		</h1>
 	</div>
 	
 	{#if loading}
