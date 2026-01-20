@@ -145,25 +145,25 @@
 		<!-- Summary Cards Grid -->
 		<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
 			<!-- Public Services Card -->
-			<div class="group relative bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/30 
-						rounded-2xl p-6 border border-blue-200/50 dark:border-blue-700/50 
+			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
+						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
 						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
 				 on:click={() => activeTab = 0} on:keypress={() => activeTab = 0} role="button" tabindex="0">
 				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-blue-500 rounded-xl shadow-lg shadow-blue-500/30">
-						<FileDocOutline class="w-6 h-6 text-white" />
+					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
+						<FileDocOutline class="w-6 h-6 text-white dark:text-gray-900" />
 					</div>
-					<ChevronRightOutline class="w-5 h-5 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
 				</div>
 				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{summaryData.services_count || 0}</h3>
 				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{$_('extensions.member_dashboard.tabs.public_services')}</p>
 				{#if summaryData.services_approaching > 0}
-					<div class="flex items-center text-amber-600 dark:text-amber-400 text-sm font-medium bg-amber-100 dark:bg-amber-900/30 px-3 py-1.5 rounded-full w-fit">
+					<div class="flex items-center text-gray-700 dark:text-gray-300 text-sm font-medium bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-full w-fit">
 						<ClockOutline class="w-4 h-4 mr-1.5" />
 						{summaryData.services_approaching} approaching
 					</div>
 				{:else}
-					<div class="flex items-center text-green-600 dark:text-green-400 text-sm font-medium">
+					<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
 						✓ All on track
 					</div>
 				{/if}
@@ -195,20 +195,20 @@
 			</div>
 			
 			<!-- Personal Data Card -->
-			<div class="group relative bg-gradient-to-br from-violet-50 to-violet-100 dark:from-violet-900/40 dark:to-violet-800/30 
-						rounded-2xl p-6 border border-violet-200/50 dark:border-violet-700/50 
+			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
+						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
 						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
 				 on:click={() => activeTab = 2} on:keypress={() => activeTab = 2} role="button" tabindex="0">
 				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-violet-500 rounded-xl shadow-lg shadow-violet-500/30">
-						<UserCircleOutline class="w-6 h-6 text-white" />
+					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
+						<UserCircleOutline class="w-6 h-6 text-white dark:text-gray-900" />
 					</div>
-					<ChevronRightOutline class="w-5 h-5 text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
 				</div>
 				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{summaryData.personal_data_items || 0}</h3>
 				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{$_('extensions.member_dashboard.tabs.personal_data')}</p>
 				{#if summaryData.personal_data_updated > 0}
-					<div class="flex items-center text-blue-600 dark:text-blue-400 text-sm font-medium">
+					<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
 						↑ {summaryData.personal_data_updated} recently updated
 					</div>
 				{:else}
@@ -219,19 +219,19 @@
 			</div>
 			
 			<!-- Payment Accounts Card -->
-			<div class="group relative bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-900/40 dark:to-orange-800/30 
-						rounded-2xl p-6 border border-amber-200/50 dark:border-amber-700/50 
+			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
+						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
 						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
 				 on:click={() => activeTab = 3} on:keypress={() => activeTab = 3} role="button" tabindex="0">
 				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl shadow-lg shadow-amber-500/30">
-						<WalletOutline class="w-6 h-6 text-white" />
+					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
+						<WalletOutline class="w-6 h-6 text-white dark:text-gray-900" />
 					</div>
-					<ChevronRightOutline class="w-5 h-5 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
 				</div>
 				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">—</h3>
 				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{$_('extensions.member_dashboard.tabs.payment_accounts')}</p>
-				<div class="flex items-center text-amber-600 dark:text-amber-400 text-sm font-medium">
+				<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
 					<span class="underline">Set up accounts →</span>
 				</div>
 			</div>
