@@ -7,7 +7,7 @@
   import { _ } from 'svelte-i18n';
   import SafeText from '$lib/components/SafeText.svelte';
   import { onMount } from 'svelte';
-  import { backend } from '$lib/stores/backend.js';
+  import { backend } from '$lib/canisters';
 
   // Active tab for switching between views
   let activeTab = 'accounting';
@@ -26,18 +26,23 @@
     loading = true;
     error = null;
     try {
-      const backendActor = await backend.getActor();
+      // Fetch budgets
+      const budgetResponse = await backend.get_objects_paginated('Budget', 0n, 100n, 'asc');
+      if (budgetResponse.success && budgetResponse.data?.objectsListPaginated) {
+        budgets = budgetResponse.data.objectsListPaginated.objects.map(objStr => JSON.parse(objStr));
+      }
       
-      // Fetch budgets, ledger entries, and funds in parallel
-      const [budgetResult, ledgerResult, fundResult] = await Promise.all([
-        backendActor.get_objects_paginated('Budget', 0, 100),
-        backendActor.get_objects_paginated('LedgerEntry', 0, 500),
-        backendActor.get_objects_paginated('Fund', 0, 50)
-      ]);
+      // Fetch ledger entries
+      const ledgerResponse = await backend.get_objects_paginated('LedgerEntry', 0n, 500n, 'desc');
+      if (ledgerResponse.success && ledgerResponse.data?.objectsListPaginated) {
+        ledgerEntries = ledgerResponse.data.objectsListPaginated.objects.map(objStr => JSON.parse(objStr));
+      }
       
-      budgets = JSON.parse(budgetResult).items || [];
-      ledgerEntries = JSON.parse(ledgerResult).items || [];
-      funds = JSON.parse(fundResult).items || [];
+      // Fetch funds
+      const fundResponse = await backend.get_objects_paginated('Fund', 0n, 50n, 'asc');
+      if (fundResponse.success && fundResponse.data?.objectsListPaginated) {
+        funds = fundResponse.data.objectsListPaginated.objects.map(objStr => JSON.parse(objStr));
+      }
       
     } catch (e) {
       console.error('Failed to fetch budget data:', e);
