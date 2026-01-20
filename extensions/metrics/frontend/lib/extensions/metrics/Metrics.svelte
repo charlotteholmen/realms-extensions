@@ -6,45 +6,160 @@
   import FinancialStatements from './FinancialStatements.svelte';
   import { _ } from 'svelte-i18n';
   import SafeText from '$lib/components/SafeText.svelte';
+  import { onMount } from 'svelte';
+  import { backend } from '$lib/stores/backend.js';
 
   // Active tab for switching between views
   let activeTab = 'accounting';
+  
+  // Data loading state
+  let loading = true;
+  let error = null;
+  
+  // Real data from backend
+  let budgets = [];
+  let ledgerEntries = [];
+  let funds = [];
 
-  // Budget visualization data with translation keys (charts need string values)
-  $: budgetData = {
-    taxAllocation: [
-      { category: $_('extensions.metrics.universal_basic_income'), amount: 45000, color: '#3B82F6' },
-      { category: $_('extensions.metrics.innovation_grants'), amount: 25000, color: '#10B981' },
-      { category: $_('extensions.metrics.infrastructure'), amount: 15000, color: '#F59E0B' },
-      { category: $_('extensions.metrics.healthcare_system'), amount: 8000, color: '#8B5CF6' },
-      { category: $_('extensions.metrics.education_programs'), amount: 5000, color: '#EF4444' },
-      { category: $_('extensions.metrics.emergency_reserve'), amount: 2000, color: '#6B7280' }
-    ],
-    assetPortfolio: [
-      { symbol: 'ckBTC', balance: 2.5, value: 112500, color: '#F7931A' },
-      { symbol: 'ckBTC', balance: 850000, value: 850000, color: '#3B82F6' },
-      { symbol: 'ICP', balance: 12000, value: 156000, color: '#29ABE2' },
-      { symbol: 'USDC', balance: 75000, value: 75000, color: '#2775CA' },
-      { symbol: 'ckETH', balance: 45, value: 103500, color: '#627EEA' }
-    ],
-    taxContributions: [
-      // Citizens
-      { name: 'Alice Chen', type: 'citizen', contribution: 12500, color: '#3B82F6', category: 'Individual' },
-      { name: 'Bob Martinez', type: 'citizen', contribution: 8900, color: '#3B82F6', category: 'Individual' },
-      { name: 'Carol Johnson', type: 'citizen', contribution: 15200, color: '#3B82F6', category: 'Individual' },
-      { name: 'David Kim', type: 'citizen', contribution: 7800, color: '#3B82F6', category: 'Individual' },
-      { name: 'Eva Rodriguez', type: 'citizen', contribution: 11300, color: '#3B82F6', category: 'Individual' },
-      { name: 'Frank Wilson', type: 'citizen', contribution: 9600, color: '#3B82F6', category: 'Individual' },
+  // Fetch data from backend
+  async function fetchData() {
+    loading = true;
+    error = null;
+    try {
+      const backendActor = await backend.getActor();
       
-      // Organizations
-      { name: 'Nova Tech Corp', type: 'organization', contribution: 45000, color: '#10B981', category: 'Technology' },
-      { name: 'Green Energy Solutions', type: 'organization', contribution: 32000, color: '#059669', category: 'Energy' },
-      { name: 'Digital Finance Ltd', type: 'organization', contribution: 28500, color: '#0D9488', category: 'Finance' },
-      { name: 'Smart Healthcare Inc', type: 'organization', contribution: 22000, color: '#0891B2', category: 'Healthcare' },
-      { name: 'Education Plus', type: 'organization', contribution: 18000, color: '#0284C7', category: 'Education' },
-      { name: 'Infrastructure Co', type: 'organization', contribution: 35000, color: '#2563EB', category: 'Infrastructure' }
-    ]
+      // Fetch budgets, ledger entries, and funds in parallel
+      const [budgetResult, ledgerResult, fundResult] = await Promise.all([
+        backendActor.get_objects_paginated('Budget', 0, 100),
+        backendActor.get_objects_paginated('LedgerEntry', 0, 500),
+        backendActor.get_objects_paginated('Fund', 0, 50)
+      ]);
+      
+      budgets = JSON.parse(budgetResult).items || [];
+      ledgerEntries = JSON.parse(ledgerResult).items || [];
+      funds = JSON.parse(fundResult).items || [];
+      
+    } catch (e) {
+      console.error('Failed to fetch budget data:', e);
+      error = e.message || 'Failed to load data';
+    } finally {
+      loading = false;
+    }
+  }
+
+  onMount(() => {
+    fetchData();
+  });
+
+  // Colors for different categories
+  const categoryColors = {
+    'tax': '#3B82F6',
+    'fee': '#10B981',
+    'personnel': '#F59E0B',
+    'capital': '#8B5CF6',
+    'grant': '#EF4444',
+    'operating': '#6B7280',
+    'general': '#3B82F6',
+    'special_revenue': '#10B981',
+    'capital_projects': '#8B5CF6'
   };
+
+  // Process budgets for Tax Allocation chart (expense budgets by category)
+  $: taxAllocationData = budgets
+    .filter(b => b.budget_type === 'expense' && b.actual_amount > 0)
+    .map((b, i) => ({
+      category: b.name || b.category || 'Other',
+      amount: b.actual_amount || 0,
+      color: categoryColors[b.category] || `hsl(${i * 60}, 70%, 50%)`
+    }));
+
+  // Process funds for Asset Portfolio chart
+  $: assetPortfolioData = (() => {
+    // Calculate fund balances from ledger entries
+    const fundBalances = {};
+    funds.forEach(f => {
+      fundBalances[f.code] = { 
+        symbol: f.code, 
+        name: f.name,
+        balance: 0, 
+        color: categoryColors[f.fund_type] || '#3B82F6' 
+      };
+    });
+    
+    // Sum up cash by fund
+    ledgerEntries.forEach(entry => {
+      if (entry.fund && entry.category === 'cash') {
+        const fundCode = typeof entry.fund === 'string' ? entry.fund : entry.fund.code;
+        if (fundBalances[fundCode]) {
+          fundBalances[fundCode].balance += (entry.debit || 0) - (entry.credit || 0);
+        }
+      }
+    });
+    
+    return Object.values(fundBalances)
+      .filter(f => f.balance > 0)
+      .map(f => ({
+        symbol: f.symbol,
+        balance: f.balance,
+        value: f.balance,
+        color: f.color
+      }));
+  })();
+
+  // Process ledger entries for Tax Contribution treemap
+  $: taxContributionData = (() => {
+    // Group revenue entries by description/source
+    const contributions = {};
+    ledgerEntries
+      .filter(e => e.entry_type === 'revenue' && e.credit > 0)
+      .forEach(entry => {
+        const name = entry.description || entry.category || 'Other';
+        if (!contributions[name]) {
+          contributions[name] = {
+            name: name,
+            type: entry.category === 'tax' ? 'citizen' : 'organization',
+            contribution: 0,
+            color: entry.category === 'tax' ? '#3B82F6' : '#10B981',
+            category: entry.category || 'Other'
+          };
+        }
+        contributions[name].contribution += entry.credit;
+      });
+    
+    return Object.values(contributions);
+  })();
+
+  // Process ledger entries for Monthly Cash Flow
+  $: cashFlowData = (() => {
+    const income = [];
+    const expenses = [];
+    
+    // Group by category for revenues
+    const revenueByCategory = {};
+    const expenseByCategory = {};
+    
+    ledgerEntries.forEach(entry => {
+      if (entry.entry_type === 'revenue' && entry.credit > 0) {
+        const cat = entry.category || 'other';
+        if (!revenueByCategory[cat]) revenueByCategory[cat] = 0;
+        revenueByCategory[cat] += entry.credit;
+      } else if (entry.entry_type === 'expense' && entry.debit > 0) {
+        const cat = entry.category || 'other';
+        if (!expenseByCategory[cat]) expenseByCategory[cat] = 0;
+        expenseByCategory[cat] += entry.debit;
+      }
+    });
+    
+    Object.entries(revenueByCategory).forEach(([cat, amount]) => {
+      income.push({ category: cat.charAt(0).toUpperCase() + cat.slice(1), amount });
+    });
+    
+    Object.entries(expenseByCategory).forEach(([cat, amount]) => {
+      expenses.push({ category: cat.charAt(0).toUpperCase() + cat.slice(1), amount });
+    });
+    
+    return { income, expenses };
+  })();
 </script>
 
 <div class="charts-extension">
@@ -79,23 +194,34 @@
     <FinancialStatements />
   {:else}
     <!-- Budget Visualization Charts -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-      <!-- Tax Allocation Pie Chart -->
-      <TaxAllocationChart data={budgetData.taxAllocation} />
+    {#if loading}
+      <div class="flex items-center justify-center py-12">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span class="ml-3 text-gray-600">{$_('extensions.metrics.loading') || 'Loading...'}</span>
+      </div>
+    {:else if error}
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        {$_('extensions.metrics.error_loading') || 'Error loading data'}: {error}
+      </div>
+    {:else}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Tax Allocation Pie Chart -->
+        <TaxAllocationChart data={taxAllocationData} />
+        
+        <!-- Asset Portfolio Donut Chart -->
+        <AssetPortfolioChart data={assetPortfolioData} />
+      </div>
       
-      <!-- Asset Portfolio Donut Chart -->
-      <AssetPortfolioChart data={budgetData.assetPortfolio} />
-    </div>
-    
-    <!-- Tax Contribution Treemap -->
-    <div class="mt-6">
-      <TaxContributionTreemap data={budgetData.taxContributions} />
-    </div>
-    
-    <!-- Monthly Cash Flow -->
-    <div class="mt-6">
-      <MonthlyCashFlow />
-    </div>
+      <!-- Tax Contribution Treemap -->
+      <div class="mt-6">
+        <TaxContributionTreemap data={taxContributionData} />
+      </div>
+      
+      <!-- Monthly Cash Flow -->
+      <div class="mt-6">
+        <MonthlyCashFlow data={cashFlowData} />
+      </div>
+    {/if}
   {/if}
 </div>
 

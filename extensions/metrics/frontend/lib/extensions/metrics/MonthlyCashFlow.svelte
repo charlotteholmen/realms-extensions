@@ -1,23 +1,14 @@
 <script>
   import { _ } from 'svelte-i18n';
   
-  // Monthly cash flow data with translation keys
-  $: cashFlowData = {
-    income: [
-      { category: $_('extensions.metrics.tax_revenue'), amount: 3450 },
-      { category: $_('extensions.metrics.license_fees'), amount: 350 },
-      { category: $_('extensions.metrics.healthcare_contributions'), amount: 180 },
-      { category: $_('extensions.metrics.housing_payments'), amount: 750 }
-    ],
-    expenses: [
-      { category: $_('extensions.metrics.ubi_payments'), amount: 1200 },
-      { category: $_('extensions.metrics.innovation_grants'), amount: 5000 },
-      { category: $_('extensions.metrics.tax_refunds'), amount: 125 }
-    ]
-  };
+  // Accept data prop from parent, with fallback to empty arrays
+  export let data = { income: [], expenses: [] };
   
-  $: totalIncome = cashFlowData.income.reduce((sum, item) => sum + item.amount, 0);
-  $: totalExpenses = cashFlowData.expenses.reduce((sum, item) => sum + item.amount, 0);
+  $: income = data.income || [];
+  $: expenses = data.expenses || [];
+  
+  $: totalIncome = income.reduce((sum, item) => sum + item.amount, 0);
+  $: totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
   $: netFlow = totalIncome - totalExpenses;
 </script>
 
@@ -34,7 +25,7 @@
         <span class="text-lg font-bold text-green-600">+{totalIncome.toLocaleString()} ckBTC</span>
       </div>
       <div class="text-xs text-gray-600 space-y-1">
-        {#each cashFlowData.income as item}
+        {#each income as item}
           <div class="flex justify-between">
             <span>{item.category}</span>
             <span>{item.amount.toLocaleString()} ckBTC</span>
@@ -50,7 +41,7 @@
         <span class="text-lg font-bold text-red-600">-{totalExpenses.toLocaleString()} ckBTC</span>
       </div>
       <div class="text-xs text-gray-600 space-y-1">
-        {#each cashFlowData.expenses as item}
+        {#each expenses as item}
           <div class="flex justify-between">
             <span>{item.category}</span>
             <span>{item.amount.toLocaleString()} ckBTC</span>
