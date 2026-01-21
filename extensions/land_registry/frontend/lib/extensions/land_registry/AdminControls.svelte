@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { backend } from '$lib/canisters';
-  import { authStore } from '$lib/services/auth';
+  import { principal } from '$lib/stores/auth';
   
   const dispatch = createEventDispatcher();
   
@@ -166,7 +166,7 @@
         args: JSON.stringify({
           land_id: nftMint.land_id,
           owner_principal: nftMint.owner_principal,
-          registered_by: $authStore.identity?.getPrincipal().toString() || 'admin'
+          registered_by: $principal || 'admin'
         })
       });
       
