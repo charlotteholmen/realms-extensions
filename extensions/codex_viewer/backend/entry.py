@@ -7,7 +7,7 @@ import json
 import traceback
 from typing import Any, Dict, List
 
-from ggg.codex import Codex
+from ggg import Codex
 from kybra_simple_logging import get_logger
 
 logger = get_logger("extensions.codex_viewer")

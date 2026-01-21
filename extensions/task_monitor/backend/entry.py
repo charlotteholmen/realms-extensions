@@ -9,10 +9,7 @@ from typing import Any, Dict, List
 
 import ggg
 from core.task_manager import TaskManager
-from ggg.codex import Codex
-from ggg.task import Task
-from ggg.task_execution import TaskExecution
-from ggg.task_schedule import TaskSchedule
+from ggg import Codex, Task, TaskExecution, TaskSchedule
 from kybra import ic
 from kybra_simple_logging import get_logger
 

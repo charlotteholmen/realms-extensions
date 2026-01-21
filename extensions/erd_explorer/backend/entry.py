@@ -30,29 +30,11 @@ def extension_sync_call(method_name: str, args: dict):
         return {"success": False, "error": f"Error calling {method_name}: {str(e)}"}
 
 
-from ggg.balance import Balance
-from ggg.member import Member
-from ggg.codex import Codex
-from ggg.contract import Contract
-from ggg.dispute import Dispute
-from ggg.human import Human
-from ggg.identity import Identity
-from ggg.instrument import Instrument
-from ggg.land import Land
-from ggg.license import License
-from ggg.mandate import Mandate
-from ggg.organization import Organization
-from ggg.proposal import Proposal
-from ggg.realm import Realm
-from ggg.task import Task
-from ggg.task_execution import TaskExecution
-from ggg.task_schedule import TaskSchedule
-from ggg.trade import Trade
-from ggg.transfer import Transfer
-from ggg.treasury import Treasury
-from ggg.user import User
-from ggg.user_profile import UserProfile
-from ggg.vote import Vote
+from ggg import (
+    Balance, Member, Codex, Contract, Dispute, Human, Identity, Instrument,
+    Land, License, Mandate, Organization, Proposal, Realm, Task, TaskExecution,
+    TaskSchedule, Trade, Transfer, Treasury, User, UserProfile, Vote,
+)
 from kybra_simple_db import (
     Boolean,
     Entity,
