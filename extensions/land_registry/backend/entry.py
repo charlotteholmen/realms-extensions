@@ -6,7 +6,7 @@ import json
 import traceback
 from typing import Any, Dict
 
-from ggg import Land, LandType, Organization, User
+from ggg import Land, LandType, LandStatus, Organization, User
 from kybra_simple_logging import get_logger
 
 logger = get_logger("extensions.land_registry")
@@ -28,9 +28,12 @@ def get_lands(args: str) -> str:
                 "x_coordinate": land.x_coordinate,
                 "y_coordinate": land.y_coordinate,
                 "land_type": land.land_type,
+                "status": land.status,
                 "size_width": land.size_width,
                 "size_height": land.size_height,
                 "metadata": land.metadata,
+                "registered_by": land.registered_by,
+                "nft_token_id": land.nft_token_id,
                 "owner_user_id": land.owner_user.id if land.owner_user else None,
                 "owner_organization_id": (
                     land.owner_organization.id if land.owner_organization else None
@@ -247,4 +250,179 @@ def get_land_map(args: str) -> str:
 
     except Exception as e:
         logger.error(f"Error in get_land_map: {str(e)}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def get_land(args: str) -> str:
+    """Get a single land parcel by ID with all details"""
+    logger.info(f"land_registry.get_land called with args: {args}")
+
+    try:
+        params = json.loads(args) if args else {}
+        land_id = params.get("land_id")
+
+        if not land_id:
+            return json.dumps({"success": False, "error": "land_id is required"})
+
+        land = Land[land_id]
+        if not land:
+            return json.dumps({"success": False, "error": "Land not found"})
+
+        land_data = {
+            "id": land.id,
+            "x_coordinate": land.x_coordinate,
+            "y_coordinate": land.y_coordinate,
+            "land_type": land.land_type,
+            "status": land.status,
+            "size_width": land.size_width,
+            "size_height": land.size_height,
+            "metadata": land.metadata,
+            "registered_by": land.registered_by,
+            "nft_token_id": land.nft_token_id,
+            "owner_user_id": land.owner_user.id if land.owner_user else None,
+            "owner_organization_id": (
+                land.owner_organization.id if land.owner_organization else None
+            ),
+            "owner_user_name": land.owner_user.name if land.owner_user else None,
+            "owner_organization_name": (
+                land.owner_organization.name if land.owner_organization else None
+            ),
+        }
+        return json.dumps({"success": True, "data": land_data})
+
+    except Exception as e:
+        logger.error(f"Error in get_land: {str(e)}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def update_land(args: str) -> str:
+    """Update land parcel properties (type, status, metadata)"""
+    logger.info(f"land_registry.update_land called with args: {args}")
+
+    try:
+        params = json.loads(args) if args else {}
+        land_id = params.get("land_id")
+
+        if not land_id:
+            return json.dumps({"success": False, "error": "land_id is required"})
+
+        land = Land[land_id]
+        if not land:
+            return json.dumps({"success": False, "error": "Land not found"})
+
+        updated_fields = []
+
+        if "land_type" in params:
+            land.land_type = params["land_type"]
+            updated_fields.append("land_type")
+        if "status" in params:
+            land.status = params["status"]
+            updated_fields.append("status")
+        if "metadata" in params:
+            land.metadata = params["metadata"]
+            updated_fields.append("metadata")
+        if "registered_by" in params:
+            land.registered_by = params["registered_by"]
+            updated_fields.append("registered_by")
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "message": f"Land updated successfully. Fields: {', '.join(updated_fields)}",
+                "updated_fields": updated_fields
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error in update_land: {str(e)}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def register_land_nft(args: str) -> str:
+    """
+    Prepare a land parcel for NFT registration.
+    Returns info needed for frontend to call mint_land_nft_for_parcel on backend.
+    """
+    logger.info(f"land_registry.register_land_nft called with args: {args}")
+
+    try:
+        params = json.loads(args) if args else {}
+        land_id = params.get("land_id")
+        owner_principal = params.get("owner_principal")
+        registered_by = params.get("registered_by", "")
+
+        if not land_id:
+            return json.dumps({"success": False, "error": "land_id is required"})
+
+        if not owner_principal:
+            return json.dumps({"success": False, "error": "owner_principal is required"})
+
+        land = Land[land_id]
+        if not land:
+            return json.dumps({"success": False, "error": "Land not found"})
+
+        if land.nft_token_id:
+            return json.dumps({
+                "success": False,
+                "error": f"Land already has NFT minted (token_id: {land.nft_token_id})"
+            })
+
+        # Update registration info
+        if registered_by:
+            land.registered_by = registered_by
+        land.status = LandStatus.ACTIVE
+
+        # Generate a token_id based on coordinates (unique per land)
+        token_id = land.x_coordinate * 10000 + land.y_coordinate
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "land_id": land_id,
+                "owner_principal": owner_principal,
+                "token_id": token_id,
+                "x_coordinate": land.x_coordinate,
+                "y_coordinate": land.y_coordinate,
+                "message": "Land prepared for NFT minting. Call mint_land_nft_for_parcel.",
+                "requires_mint": True
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error in register_land_nft: {str(e)}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def update_land_nft_token(args: str) -> str:
+    """Update the NFT token ID for a land parcel after minting"""
+    logger.info(f"land_registry.update_land_nft_token called with args: {args}")
+
+    try:
+        params = json.loads(args) if args else {}
+        land_id = params.get("land_id")
+        nft_token_id = params.get("nft_token_id")
+
+        if not land_id:
+            return json.dumps({"success": False, "error": "land_id is required"})
+
+        if not nft_token_id:
+            return json.dumps({"success": False, "error": "nft_token_id is required"})
+
+        land = Land[land_id]
+        if not land:
+            return json.dumps({"success": False, "error": "Land not found"})
+
+        land.nft_token_id = str(nft_token_id)
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "message": f"NFT token ID updated for land {land_id}",
+                "land_id": land_id,
+                "nft_token_id": nft_token_id
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error in update_land_nft_token: {str(e)}\n{traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})

@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { backend } from '$lib/canisters';
+  import { authStore } from '$lib/services/auth';
   
   const dispatch = createEventDispatcher();
   
@@ -23,12 +24,30 @@
     owner_type: 'none'
   };
   
+  let landUpdate = {
+    land_id: '',
+    land_type: '',
+    status: ''
+  };
+  
+  let nftMint = {
+    land_id: '',
+    owner_principal: ''
+  };
+  
   const landTypes = [
     { value: 'unassigned', label: 'Unassigned' },
     { value: 'residential', label: 'Residential' },
     { value: 'agricultural', label: 'Agricultural' },
     { value: 'industrial', label: 'Industrial' },
     { value: 'commercial', label: 'Commercial' }
+  ];
+  
+  const landStatuses = [
+    { value: 'active', label: 'Active' },
+    { value: 'disputed', label: 'Disputed' },
+    { value: 'transferred', label: 'Transferred' },
+    { value: 'revoked', label: 'Revoked' }
   ];
   
   async function createLand() {
@@ -98,6 +117,103 @@
       loading = false;
     }
   }
+  
+  async function updateLand() {
+    try {
+      loading = true;
+      error = null;
+      success = null;
+      
+      const updateData = { land_id: landUpdate.land_id };
+      if (landUpdate.land_type) updateData.land_type = landUpdate.land_type;
+      if (landUpdate.status) updateData.status = landUpdate.status;
+      
+      const result = await backend.extension_sync_call({
+        extension_name: 'land_registry',
+        function_name: 'update_land',
+        args: JSON.stringify(updateData)
+      });
+      
+      if (result.success && result.data) {
+        const response = JSON.parse(result.data);
+        if (response.success) {
+          success = response.data.message;
+          landUpdate = { land_id: '', land_type: '', status: '' };
+          dispatch('refresh');
+        } else {
+          error = response.error;
+        }
+      } else {
+        error = result.error || 'Failed to update land';
+      }
+    } catch (err) {
+      error = err.message;
+    } finally {
+      loading = false;
+    }
+  }
+  
+  async function mintNFT() {
+    try {
+      loading = true;
+      error = null;
+      success = null;
+      
+      // First prepare the land for NFT minting via extension
+      const prepareResult = await backend.extension_sync_call({
+        extension_name: 'land_registry',
+        function_name: 'register_land_nft',
+        args: JSON.stringify({
+          land_id: nftMint.land_id,
+          owner_principal: nftMint.owner_principal,
+          registered_by: $authStore.identity?.getPrincipal().toString() || 'admin'
+        })
+      });
+      
+      if (!prepareResult.success || !prepareResult.data) {
+        error = prepareResult.error || 'Failed to prepare land for NFT';
+        return;
+      }
+      
+      const prepareData = JSON.parse(prepareResult.data);
+      if (!prepareData.success) {
+        error = prepareData.error;
+        return;
+      }
+      
+      // Now call the backend mint function
+      const mintData = prepareData.data;
+      const mintResult = await backend.mint_land_nft_for_parcel(
+        nftMint.land_id,
+        nftMint.owner_principal,
+        BigInt(mintData.token_id),
+        '' // Use configured NFT canister
+      );
+      
+      const mintResponse = JSON.parse(mintResult);
+      if (mintResponse.success) {
+        // Update land with NFT token ID
+        await backend.extension_sync_call({
+          extension_name: 'land_registry',
+          function_name: 'update_land_nft_token',
+          args: JSON.stringify({
+            land_id: nftMint.land_id,
+            nft_token_id: mintResponse.token_id
+          })
+        });
+        
+        success = `NFT minted successfully! Token ID: ${mintResponse.token_id}`;
+        nftMint = { land_id: '', owner_principal: '' };
+        dispatch('refresh');
+      } else {
+        error = mintResponse.error || 'Failed to mint NFT';
+      }
+    } catch (err) {
+      error = err.message;
+    } finally {
+      loading = false;
+    }
+  }
 </script>
 
 <div class="admin-controls space-y-8">
@@ -123,8 +239,9 @@
     <form on:submit|preventDefault={createLand} class="space-y-4">
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">X Coordinate</label>
+          <label for="new-x-coord" class="block text-sm font-medium text-gray-700 mb-1">X Coordinate</label>
           <input 
+            id="new-x-coord"
             type="number" 
             bind:value={newLand.x_coordinate}
             min="0"
@@ -134,8 +251,9 @@
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Y Coordinate</label>
+          <label for="new-y-coord" class="block text-sm font-medium text-gray-700 mb-1">Y Coordinate</label>
           <input 
+            id="new-y-coord"
             type="number" 
             bind:value={newLand.y_coordinate}
             min="0"
@@ -147,8 +265,8 @@
       </div>
       
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Land Type</label>
-        <select bind:value={newLand.land_type} class="w-full border border-gray-300 rounded px-3 py-2">
+        <label for="new-land-type" class="block text-sm font-medium text-gray-700 mb-1">Land Type</label>
+        <select id="new-land-type" bind:value={newLand.land_type} class="w-full border border-gray-300 rounded px-3 py-2">
           {#each landTypes as type}
             <option value={type.value}>{type.label}</option>
           {/each}
@@ -169,8 +287,9 @@
     <h4 class="text-md font-semibold mb-4">Update Land Ownership</h4>
     <form on:submit|preventDefault={updateOwnership} class="space-y-4">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Land ID</label>
+        <label for="ownership-land-id" class="block text-sm font-medium text-gray-700 mb-1">Land ID</label>
         <input 
+          id="ownership-land-id"
           type="text" 
           bind:value={ownership.land_id}
           class="w-full border border-gray-300 rounded px-3 py-2"
@@ -180,8 +299,8 @@
       </div>
       
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Owner Type</label>
-        <select bind:value={ownership.owner_type} class="w-full border border-gray-300 rounded px-3 py-2">
+        <label for="owner-type" class="block text-sm font-medium text-gray-700 mb-1">Owner Type</label>
+        <select id="owner-type" bind:value={ownership.owner_type} class="w-full border border-gray-300 rounded px-3 py-2">
           <option value="none">No Owner</option>
           <option value="user">Citizen</option>
           <option value="organization">Organization</option>
@@ -190,8 +309,9 @@
       
       {#if ownership.owner_type === 'user'}
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+          <label for="owner-user-id" class="block text-sm font-medium text-gray-700 mb-1">User ID</label>
           <input 
+            id="owner-user-id"
             type="text" 
             bind:value={ownership.owner_user_id}
             class="w-full border border-gray-300 rounded px-3 py-2"
@@ -201,8 +321,9 @@
         </div>
       {:else if ownership.owner_type === 'organization'}
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Organization ID</label>
+          <label for="owner-org-id" class="block text-sm font-medium text-gray-700 mb-1">Organization ID</label>
           <input 
+            id="owner-org-id"
             type="text" 
             bind:value={ownership.owner_organization_id}
             class="w-full border border-gray-300 rounded px-3 py-2"
@@ -218,6 +339,89 @@
         class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
       >
         {loading ? 'Updating...' : 'Update Ownership'}
+      </button>
+    </form>
+  </div>
+  
+  <div class="bg-white p-6 border border-gray-200 rounded-lg">
+    <h4 class="text-md font-semibold mb-4">Update Land Properties</h4>
+    <form on:submit|preventDefault={updateLand} class="space-y-4">
+      <div>
+        <label for="update-land-id" class="block text-sm font-medium text-gray-700 mb-1">Land ID</label>
+        <input 
+          id="update-land-id"
+          type="text" 
+          bind:value={landUpdate.land_id}
+          class="w-full border border-gray-300 rounded px-3 py-2"
+          placeholder="Enter land ID"
+          required
+        />
+      </div>
+      
+      <div>
+        <label for="update-land-type" class="block text-sm font-medium text-gray-700 mb-1">Land Type (optional)</label>
+        <select id="update-land-type" bind:value={landUpdate.land_type} class="w-full border border-gray-300 rounded px-3 py-2">
+          <option value="">-- No change --</option>
+          {#each landTypes as type}
+            <option value={type.value}>{type.label}</option>
+          {/each}
+        </select>
+      </div>
+      
+      <div>
+        <label for="update-status" class="block text-sm font-medium text-gray-700 mb-1">Status (optional)</label>
+        <select id="update-status" bind:value={landUpdate.status} class="w-full border border-gray-300 rounded px-3 py-2">
+          <option value="">-- No change --</option>
+          {#each landStatuses as status}
+            <option value={status.value}>{status.label}</option>
+          {/each}
+        </select>
+      </div>
+      
+      <button 
+        type="submit" 
+        disabled={loading}
+        class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700 disabled:opacity-50"
+      >
+        {loading ? 'Updating...' : 'Update Land'}
+      </button>
+    </form>
+  </div>
+  
+  <div class="bg-white p-6 border border-gray-200 rounded-lg">
+    <h4 class="text-md font-semibold mb-4">Mint Land NFT</h4>
+    <p class="text-sm text-gray-500 mb-4">Register a land parcel and mint an NFT representing ownership</p>
+    <form on:submit|preventDefault={mintNFT} class="space-y-4">
+      <div>
+        <label for="nft-land-id" class="block text-sm font-medium text-gray-700 mb-1">Land ID</label>
+        <input 
+          id="nft-land-id"
+          type="text" 
+          bind:value={nftMint.land_id}
+          class="w-full border border-gray-300 rounded px-3 py-2"
+          placeholder="Enter land ID to mint NFT for"
+          required
+        />
+      </div>
+      
+      <div>
+        <label for="nft-owner" class="block text-sm font-medium text-gray-700 mb-1">Owner Principal</label>
+        <input 
+          id="nft-owner"
+          type="text" 
+          bind:value={nftMint.owner_principal}
+          class="w-full border border-gray-300 rounded px-3 py-2"
+          placeholder="Principal ID of the NFT owner"
+          required
+        />
+      </div>
+      
+      <button 
+        type="submit" 
+        disabled={loading}
+        class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
+      >
+        {loading ? 'Minting...' : 'Mint NFT'}
       </button>
     </form>
   </div>

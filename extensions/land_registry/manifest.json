@@ -1,13 +1,17 @@
 {
   "name": "land_registry",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Property registration and land ownership management",
   "permissions": [],
   "entry_points": [
     "get_lands",
+    "get_land",
     "create_land",
+    "update_land",
     "update_land_ownership",
-    "get_land_map"
+    "get_land_map",
+    "register_land_nft",
+    "update_land_nft_token"
   ],
   "profiles": [
     "admin"
