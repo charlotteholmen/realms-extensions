@@ -47,13 +47,13 @@ logger = get_logger("extensions.justice_litigation")
 def _court_to_dict(court: Court) -> Dict[str, Any]:
     """Convert Court entity to dictionary format"""
     return {
-        "id": court.id,
+        "id": court._id,
         "name": court.name,
         "description": court.description or "",
         "jurisdiction": court.jurisdiction or "",
         "level": court.level or "",
         "status": court.status or "",
-        "justice_system_id": court.justice_system.id if court.justice_system else None,
+        "justice_system_id": court.justice_system._id if court.justice_system else None,
         "justice_system_name": court.justice_system.name if court.justice_system else None,
         "license_valid": court.license.is_valid() if court.license else False,
         "case_count": len(list(court.cases)) if hasattr(court, 'cases') else 0,
@@ -64,13 +64,13 @@ def _court_to_dict(court: Court) -> Dict[str, Any]:
 def _judge_to_dict(judge: Judge) -> Dict[str, Any]:
     """Convert Judge entity to dictionary format"""
     return {
-        "id": judge.id,
+        "id": judge._id,
         "appointment_date": judge.appointment_date or "",
         "status": judge.status or "",
         "specialization": judge.specialization or "",
-        "court_id": judge.court.id if judge.court else None,
+        "court_id": judge.court._id if judge.court else None,
         "court_name": judge.court.name if judge.court else None,
-        "member_id": judge.member.id if judge.member else None,
+        "member_id": judge.member._id if judge.member else None,
         "is_active": judge.is_active(),
         "case_count": len(list(judge.cases_assigned)) if hasattr(judge, 'cases_assigned') else 0,
     }
@@ -83,18 +83,18 @@ def _case_to_dict(case: Case) -> Dict[str, Any]:
     appeals = list(case.appeals) if hasattr(case, 'appeals') else []
     
     return {
-        "id": case.id,
+        "id": case._id,
         "case_number": case.case_number or "",
         "title": case.title or "",
         "description": case.description or "",
         "status": case.status or "",
         "filed_date": case.filed_date or "",
         "closed_date": case.closed_date or "",
-        "court_id": case.court.id if case.court else None,
+        "court_id": case.court._id if case.court else None,
         "court_name": case.court.name if case.court else None,
-        "plaintiff_id": case.plaintiff.id if case.plaintiff else None,
-        "defendant_id": case.defendant.id if case.defendant else None,
-        "judges": [{"id": j.id, "specialization": j.specialization} for j in judges],
+        "plaintiff_id": case.plaintiff._id if case.plaintiff else None,
+        "defendant_id": case.defendant._id if case.defendant else None,
+        "judges": [{"id": j._id, "specialization": j.specialization} for j in judges],
         "verdict_count": len(verdicts),
         "appeal_count": len(appeals),
         "has_verdict": len(verdicts) > 0,
@@ -107,13 +107,13 @@ def _verdict_to_dict(verdict: Verdict) -> Dict[str, Any]:
     penalties = list(verdict.penalties) if hasattr(verdict, 'penalties') else []
     
     return {
-        "id": verdict.id,
+        "id": verdict._id,
         "decision": verdict.decision or "",
         "reasoning": verdict.reasoning or "",
         "issued_date": verdict.issued_date or "",
-        "case_id": verdict.case.id if verdict.case else None,
+        "case_id": verdict.case._id if verdict.case else None,
         "case_number": verdict.case.case_number if verdict.case else None,
-        "issued_by_id": verdict.issued_by.id if verdict.issued_by else None,
+        "issued_by_id": verdict.issued_by._id if verdict.issued_by else None,
         "penalties": [_penalty_to_dict(p) for p in penalties],
         "penalty_count": len(penalties),
     }
@@ -122,7 +122,7 @@ def _verdict_to_dict(verdict: Verdict) -> Dict[str, Any]:
 def _penalty_to_dict(penalty: Penalty) -> Dict[str, Any]:
     """Convert Penalty entity to dictionary format"""
     return {
-        "id": penalty.id,
+        "id": penalty._id,
         "penalty_type": penalty.penalty_type or "",
         "amount": penalty.amount or 0,
         "currency": penalty.currency or "",
@@ -130,26 +130,26 @@ def _penalty_to_dict(penalty: Penalty) -> Dict[str, Any]:
         "status": penalty.status or "",
         "due_date": penalty.due_date or "",
         "executed_date": penalty.executed_date or "",
-        "target_user_id": penalty.target_user.id if penalty.target_user else None,
-        "verdict_id": penalty.verdict.id if penalty.verdict else None,
+        "target_user_id": penalty.target_user._id if penalty.target_user else None,
+        "verdict_id": penalty.verdict._id if penalty.verdict else None,
     }
 
 
 def _appeal_to_dict(appeal: Appeal) -> Dict[str, Any]:
     """Convert Appeal entity to dictionary format"""
     return {
-        "id": appeal.id,
+        "id": appeal._id,
         "grounds": appeal.grounds or "",
         "status": appeal.status or "",
         "filed_date": appeal.filed_date or "",
         "decision_date": appeal.decision_date or "",
         "decision": appeal.decision or "",
-        "original_case_id": appeal.original_case.id if appeal.original_case else None,
+        "original_case_id": appeal.original_case._id if appeal.original_case else None,
         "original_case_number": appeal.original_case.case_number if appeal.original_case else None,
-        "original_verdict_id": appeal.original_verdict.id if appeal.original_verdict else None,
-        "appellate_court_id": appeal.appellate_court.id if appeal.appellate_court else None,
+        "original_verdict_id": appeal.original_verdict._id if appeal.original_verdict else None,
+        "appellate_court_id": appeal.appellate_court._id if appeal.appellate_court else None,
         "appellate_court_name": appeal.appellate_court.name if appeal.appellate_court else None,
-        "appellant_id": appeal.appellant.id if appeal.appellant else None,
+        "appellant_id": appeal.appellant._id if appeal.appellant else None,
     }
 
 
@@ -158,7 +158,7 @@ def _justice_system_to_dict(js: JusticeSystem) -> Dict[str, Any]:
     courts = list(js.courts) if hasattr(js, 'courts') else []
     
     return {
-        "id": js.id,
+        "id": js._id,
         "name": js.name or "",
         "description": js.description or "",
         "system_type": js.system_type or "",
@@ -186,7 +186,7 @@ def get_courts(args: str) -> str:
         
         # Apply filters
         if justice_system_id:
-            courts = [c for c in courts if c.justice_system and c.justice_system.id == justice_system_id]
+            courts = [c for c in courts if c.justice_system and c.justice_system._id == justice_system_id]
         if status:
             courts = [c for c in courts if c.status == status]
         if level:
@@ -250,7 +250,7 @@ def get_judges(args: str) -> str:
         
         # Apply filters
         if court_id:
-            judges = [j for j in judges if j.court and j.court.id == court_id]
+            judges = [j for j in judges if j.court and j.court._id == court_id]
         if status:
             judges = [j for j in judges if j.status == status]
         if specialization:
@@ -290,17 +290,17 @@ def get_cases(args: str) -> str:
         
         # Apply filters
         if court_id:
-            cases = [c for c in cases if c.court and c.court.id == court_id]
+            cases = [c for c in cases if c.court and c.court._id == court_id]
         if status:
             cases = [c for c in cases if c.status == status]
         if plaintiff_id:
-            cases = [c for c in cases if c.plaintiff and c.plaintiff.id == plaintiff_id]
+            cases = [c for c in cases if c.plaintiff and c.plaintiff._id == plaintiff_id]
         if defendant_id:
-            cases = [c for c in cases if c.defendant and c.defendant.id == defendant_id]
+            cases = [c for c in cases if c.defendant and c.defendant._id == defendant_id]
         if user_id:
             cases = [c for c in cases if 
-                     (c.plaintiff and c.plaintiff.id == user_id) or 
-                     (c.defendant and c.defendant.id == user_id)]
+                     (c.plaintiff and c.plaintiff._id == user_id) or 
+                     (c.defendant and c.defendant._id == user_id)]
         
         return json.dumps({
             "success": True,
@@ -326,7 +326,18 @@ def get_case(args: str) -> str:
         if not case_id:
             return json.dumps({"success": False, "error": "case_id is required"})
         
-        case = Case.find(case_id)
+        # Try to find by ID first, then by case_number
+        case = None
+        try:
+            case = Case[case_id]
+        except (KeyError, Exception):
+            pass
+        
+        # If not found by ID, search by case_number
+        if not case:
+            cases = Case.find({"case_number": case_id})
+            case = cases[0] if cases else None
+        
         if not case:
             return json.dumps({"success": False, "error": f"Case {case_id} not found"})
         
@@ -466,7 +477,7 @@ def get_verdicts(args: str) -> str:
         verdicts = list(Verdict.instances())
         
         if case_id:
-            verdicts = [v for v in verdicts if v.case and v.case.id == case_id]
+            verdicts = [v for v in verdicts if v.case and v.case._id == case_id]
         
         return json.dumps({
             "success": True,
@@ -563,9 +574,9 @@ def get_penalties(args: str) -> str:
         penalties = list(Penalty.instances())
         
         if verdict_id:
-            penalties = [p for p in penalties if p.verdict and p.verdict.id == verdict_id]
+            penalties = [p for p in penalties if p.verdict and p.verdict._id == verdict_id]
         if target_user_id:
-            penalties = [p for p in penalties if p.target_user and p.target_user.id == target_user_id]
+            penalties = [p for p in penalties if p.target_user and p.target_user._id == target_user_id]
         if status:
             penalties = [p for p in penalties if p.status == status]
         
@@ -673,13 +684,13 @@ def get_appeals(args: str) -> str:
         appeals = list(Appeal.instances())
         
         if case_id:
-            appeals = [a for a in appeals if a.original_case and a.original_case.id == case_id]
+            appeals = [a for a in appeals if a.original_case and a.original_case._id == case_id]
         if appellant_id:
-            appeals = [a for a in appeals if a.appellant and a.appellant.id == appellant_id]
+            appeals = [a for a in appeals if a.appellant and a.appellant._id == appellant_id]
         if status:
             appeals = [a for a in appeals if a.status == status]
         if court_id:
-            appeals = [a for a in appeals if a.appellate_court and a.appellate_court.id == court_id]
+            appeals = [a for a in appeals if a.appellate_court and a.appellate_court._id == court_id]
         
         return json.dumps({
             "success": True,
@@ -881,24 +892,24 @@ def get_litigations(args: str) -> str:
             from ggg import Identity
             identities = Identity.find({"metadata": user_principal})
             matching_user_ids = {
-                i.user.id for i in identities 
+                i.user._id for i in identities 
                 if hasattr(i, 'user') and i.user
             }
             
             # Only filter if we found a matching user, otherwise show all (demo mode)
             if matching_user_ids:
                 cases = [c for c in cases if 
-                         (c.plaintiff and c.plaintiff.id in matching_user_ids) or 
-                         (c.defendant and c.defendant.id in matching_user_ids)]
+                         (c.plaintiff and c.plaintiff._id in matching_user_ids) or 
+                         (c.defendant and c.defendant._id in matching_user_ids)]
         
         # Map to old format for backwards compatibility
         litigations = []
         for case in cases:
             verdicts = list(case.verdicts) if hasattr(case, 'verdicts') else []
             litigations.append({
-                "id": case.case_number or case.id,
-                "requester_principal": case.plaintiff.id if case.plaintiff else "unknown",
-                "defendant_principal": case.defendant.id if case.defendant else "unknown",
+                "id": case.case_number or case._id,
+                "requester_principal": case.plaintiff._id if case.plaintiff else "unknown",
+                "defendant_principal": case.defendant._id if case.defendant else "unknown",
                 "case_title": case.title or "",
                 "description": case.description or "",
                 "status": case.status or "pending",
@@ -943,7 +954,7 @@ def create_litigation(args: str) -> str:
         if not court_id:
             courts = list(Court.instances())
             if courts:
-                court_id = courts[0].id
+                court_id = courts[0]._id
             else:
                 return json.dumps({
                     "success": False,

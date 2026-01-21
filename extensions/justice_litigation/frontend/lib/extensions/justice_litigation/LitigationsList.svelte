@@ -3,6 +3,7 @@
 	import { Table, TableHead, TableHeadCell, TableBody, TableBodyRow, TableBodyCell, Badge, Button, Modal, Input, Textarea, Alert } from 'flowbite-svelte';
 	import { ExclamationCircleSolid, CheckCircleSolid, ClockSolid } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
+	import { goto } from '$app/navigation';
 	
 	export let litigations = [];
 	export let userProfile = 'member';
@@ -142,8 +143,8 @@
 			</TableHead>
 			<TableBody>
 				{#each litigations as litigation}
-					<TableBodyRow>
-						<TableBodyCell class="font-mono text-sm">{litigation.id}</TableBodyCell>
+					<TableBodyRow class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700" on:click={() => goto(`/extensions/justice_litigation/case/${encodeURIComponent(litigation.id)}`)}>
+						<TableBodyCell class="font-mono text-sm text-primary-600 hover:underline">{litigation.id}</TableBodyCell>
 						<TableBodyCell>
 							<div>
 								<div class="font-medium">{litigation.case_title}</div>
@@ -175,7 +176,7 @@
 									<Button 
 										size="xs" 
 										color="primary" 
-										on:click={() => openVerdictModal(litigation)}
+										on:click={(e) => { e.stopPropagation(); openVerdictModal(litigation); }}
 									>
 										Execute Verdict
 									</Button>
