@@ -1,14 +1,13 @@
 <script>
   import { onMount } from 'svelte';
   import { backend } from '$lib/canisters';
-  import LandMap from './LandMap.svelte';
   import GeographicMap from './GeographicMap.svelte';
   import LandTable from './LandTable.svelte';
   import AdminControls from './AdminControls.svelte';
   import { _ } from 'svelte-i18n';
   import SafeText from '$lib/components/SafeText.svelte';
   
-  let activeTab = 'map';
+  let activeTab = 'geographic';
   let lands = [];
   let loading = false;
   let error = null;
@@ -40,10 +39,10 @@
       console.log('Result.error:', result?.error);
       console.log('Full result object:', JSON.stringify(result, null, 2));
       
-      if (result && result.success && result.data !== undefined) {
-        console.log('=== Parsing result.data ===');
+      if (result && result.success && result.response !== undefined) {
+        console.log('=== Parsing result.response ===');
         try {
-          const response = JSON.parse(result.data);
+          const response = JSON.parse(result.response);
           console.log('Parsed response type:', typeof response);
           console.log('Parsed response keys:', Object.keys(response || {}));
           console.log('Parsed response.success:', response?.success);
@@ -112,12 +111,6 @@
   <div class="border-b border-gray-200 mb-6">
     <nav class="-mb-px flex space-x-8">
       <button 
-        class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'map' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-        on:click={() => activeTab = 'map'}
-      >
-        <SafeText key="extensions.land_registry.grid_view" spinnerSize="xs" />
-      </button>
-      <button 
         class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'geographic' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
         on:click={() => activeTab = 'geographic'}
       >
@@ -140,8 +133,6 @@
   
   {#if loading}
     <div class="text-center py-8">{$_('common.loading')}</div>
-  {:else if activeTab === 'map'}
-    <LandMap {lands} on:refresh={loadLands} />
   {:else if activeTab === 'geographic'}
     <GeographicMap {lands} on:refresh={loadLands} />
   {:else if activeTab === 'table'}

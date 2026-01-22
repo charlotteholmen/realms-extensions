@@ -6,7 +6,7 @@ import json
 import traceback
 from typing import Any, Dict
 
-from ggg import Land, LandType, LandStatus, Organization, User
+from ggg import Land, LandType, LandStatus, Organization, User, Zone
 from kybra_simple_logging import get_logger
 
 logger = get_logger("extensions.land_registry")
@@ -23,6 +23,24 @@ def get_lands(args: str) -> str:
 
         land_data = []
         for land in lands:
+            # Get zone data for this land (zones associated with this land parcel)
+            land_zones = list(land.zones) if hasattr(land, 'zones') and land.zones else []
+            zone_data = []
+            for zone in land_zones:
+                zone_data.append({
+                    "h3_index": zone.h3_index,
+                    "name": zone.name,
+                    "latitude": zone.latitude,
+                    "longitude": zone.longitude,
+                    "resolution": zone.resolution,
+                })
+            
+            # Parse metadata to get price info
+            try:
+                metadata_obj = json.loads(land.metadata) if land.metadata else {}
+            except:
+                metadata_obj = {}
+            
             land_dict = {
                 "id": land.id,
                 "x_coordinate": land.x_coordinate,
@@ -38,6 +56,14 @@ def get_lands(args: str) -> str:
                 "owner_organization_id": (
                     land.owner_organization.id if land.owner_organization else None
                 ),
+                # Zone/geographic data
+                "zones": zone_data,
+                "latitude": zone_data[0]["latitude"] if zone_data else None,
+                "longitude": zone_data[0]["longitude"] if zone_data else None,
+                "h3_index": zone_data[0]["h3_index"] if zone_data else None,
+                # Parsed metadata fields
+                "price_realm_tokens": metadata_obj.get("price_realm_tokens"),
+                "for_sale": metadata_obj.get("for_sale", False),
             }
             land_data.append(land_dict)
 
@@ -268,6 +294,26 @@ def get_land(args: str) -> str:
         if not land:
             return json.dumps({"success": False, "error": "Land not found"})
 
+        # Get zone data for this land
+        zone_data = {}
+        zone = Zone.instances(land=land)
+        if zone:
+            zone = zone[0] if isinstance(zone, list) else zone
+            zone_data = {
+                "h3_index": zone.h3_index,
+                "latitude": zone.latitude,
+                "longitude": zone.longitude,
+                "resolution": zone.resolution,
+            }
+        
+        # Parse metadata for price and for_sale
+        metadata_parsed = {}
+        if land.metadata:
+            try:
+                metadata_parsed = json.loads(land.metadata)
+            except json.JSONDecodeError:
+                pass
+        
         land_data = {
             "id": land.id,
             "x_coordinate": land.x_coordinate,
@@ -287,6 +333,13 @@ def get_land(args: str) -> str:
             "owner_organization_name": (
                 land.owner_organization.name if land.owner_organization else None
             ),
+            # Zone data
+            "h3_index": zone_data.get("h3_index"),
+            "latitude": zone_data.get("latitude"),
+            "longitude": zone_data.get("longitude"),
+            # Parsed metadata
+            "price_realm_tokens": metadata_parsed.get("price_realm_tokens"),
+            "for_sale": metadata_parsed.get("for_sale", False),
         }
         return json.dumps({"success": True, "data": land_data})
 
