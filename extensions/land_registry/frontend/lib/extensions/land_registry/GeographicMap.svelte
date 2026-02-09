@@ -10,6 +10,7 @@
   let h3 = null;
   let landLayer = null;
   let circleLayer = null;
+  let zoneLayer = null;
   let mapInitialized = false;
   
   const LAND_COLORS = {
@@ -19,6 +20,9 @@
     'commercial': '#3b82f6',
     'unassigned': '#e5e7eb'
   };
+  
+  const ZONE_COLOR = '#f59e0b';
+  const INFLUENCE_RINGS = 2;
   
   async function initializeMap() {
     if (mapInitialized || !mapContainer || typeof window === 'undefined') return;
@@ -54,12 +58,13 @@
     // Create layers for land parcels
     circleLayer = L.layerGroup().addTo(map);  // Large circles for zoomed-out view
     landLayer = L.layerGroup().addTo(map);     // H3 hexagons for detailed view
+    zoneLayer = L.layerGroup().addTo(map);     // Realm H3 zones
     
     // Handle zoom to show/hide appropriate layers
     map.on('zoomend', updateLayerVisibility);
     updateLayerVisibility();
     
-    // Render lands
+    // Render lands and zones
     renderLands();
   }
   
@@ -81,6 +86,115 @@
       map = null;
     }
   });
+  
+  function renderZonesFromLands() {
+    if (!L || !map || !h3 || !zoneLayer) return;
+    
+    zoneLayer.clearLayers();
+    
+    // Extract unique parent_zone H3 indices from land metadata
+    const parentZones = new Map(); // h3_index -> { landCount, landTypes }
+    
+    lands.forEach(land => {
+      let parentZone = null;
+      
+      // Try to get parent_zone from metadata
+      if (land.metadata) {
+        try {
+          const meta = typeof land.metadata === 'string' ? JSON.parse(land.metadata) : land.metadata;
+          parentZone = meta.parent_zone;
+        } catch (e) {}
+      }
+      
+      if (!parentZone) return;
+      
+      if (!parentZones.has(parentZone)) {
+        parentZones.set(parentZone, { landCount: 0, landTypes: {} });
+      }
+      const zoneData = parentZones.get(parentZone);
+      zoneData.landCount++;
+      zoneData.landTypes[land.land_type] = (zoneData.landTypes[land.land_type] || 0) + 1;
+    });
+    
+    if (parentZones.size === 0) return;
+    
+    // Collect all hex cells with influence rings (like the realm registry map)
+    const hexData = {};
+    
+    parentZones.forEach((zoneInfo, centerHexIndex) => {
+      let influenceHexes;
+      try {
+        influenceHexes = h3.gridDisk(centerHexIndex, INFLUENCE_RINGS);
+      } catch (e) {
+        influenceHexes = h3.kRing ? h3.kRing(centerHexIndex, INFLUENCE_RINGS) : [centerHexIndex];
+      }
+      
+      influenceHexes.forEach(hexIndex => {
+        let distance;
+        try {
+          distance = h3.gridDistance(centerHexIndex, hexIndex);
+        } catch (e) {
+          distance = hexIndex === centerHexIndex ? 0 : 1;
+        }
+        
+        if (!hexData[hexIndex]) {
+          hexData[hexIndex] = { minDistance: distance, landCount: 0, landTypes: {} };
+        } else {
+          hexData[hexIndex].minDistance = Math.min(hexData[hexIndex].minDistance, distance);
+        }
+        
+        if (distance === 0) {
+          hexData[hexIndex].landCount += zoneInfo.landCount;
+          hexData[hexIndex].landTypes = zoneInfo.landTypes;
+        }
+      });
+    });
+    
+    // Render all hex cells
+    const allLatLngs = [];
+    Object.entries(hexData).forEach(([hexIndex, data]) => {
+      try {
+        const boundary = h3.cellToBoundary(hexIndex);
+        const latLngs = boundary.map(coord => [coord[0], coord[1]]);
+        
+        const distanceOpacity = 1 - (data.minDistance / (INFLUENCE_RINGS + 1)) * 0.7;
+        const baseOpacity = data.minDistance === 0 ? 0.5 : 0.25;
+        const fillOpacity = baseOpacity * distanceOpacity;
+        
+        const polygon = L.polygon(latLngs, {
+          color: ZONE_COLOR,
+          fillColor: ZONE_COLOR,
+          fillOpacity: fillOpacity,
+          weight: data.minDistance === 0 ? 2 : 1,
+          opacity: data.minDistance === 0 ? 0.8 : 0.4,
+          dashArray: data.minDistance > 0 ? '4 4' : null
+        });
+        
+        if (data.minDistance === 0) {
+          const typeInfo = Object.entries(data.landTypes).map(([t, c]) => `${t}: ${c}`).join(', ');
+          polygon.bindPopup(`
+            <div style="padding: 4px;">
+              <strong>Land Zone</strong><br>
+              Parcels: ${data.landCount}<br>
+              ${typeInfo ? `Types: ${typeInfo}<br>` : ''}
+              <span style="font-size: 10px; color: #9ca3af;">H3: ${hexIndex}</span>
+            </div>
+          `);
+        }
+        
+        polygon.addTo(zoneLayer);
+        allLatLngs.push(...latLngs);
+      } catch (e) {
+        console.warn('Invalid H3 index for zone:', hexIndex);
+      }
+    });
+    
+    // Fit bounds to show all zones
+    if (allLatLngs.length > 0) {
+      const bounds = L.latLngBounds(allLatLngs);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+    }
+  }
   
   function updateLayerVisibility() {
     if (!map || !circleLayer || !landLayer) return;
@@ -116,47 +230,72 @@
     `;
   }
   
-  function renderLands() {
-    console.log('=== renderLands called ===');
-    
-    if (!L || !map || !landLayer || !circleLayer) {
-      console.log('Missing dependencies, returning early');
-      return;
+  function getParentZone(land) {
+    if (land.metadata) {
+      try {
+        const meta = typeof land.metadata === 'string' ? JSON.parse(land.metadata) : land.metadata;
+        return meta.parent_zone || null;
+      } catch (e) {}
     }
+    return null;
+  }
+  
+  function renderLands() {
+    if (!L || !map || !landLayer || !circleLayer) return;
     
     landLayer.clearLayers();
     circleLayer.clearLayers();
     
-    const validLands = lands.filter(land => land.h3_index || (land.latitude && land.longitude));
-    console.log('Valid lands count:', validLands.length);
+    // Also render zone hexagons from land metadata
+    renderZonesFromLands();
     
-    validLands.forEach(land => {
+    // For individual land markers, derive coordinates from h3_index or parent_zone
+    const allLatLngs = [];
+    
+    lands.forEach(land => {
       const color = LAND_COLORS[land.land_type] || LAND_COLORS.unassigned;
       const isOwned = land.owner_user_id || land.owner_organization_id;
       const popupContent = buildPopupContent(land, color);
       
-      // Get coordinates
+      // Get coordinates: from land directly, from h3_index, or from parent_zone
       let lat, lng;
+      let h3Index = land.h3_index;
+      
       if (land.latitude && land.longitude) {
         lat = land.latitude;
         lng = land.longitude;
-      } else if (h3 && land.h3_index && !land.h3_index.includes('manual')) {
+      } else if (h3 && h3Index && !h3Index.includes('manual')) {
         try {
-          const center = h3.cellToLatLng(land.h3_index);
+          const center = h3.cellToLatLng(h3Index);
           lat = center[0];
           lng = center[1];
         } catch (e) {
-          return; // Skip invalid H3
+          h3Index = null;
         }
-      } else {
-        return; // No valid coordinates
       }
       
-      // Large circle marker for zoomed-out view (like demo.realmsgos.org)
+      // Fallback: use parent_zone center if no direct coordinates
+      if (lat == null && h3) {
+        const parentZone = getParentZone(land);
+        if (parentZone) {
+          try {
+            const center = h3.cellToLatLng(parentZone);
+            lat = center[0];
+            lng = center[1];
+            h3Index = parentZone;
+          } catch (e) {}
+        }
+      }
+      
+      if (lat == null || lng == null) return;
+      
+      allLatLngs.push([lat, lng]);
+      
+      // Large circle marker for zoomed-out view
       const circle = L.circleMarker([lat, lng], {
         radius: 18,
         fillColor: color,
-        color: isOwned ? '#1f2937' : '#22c55e',  // Green border like demo
+        color: isOwned ? '#1f2937' : '#22c55e',
         weight: 3,
         opacity: 1,
         fillOpacity: 0.85
@@ -166,9 +305,9 @@
       circle.addTo(circleLayer);
       
       // H3 hexagon for detailed view
-      if (h3 && land.h3_index && !land.h3_index.includes('manual')) {
+      if (h3 && h3Index && !h3Index.includes('manual')) {
         try {
-          const boundary = h3.cellToBoundary(land.h3_index);
+          const boundary = h3.cellToBoundary(h3Index);
           const latLngs = boundary.map(coord => [coord[0], coord[1]]);
           
           const polygon = L.polygon(latLngs, {
@@ -181,18 +320,15 @@
           polygon.on('click', () => goto(`/extensions/land_registry/land/${land.id}`));
           polygon.addTo(landLayer);
         } catch (e) {
-          console.warn('Invalid H3 index for land:', land.id, land.h3_index);
+          // Skip invalid H3
         }
       }
     });
     
-    // Fit bounds if we have lands with coordinates
-    if (validLands.length > 0) {
-      const coordLands = validLands.filter(l => l.latitude && l.longitude);
-      if (coordLands.length > 0) {
-        const bounds = L.latLngBounds(coordLands.map(l => [l.latitude, l.longitude]));
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-      }
+    // Fit bounds — zones already handle fitBounds, but if no zones, fit to lands
+    if (allLatLngs.length > 0 && zoneLayer.getLayers().length === 0) {
+      const bounds = L.latLngBounds(allLatLngs);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
     }
     
     updateLayerVisibility();

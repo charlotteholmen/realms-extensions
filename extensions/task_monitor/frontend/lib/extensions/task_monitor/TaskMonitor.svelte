@@ -33,6 +33,14 @@
   let refreshInterval: any = null;
   let searchTerm = '';
   let statusFilter = '';
+
+  // Pagination state
+  const PAGE_SIZE = 10;
+  let fromId = 1;
+  let maxId = 0;
+  let nextFromId: number | null = null;
+  let hasMore = false;
+  let pageHistory: number[] = [1];
   
   // Stats computed from tasks
   $: stats = {
@@ -66,11 +74,14 @@
       const response = await backend.extension_sync_call({
         extension_name: 'task_monitor',
         function_name: 'get_all_tasks',
-        args: '{}'
+        args: JSON.stringify({ from_id: fromId, page_size: PAGE_SIZE })
       });
       if (response.success) {
         const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
         tasks = data.tasks || [];
+        maxId = data.max_id || 0;
+        nextFromId = data.next_from_id || null;
+        hasMore = data.has_more || false;
         error = '';
       } else {
         error = response.response || 'Failed to load tasks';
@@ -79,6 +90,22 @@
       error = 'Error loading tasks: ' + e.message;
     } finally {
       loading = false;
+    }
+  }
+
+  function goNextPage() {
+    if (nextFromId) {
+      pageHistory = [...pageHistory, nextFromId];
+      fromId = nextFromId;
+      loadTasks();
+    }
+  }
+
+  function goPrevPage() {
+    if (pageHistory.length > 1) {
+      pageHistory = pageHistory.slice(0, -1);
+      fromId = pageHistory[pageHistory.length - 1];
+      loadTasks();
     }
   }
   
@@ -431,6 +458,27 @@
             </div>
           </div>
         {/each}
+      </div>
+
+      <!-- Pagination Controls -->
+      <div class="flex items-center justify-between mt-6">
+        <button
+          on:click={goPrevPage}
+          disabled={pageHistory.length <= 1}
+          class="text-sm px-4 py-2 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+        >
+          Previous
+        </button>
+        <span class="text-xs text-gray-500 dark:text-gray-400">
+          Page {pageHistory.length}
+        </span>
+        <button
+          on:click={goNextPage}
+          disabled={!hasMore}
+          class="text-sm px-4 py-2 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+        >
+          Next
+        </button>
       </div>
     {/if}
   {/if}

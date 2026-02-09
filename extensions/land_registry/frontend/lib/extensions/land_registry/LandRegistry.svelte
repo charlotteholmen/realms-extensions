@@ -7,7 +7,27 @@
   import { _ } from 'svelte-i18n';
   import SafeText from '$lib/components/SafeText.svelte';
   
-  let activeTab = 'geographic';
+  const TAB_HASHES = { 'map': 'geographic', 'table': 'table', 'admin': 'admin' };
+  const TAB_TO_HASH = { 'geographic': 'map', 'table': 'table', 'admin': 'admin' };
+  
+  function getTabFromHash() {
+    if (typeof window === 'undefined') return 'geographic';
+    const hash = window.location.hash.replace('#', '');
+    return TAB_HASHES[hash] || 'geographic';
+  }
+  
+  function setHash(tab) {
+    if (typeof window === 'undefined') return;
+    const hash = TAB_TO_HASH[tab] || 'map';
+    window.history.pushState(null, '', `#${hash}`);
+  }
+  
+  function switchTab(tab) {
+    activeTab = tab;
+    setHash(tab);
+  }
+  
+  let activeTab = getTabFromHash();
   let lands = [];
   let loading = false;
   let error = null;
@@ -87,8 +107,19 @@
     }
   }
   
+  function onHashChange() {
+    activeTab = getTabFromHash();
+  }
+  
   onMount(() => {
+    if (!window.location.hash) setHash(activeTab);
+    window.addEventListener('popstate', onHashChange);
+    window.addEventListener('hashchange', onHashChange);
     loadLands();
+    return () => {
+      window.removeEventListener('popstate', onHashChange);
+      window.removeEventListener('hashchange', onHashChange);
+    };
   });
 </script>
 
@@ -112,19 +143,19 @@
     <nav class="-mb-px flex space-x-8">
       <button 
         class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'geographic' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-        on:click={() => activeTab = 'geographic'}
+        on:click={() => switchTab('geographic')}
       >
         <SafeText key="extensions.land_registry.geographic_map" spinnerSize="xs" />
       </button>
       <button 
         class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'table' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-        on:click={() => activeTab = 'table'}
+        on:click={() => switchTab('table')}
       >
         <SafeText key="extensions.land_registry.table_view" spinnerSize="xs" />
       </button>
       <button 
         class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'admin' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-        on:click={() => activeTab = 'admin'}
+        on:click={() => switchTab('admin')}
       >
         <SafeText key="extensions.land_registry.admin_controls" spinnerSize="xs" />
       </button>

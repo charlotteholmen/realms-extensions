@@ -11,18 +11,23 @@ from kybra_simple_logging import get_logger
 
 logger = get_logger("extensions.land_registry")
 
+DEFAULT_PAGE_SIZE = 10
+
 
 def get_lands(args: str) -> str:
-    """Get all land parcels with optional filtering"""
+    """Get a page of land parcels using load_some pagination"""
     logger.info(f"land_registry.get_lands called with args: {args}")
 
     try:
         params = json.loads(args) if args else {}
+        from_id = int(params.get("from_id", 1))
+        page_size = int(params.get("page_size", DEFAULT_PAGE_SIZE))
 
-        lands = Land.instances()
+        max_id = Land.max_id()
+        batch = Land.load_some(from_id=from_id, count=page_size)
 
         land_data = []
-        for land in lands:
+        for land in batch:
             # Get zone data for this land (zones associated with this land parcel)
             land_zones = list(land.zones) if hasattr(land, 'zones') and land.zones else []
             zone_data = []
@@ -67,7 +72,17 @@ def get_lands(args: str) -> str:
             }
             land_data.append(land_dict)
 
-        return json.dumps({"success": True, "data": land_data})
+        next_from_id = (int(batch[-1]._id) + 1) if batch else None
+        if next_from_id and next_from_id > max_id:
+            next_from_id = None
+
+        return json.dumps({
+            "success": True,
+            "data": land_data,
+            "max_id": max_id,
+            "next_from_id": next_from_id,
+            "has_more": next_from_id is not None,
+        })
 
     except Exception as e:
         logger.error(f"Error in get_lands: {str(e)}\n{traceback.format_exc()}")
@@ -93,18 +108,25 @@ def create_land(args: str) -> str:
                 }
             )
 
-        existing_lands = Land.instances()
-        for existing_land in existing_lands:
-            if (
-                existing_land.x_coordinate == x_coord
-                and existing_land.y_coordinate == y_coord
-            ):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": "Land already exists at these coordinates",
-                    }
-                )
+        # Check for duplicate coordinates using load_some batches
+        check_from = 1
+        land_max = Land.max_id()
+        while check_from <= land_max:
+            check_batch = Land.load_some(from_id=check_from, count=DEFAULT_PAGE_SIZE)
+            if not check_batch:
+                break
+            for existing_land in check_batch:
+                if (
+                    existing_land.x_coordinate == x_coord
+                    and existing_land.y_coordinate == y_coord
+                ):
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "error": "Land already exists at these coordinates",
+                        }
+                    )
+            check_from = int(check_batch[-1]._id) + 1
 
         land = Land(
             x_coordinate=x_coord,
@@ -141,12 +163,7 @@ def update_land_ownership(args: str) -> str:
         if not land_id:
             return json.dumps({"success": False, "error": "land_id is required"})
 
-        land = None
-        for existing_land in Land.instances():
-            if existing_land.id == land_id:
-                land = existing_land
-                break
-
+        land = Land.load(land_id)
         if not land:
             return json.dumps({"success": False, "error": "Land not found"})
 
@@ -167,12 +184,7 @@ def update_land_ownership(args: str) -> str:
                     }
                 )
 
-            user = None
-            for existing_user in User.instances():
-                if existing_user.id == owner_user_id:
-                    user = existing_user
-                    break
-
+            user = User.load(owner_user_id)
             if not user:
                 return json.dumps({"success": False, "error": "User not found"})
 
@@ -188,12 +200,7 @@ def update_land_ownership(args: str) -> str:
                     }
                 )
 
-            org = None
-            for existing_org in Organization.instances():
-                if existing_org.id == owner_organization_id:
-                    org = existing_org
-                    break
-
+            org = Organization.load(owner_organization_id)
             if not org:
                 return json.dumps({"success": False, "error": "Organization not found"})
 
@@ -229,10 +236,14 @@ def get_land_map(args: str) -> str:
         min_y = params.get("min_y", 0)
         max_y = params.get("max_y", 20)
 
-        lands = Land.instances()
+        from_id = int(params.get("from_id", 1))
+        page_size = int(params.get("page_size", DEFAULT_PAGE_SIZE))
+
+        land_max_id = Land.max_id()
+        batch = Land.load_some(from_id=from_id, count=page_size)
         map_data = {}
 
-        for land in lands:
+        for land in batch:
             if (
                 min_x <= land.x_coordinate <= max_x
                 and min_y <= land.y_coordinate <= max_y
@@ -259,6 +270,10 @@ def get_land_map(args: str) -> str:
                     ),
                 }
 
+        next_from_id = (int(batch[-1]._id) + 1) if batch else None
+        if next_from_id and next_from_id > land_max_id:
+            next_from_id = None
+
         return json.dumps(
             {
                 "success": True,
@@ -271,6 +286,9 @@ def get_land_map(args: str) -> str:
                     },
                     "lands": map_data,
                 },
+                "max_id": land_max_id,
+                "next_from_id": next_from_id,
+                "has_more": next_from_id is not None,
             }
         )
 
@@ -294,11 +312,11 @@ def get_land(args: str) -> str:
         if not land:
             return json.dumps({"success": False, "error": "Land not found"})
 
-        # Get zone data for this land
+        # Get zone data for this land via reverse relation
         zone_data = {}
-        zone = Zone.instances(land=land)
-        if zone:
-            zone = zone[0] if isinstance(zone, list) else zone
+        land_zones = list(land.zones) if hasattr(land, 'zones') and land.zones else []
+        if land_zones:
+            zone = land_zones[0]
             zone_data = {
                 "h3_index": zone.h3_index,
                 "latitude": zone.latitude,

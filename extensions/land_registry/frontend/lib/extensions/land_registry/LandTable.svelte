@@ -1,11 +1,9 @@
 <script>
-  import { goto } from '$app/navigation';
-  
   export let lands = [];
   
   // Pagination state
   let currentPage = 0;
-  const pageSize = 20;
+  const pageSize = 10;
   
   $: totalPages = Math.ceil(lands.length / pageSize);
   $: paginatedLands = lands.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
@@ -16,8 +14,8 @@
     }
   }
   
-  function handleRowClick(land) {
-    goto(`/extensions/land_registry/land/${land.id}`);
+  function getLandUrl(land) {
+    return `/extensions/land_registry/land/${land.id}`;
   }
   
   function getTypeColor(type) {
@@ -53,11 +51,11 @@
         </thead>
         <tbody class="divide-y divide-gray-200">
           {#each paginatedLands as land}
-            <tr 
-              class="hover:bg-blue-50 cursor-pointer transition-colors"
-              on:click={() => handleRowClick(land)}
-            >
-              <td class="px-4 py-3 text-sm font-medium text-gray-900">{land.id}</td>
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                <a href={getLandUrl(land)} class="text-blue-600 hover:text-blue-800 hover:underline">{land.id}</a>
+                <a href={getLandUrl(land)} target="_blank" rel="noopener noreferrer" class="ml-2 text-gray-400 hover:text-blue-600" title="Open in new tab">↗</a>
+              </td>
               <td class="px-4 py-3 text-sm">
                 <span class="px-2 py-1 rounded-full text-xs font-medium {getTypeColor(land.land_type)}">
                   {land.land_type}
