@@ -69,7 +69,18 @@ def get_all_tasks(args: str = "{}"):
         current_from = from_id
         attempts = 0
         while len(tasks) < page_size and current_from <= max_id and attempts < 10:
-            batch = Task.load_some(from_id=current_from, count=page_size)
+            try:
+                batch = Task.load_some(from_id=current_from, count=page_size)
+            except Exception as batch_err:
+                logger.warning(f"get_all_tasks: batch load failed at from_id={current_from}: {batch_err}, loading individually")
+                batch = []
+                for eid in range(current_from, min(current_from + page_size, max_id + 1)):
+                    try:
+                        e = Task.load(str(eid))
+                        if e:
+                            batch.append(e)
+                    except Exception:
+                        logger.warning(f"get_all_tasks: skipping Task {eid} due to load error")
             if not batch:
                 break
             for task in batch:
@@ -87,8 +98,8 @@ def get_all_tasks(args: str = "{}"):
                     ),
                     "total_steps": len(list(task.steps)) if hasattr(task, "steps") else 0,
                     "schedules": [],
-                    "created_at": task.created_at if hasattr(task, "created_at") else None,
-                    "updated_at": task.updated_at if hasattr(task, "updated_at") else None,
+                    "created_at": task._timestamp_created if hasattr(task, "_timestamp_created") else None,
+                    "updated_at": task._timestamp_updated if hasattr(task, "_timestamp_updated") else None,
                 }
 
                 if hasattr(task, "schedules"):
@@ -159,8 +170,8 @@ def get_task_details(args):
             ),
             "steps": [],
             "schedules": [],
-            "created_at": task.created_at if hasattr(task, "created_at") else None,
-            "updated_at": task.updated_at if hasattr(task, "updated_at") else None,
+            "created_at": task._timestamp_created if hasattr(task, "_timestamp_created") else None,
+            "updated_at": task._timestamp_updated if hasattr(task, "_timestamp_updated") else None,
         }
         logger.info("get_task_details: basic data built")
 
@@ -225,23 +236,22 @@ def get_task_details(args):
 
         execs_found = []
         current_from = exec_from_id
-        attempts = 0
-        while len(execs_found) < exec_page_size and current_from <= task_data["exec_max_id"] and attempts < 20:
-            logger.info(f"get_task_details: exec scan attempt={attempts}, from={current_from}, found={len(execs_found)}")
-            batch = TaskExecution.load_some(from_id=current_from, count=exec_page_size)
-            if not batch:
-                logger.info("get_task_details: empty batch, stopping")
-                break
-            logger.info(f"get_task_details: loaded batch of {len(batch)}, ids {batch[0]._id}-{batch[-1]._id}")
-            for exc in batch:
-                if hasattr(exc, "task") and exc.task and str(exc.task._id) == task_id:
-                    execs_found.append(exc)
-                    if len(execs_found) >= exec_page_size:
-                        break
-            current_from = int(batch[-1]._id) + 1
-            attempts += 1
+        # Use level=2 to load TaskExecution + direct Task ref without deep resolution
+        # (avoids crashes from missing Call entities in Task.steps)
+        while len(execs_found) < exec_page_size and current_from <= task_data["exec_max_id"]:
+            try:
+                exc = TaskExecution.load(str(current_from), level=2)
+            except Exception:
+                logger.warning(f"get_task_details: skipping TaskExecution {current_from} due to load error")
+                current_from += 1
+                continue
+            current_from += 1
+            if not exc:
+                continue
+            if hasattr(exc, "task") and exc.task and str(exc.task._id) == task_id:
+                execs_found.append(exc)
 
-        logger.info(f"get_task_details: exec scan done, found={len(execs_found)}, attempts={attempts}")
+        logger.info(f"get_task_details: exec scan done, found={len(execs_found)}")
         task_data["exec_next_from_id"] = current_from if current_from <= task_data["exec_max_id"] else None
         task_data["exec_has_more"] = task_data["exec_next_from_id"] is not None
 
@@ -251,8 +261,8 @@ def get_task_details(args):
                 "name": execution.name,
                 "status": execution.status,
                 "result": execution.result if hasattr(execution, "result") else "",
-                "created_at": execution.created_at if hasattr(execution, "created_at") else None,
-                "updated_at": execution.updated_at if hasattr(execution, "updated_at") else None,
+                "created_at": execution._timestamp_created if hasattr(execution, "_timestamp_created") else None,
+                "updated_at": execution._timestamp_updated if hasattr(execution, "_timestamp_updated") else None,
                 "logger_name": execution._logger_name() if hasattr(execution, "_logger_name") else "",
             }
             task_data["executions"].append(exec_data)
@@ -297,13 +307,13 @@ def get_task_executions(args):
                             execution.result if hasattr(execution, "result") else ""
                         ),
                         "created_at": (
-                            execution.created_at
-                            if hasattr(execution, "created_at")
+                            execution._timestamp_created
+                            if hasattr(execution, "_timestamp_created")
                             else None
                         ),
                         "updated_at": (
-                            execution.updated_at
-                            if hasattr(execution, "updated_at")
+                            execution._timestamp_updated
+                            if hasattr(execution, "_timestamp_updated")
                             else None
                         ),
                     }
@@ -411,10 +421,11 @@ def toggle_schedule(args):
 
 def run_task_now(args):
     """
-    Immediately execute a task by triggering the task manager
+    Immediately execute a task by triggering the task manager.
+    If the task has no steps, attempts to find and execute the codex
+    referenced in the task's metadata directly.
     """
     try:
-        # Parse args if it's a string
         if isinstance(args, str):
             args = json.loads(args)
         task_id = args.get("task_id")
@@ -422,37 +433,110 @@ def run_task_now(args):
         if not task_id:
             return json.dumps({"success": False, "error": "task_id is required"})
 
-        # Find task
         task = Task.load(task_id)
         if not task:
             return json.dumps({"success": False, "error": f"Task {task_id} not found"})
 
-        # Reset task to pending state
-        if hasattr(task, "status"):
-            task.status = "pending"
-        if hasattr(task, "step_to_execute"):
-            task.step_to_execute = 0
+        has_steps = hasattr(task, "steps") and len(list(task.steps)) > 0
 
-        # Reset step statuses
-        if hasattr(task, "steps"):
+        if has_steps:
+            # Normal flow: reset and trigger task manager
+            if hasattr(task, "status"):
+                task.status = "pending"
+            if hasattr(task, "step_to_execute"):
+                task.step_to_execute = 0
             for step in task.steps:
                 if hasattr(step, "status"):
                     step.status = "pending"
 
-        # Trigger task manager
-        manager = TaskManager()
-        manager.add_task(task)
-        manager.run()
+            manager = TaskManager()
+            manager.add_task(task)
+            manager.run()
 
-        logger.info(f"Task {task.name} triggered manually")
-
-        return json.dumps(
-            {
+            logger.info(f"Task {task.name} triggered manually via task manager")
+            return json.dumps({
                 "success": True,
                 "message": f"Task {task.name} started",
                 "task_id": str(task._id),
-            }
-        )
+            })
+        else:
+            # No steps: try to execute codex directly from metadata
+            codex_name = None
+            if hasattr(task, "metadata") and task.metadata:
+                try:
+                    meta = json.loads(task.metadata)
+                    codex_name = meta.get("codex_name")
+                except Exception:
+                    pass
+
+            if not codex_name:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Task {task.name} has no steps and no codex_name in metadata",
+                })
+
+            codex = Codex[codex_name]
+            if not codex:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Codex '{codex_name}' not found",
+                })
+
+            if not hasattr(codex, "code") or not codex.code:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Codex '{codex_name}' has no code",
+                })
+
+            # Create execution record and run the codex directly
+            task_execution = task.new_task_execution()
+            task_execution.status = "running"
+
+            # Codex code defines functions (e.g. async_task(), main()) but doesn't call them.
+            # Detect and append a call to the entry point function.
+            code_to_run = codex.code
+            logger.info(f"run_task_now: codex code length={len(code_to_run)}")
+            # Codex entry points may use 'yield' for IC async calls, making them generators.
+            # We must iterate the generator to actually execute the code body.
+            _call_snippet = '''
+_entry_result = {entry_fn}()
+if hasattr(_entry_result, '__next__'):
+    try:
+        while True:
+            next(_entry_result)
+    except StopIteration:
+        pass
+'''
+            if 'def async_task' in code_to_run:
+                logger.info("run_task_now: detected async_task entry point")
+                code_to_run += _call_snippet.format(entry_fn='async_task')
+            elif 'def main' in code_to_run:
+                logger.info("run_task_now: detected main entry point")
+                code_to_run += _call_snippet.format(entry_fn='main')
+            else:
+                logger.info("run_task_now: no entry point function detected, running code as-is")
+
+            from core.execution import run_code
+            result = run_code(code_to_run, task_execution=task_execution)
+            logger.info(f"run_task_now: run_code result success={result.get('success')}, error={result.get('error', 'none')[:200] if result.get('error') else 'none'}")
+
+            if result.get("success"):
+                task_execution.status = "completed"
+                task_execution.result = str(result.get("result", ""))[:4999]
+                msg = f"Task {task.name} executed successfully (codex: {codex_name})"
+            else:
+                task_execution.status = "failed"
+                task_execution.result = str(result.get("error", ""))[:4999]
+                msg = f"Task {task.name} execution failed (codex: {codex_name})"
+
+            logger.info(msg)
+            return json.dumps({
+                "success": True,
+                "message": msg,
+                "task_id": str(task._id),
+                "execution_id": str(task_execution._id),
+            })
+
     except Exception as e:
         logger.error(f"Error running task: {str(e)}")
         logger.error(traceback.format_exc())

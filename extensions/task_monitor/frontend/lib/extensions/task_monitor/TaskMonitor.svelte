@@ -34,6 +34,20 @@
   let searchTerm = '';
   let statusFilter = '';
 
+  // Toast notification system
+  interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+  let toasts: Toast[] = [];
+  let toastCounter = 0;
+  function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    const id = ++toastCounter;
+    toasts = [...toasts, { id, message, type }];
+    setTimeout(() => { toasts = toasts.filter(t => t.id !== id); }, 4000);
+  }
+
+  // Per-task action loading states
+  let runningTasks: Record<string, boolean> = {};
+  let deletingTasks: Record<string, boolean> = {};
+
   // Pagination state
   const PAGE_SIZE = 10;
   let fromId = 1;
@@ -124,17 +138,19 @@
         })
       });
       if (response.success) {
+        showToast(disabled ? 'Schedule resumed' : 'Schedule paused', 'success');
         await loadTasks();
       } else {
-        alert(response.error || 'Failed to toggle schedule');
+        showToast(response.error || 'Failed to toggle schedule', 'error');
       }
     } catch (e: any) {
-      alert(e.message || 'Error toggling schedule');
+      showToast(e.message || 'Error toggling schedule', 'error');
     }
   }
   
   async function runTaskNow(taskId: string) {
-    if (!confirm($_('extensions.task_monitor.confirm_run'))) return;
+    runningTasks[taskId] = true;
+    runningTasks = runningTasks;
     
     try {
       const response = await backend.extension_sync_call({
@@ -144,18 +160,22 @@
       });
       if (response.success) {
         const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-        alert(data.message || 'Task started');
+        showToast(data.message || 'Task started', 'success');
         await loadTasks();
       } else {
-        alert(response.error || 'Failed to run task');
+        showToast(response.error || 'Failed to run task', 'error');
       }
     } catch (e: any) {
-      alert(e.message || 'Error running task');
+      showToast(e.message || 'Error running task', 'error');
+    } finally {
+      delete runningTasks[taskId];
+      runningTasks = runningTasks;
     }
   }
   
   async function deleteTask(taskId: string) {
-    if (!confirm($_('extensions.task_monitor.confirm_delete'))) return;
+    deletingTasks[taskId] = true;
+    deletingTasks = deletingTasks;
     
     try {
       const response = await backend.extension_sync_call({
@@ -165,13 +185,16 @@
       });
       if (response.success) {
         const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-        alert(data.message || 'Task deleted');
+        showToast(data.message || 'Task deleted', 'success');
         await loadTasks();
       } else {
-        alert(response.error || 'Failed to delete task');
+        showToast(response.error || 'Failed to delete task', 'error');
       }
     } catch (e: any) {
-      alert(e.message || 'Error deleting task');
+      showToast(e.message || 'Error deleting task', 'error');
+    } finally {
+      delete deletingTasks[taskId];
+      deletingTasks = deletingTasks;
     }
   }
   
@@ -235,6 +258,29 @@
     return Math.round((task.step_to_execute / task.total_steps) * 100);
   }
 </script>
+
+<!-- Toast Notifications -->
+{#if toasts.length > 0}
+  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2" style="min-width: 300px;">
+    {#each toasts as toast (toast.id)}
+      <div
+        class="px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 animate-slide-in
+          {toast.type === 'success' ? 'bg-green-600 text-white' : ''}
+          {toast.type === 'error' ? 'bg-red-600 text-white' : ''}
+          {toast.type === 'info' ? 'bg-blue-600 text-white' : ''}"
+      >
+        {#if toast.type === 'success'}
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        {:else if toast.type === 'error'}
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        {:else}
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        {/if}
+        {toast.message}
+      </div>
+    {/each}
+  </div>
+{/if}
 
 <div class="p-6 max-w-7xl mx-auto">
   <!-- Header -->
@@ -364,20 +410,6 @@
                 </p>
               {/if}
               
-              <!-- Progress -->
-              <div>
-                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  <span>{$_('extensions.task_monitor.progress')}</span>
-                  <span>{task.step_to_execute} / {task.total_steps} steps ({getProgressPercent(task)}%)</span>
-                </div>
-                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div 
-                    class="h-2 rounded-full transition-all duration-300 {task.status?.toLowerCase() === 'failed' ? 'bg-red-500' : 'bg-blue-600'}" 
-                    style="width: {getProgressPercent(task)}%"
-                  ></div>
-                </div>
-              </div>
-              
               <!-- Schedule & Timing -->
               <div class="flex flex-wrap gap-3 text-sm">
                 {#if task.schedules.length > 0}
@@ -432,12 +464,17 @@
                 </svg>
                 {$_('extensions.task_monitor.view')}
               </Button>
-              <Button size="xs" color="green" class="flex-1" on:click={() => runTaskNow(task._id)}>
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                {$_('extensions.task_monitor.run')}
+              <Button size="xs" color="green" class="flex-1" disabled={runningTasks[task._id]} on:click={() => runTaskNow(task._id)}>
+                {#if runningTasks[task._id]}
+                  <Spinner size="4" class="mr-1" />
+                  Starting...
+                {:else}
+                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  {$_('extensions.task_monitor.run')}
+                {/if}
               </Button>
               {#if task.schedules.length > 0}
                 {@const schedule = task.schedules[0]}
@@ -450,10 +487,14 @@
                   {schedule.disabled ? 'Resume' : 'Pause'}
                 </Button>
               {/if}
-              <Button size="xs" color="red" outline on:click={() => deleteTask(task._id)}>
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
+              <Button size="xs" color="red" outline disabled={deletingTasks[task._id]} on:click={() => deleteTask(task._id)}>
+                {#if deletingTasks[task._id]}
+                  <Spinner size="4" />
+                {:else}
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                {/if}
               </Button>
             </div>
           </div>
@@ -491,5 +532,12 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+  @keyframes slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  :global(.animate-slide-in) {
+    animation: slide-in 0.3s ease-out;
   }
 </style>

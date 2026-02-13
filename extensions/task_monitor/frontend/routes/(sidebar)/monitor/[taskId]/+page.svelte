@@ -53,6 +53,17 @@
   let followLogs = false;
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
   let logsContainer: HTMLElement;
+  let runningTask = false;
+
+  // Toast notification system
+  interface Toast { id: number; message: string; type: 'success' | 'error' | 'info'; }
+  let toasts: Toast[] = [];
+  let toastCounter = 0;
+  function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+    const id = ++toastCounter;
+    toasts = [...toasts, { id, message, type }];
+    setTimeout(() => { toasts = toasts.filter(t => t.id !== id); }, 4000);
+  }
 
   // Execution log viewer state
   let selectedExecution: TaskExecution | null = null;
@@ -211,7 +222,7 @@
   }
 
   async function runTaskNow() {
-    if (!confirm('Are you sure you want to run this task now?')) return;
+    runningTask = true;
     
     try {
       const response = await backend.extension_sync_call({
@@ -222,13 +233,15 @@
       
       if (response.success) {
         const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-        alert(data.message || 'Task started');
+        showToast(data.message || 'Task started', 'success');
         await loadAll();
       } else {
-        alert(response.error || 'Failed to run task');
+        showToast(response.error || 'Failed to run task', 'error');
       }
     } catch (e: any) {
-      alert(e.message || 'Error running task');
+      showToast(e.message || 'Error running task', 'error');
+    } finally {
+      runningTask = false;
     }
   }
 
@@ -291,6 +304,29 @@
   }
 </script>
 
+<!-- Toast Notifications -->
+{#if toasts.length > 0}
+  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2" style="min-width: 300px;">
+    {#each toasts as toast (toast.id)}
+      <div
+        class="px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 animate-slide-in
+          {toast.type === 'success' ? 'bg-green-600 text-white' : ''}
+          {toast.type === 'error' ? 'bg-red-600 text-white' : ''}
+          {toast.type === 'info' ? 'bg-blue-600 text-white' : ''}"
+      >
+        {#if toast.type === 'success'}
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        {:else if toast.type === 'error'}
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        {:else}
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        {/if}
+        {toast.message}
+      </div>
+    {/each}
+  </div>
+{/if}
+
 <div class="p-6 max-w-6xl mx-auto">
   <!-- Header -->
   <div class="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -318,12 +354,17 @@
       <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">ID: {taskId}</p>
     </div>
     <div class="flex gap-2">
-      <Button color="green" size="sm" on:click={runTaskNow}>
-        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        Run Now
+      <Button color="green" size="sm" disabled={runningTask} on:click={runTaskNow}>
+        {#if runningTask}
+          <Spinner size="4" class="mr-1" />
+          Starting...
+        {:else}
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Run Now
+        {/if}
       </Button>
     </div>
   </div>
@@ -340,24 +381,7 @@
     </Card>
   {:else if task}
     <!-- Task Info Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <!-- Status Card -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-sm text-gray-500 dark:text-gray-400">Progress</span>
-          <span class="text-sm font-medium text-gray-900 dark:text-white">{getProgressPercent()}%</span>
-        </div>
-        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
-          <div 
-            class="h-2 rounded-full transition-all duration-300 {task.status?.toLowerCase() === 'failed' ? 'bg-red-500' : 'bg-blue-600'}" 
-            style="width: {getProgressPercent()}%"
-          ></div>
-        </div>
-        <p class="text-xs text-gray-500 dark:text-gray-400">
-          {task.step_to_execute} / {task.steps?.length || 0} steps
-        </p>
-      </div>
-
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
       <!-- Schedule Card -->
       <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
         <span class="text-sm text-gray-500 dark:text-gray-400">Schedule</span>
@@ -384,43 +408,45 @@
     </div>
 
     <!-- Executions Table -->
-    {#if sortedExecutions.length > 0}
-      <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            Executions
-          </h2>
-        </div>
-        <div class="overflow-x-auto" style="max-height: 300px; overflow-y: auto;">
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Executions
+        </h2>
+        <Button size="xs" color="light" on:click={loadTaskDetails}>
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Refresh
+        </Button>
+      </div>
+      {#if sortedExecutions.length > 0}
+        <div class="overflow-x-auto">
           <table class="w-full text-sm">
-            <thead class="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-900 sticky top-0">
+            <thead class="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th class="px-4 py-2 text-left">ID</th>
                 <th class="px-4 py-2 text-left">Started</th>
-                <th class="px-4 py-2 text-left">Ended</th>
                 <th class="px-4 py-2 text-left">Runtime</th>
                 <th class="px-4 py-2 text-left">Status</th>
                 <th class="px-4 py-2 text-left">Result</th>
-                <th class="px-4 py-2 text-center">Logs</th>
               </tr>
             </thead>
             <tbody>
-              {#each sortedExecutions as execution, i}
+              {#each sortedExecutions as execution}
                 <tr 
-                  class="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors
-                    {selectedExecution?._id === execution._id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}"
+                  on:click={() => selectExecution(execution)}
+                  class="border-t border-gray-100 dark:border-gray-700 cursor-pointer transition-colors
+                    {selectedExecution?._id === execution._id ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' : 'hover:bg-gray-50 dark:hover:bg-gray-750'}"
                 >
                   <td class="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono text-xs">
                     {execution._id}
                   </td>
-                  <td class="px-4 py-2 text-gray-900 dark:text-white whitespace-nowrap">
+                  <td class="px-4 py-2 text-gray-900 dark:text-white whitespace-nowrap text-xs">
                     {formatTimestamp(execution.created_at)}
-                  </td>
-                  <td class="px-4 py-2 text-gray-900 dark:text-white whitespace-nowrap">
-                    {formatTimestamp(execution.updated_at)}
                   </td>
                   <td class="px-4 py-2 text-gray-900 dark:text-white whitespace-nowrap font-mono text-xs">
                     {formatDuration(execution.created_at, execution.updated_at)}
@@ -430,19 +456,6 @@
                   </td>
                   <td class="px-4 py-2 text-gray-600 dark:text-gray-400 text-xs max-w-xs truncate" title={execution.result || ''}>
                     {truncateResult(execution.result)}
-                  </td>
-                  <td class="px-4 py-2 text-center">
-                    <button
-                      on:click={() => selectExecution(execution)}
-                      class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-xs font-medium"
-                      title="View logs for this execution"
-                    >
-                      {#if selectedExecution?._id === execution._id}
-                        Hide
-                      {:else}
-                        View
-                      {/if}
-                    </button>
                   </td>
                 </tr>
               {/each}
@@ -468,62 +481,46 @@
             Next
           </button>
         </div>
-      </div>
-    {/if}
-
-    <!-- Logs Section -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-      <!-- Logs Header -->
-      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          {#if selectedExecution}
-            Execution Logs
-            <Badge color="blue" class="text-xs">#{sortedExecutions.length - sortedExecutions.indexOf(selectedExecution)}</Badge>
-          {:else}
-            Logs (All Executions)
-          {/if}
-          {#if logsLoading || executionLogsLoading}
-            <Spinner size="4" class="ml-2" />
-          {/if}
-        </h2>
-        <div class="flex items-center gap-4">
-          {#if selectedExecution}
-            <button
-              on:click={showAllLogs}
-              class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              Show All Logs
-            </button>
-          {/if}
-          <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-            <Checkbox bind:checked={followLogs} />
-            <span>Follow</span>
-            {#if followLogs}
-              <span class="relative flex h-2 w-2">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-            {/if}
-          </label>
-          <Button size="xs" color="light" on:click={() => selectedExecution ? loadExecutionLogs(selectedExecution) : loadLogs()}>
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            Refresh
-          </Button>
+      {:else}
+        <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+          No executions yet. Click <strong>Run Now</strong> to execute this task.
         </div>
-      </div>
-      
-      <!-- Logs Content -->
-      <div 
-        bind:this={logsContainer}
-        class="bg-gray-900 text-gray-100 p-4 font-mono text-sm overflow-auto"
-        style="height: 400px; max-height: 60vh;"
-      >
-        {#if selectedExecution}
+      {/if}
+    </div>
+
+    <!-- Execution Logs Section (shown when an execution is selected) -->
+    {#if selectedExecution}
+      <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Execution #{selectedExecution._id} Logs
+            <Badge color={getStatusColor(selectedExecution.status)} class="text-xs">{selectedExecution.status}</Badge>
+            {#if executionLogsLoading}
+              <Spinner size="4" class="ml-2" />
+            {/if}
+          </h2>
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+              <Checkbox bind:checked={followLogs} />
+              <span>Follow</span>
+            </label>
+            <Button size="xs" color="light" on:click={() => loadExecutionLogs(selectedExecution)}>
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Refresh
+            </Button>
+          </div>
+        </div>
+        
+        <div 
+          bind:this={logsContainer}
+          class="bg-gray-900 text-gray-100 p-4 font-mono text-sm overflow-auto"
+          style="height: 400px; max-height: 60vh;"
+        >
           {#if executionLogsLoading}
             <div class="text-gray-500 italic text-center py-8">Loading execution logs...</div>
           {:else if executionLogs}
@@ -533,15 +530,13 @@
               No logs for this execution.
             </div>
           {/if}
-        {:else if rawLogs}
-          <pre class="whitespace-pre-wrap break-words">{rawLogs}</pre>
-        {:else}
-          <div class="text-gray-500 italic text-center py-8">
-            No logs available. Run the task to generate logs.
-          </div>
-        {/if}
+        </div>
       </div>
-    </div>
+    {:else}
+      <div class="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+        Select an execution above to view its logs.
+      </div>
+    {/if}
 
     <!-- Steps Preview (collapsed) -->
     {#if task.steps?.length > 0}
@@ -587,5 +582,12 @@
 <style>
   pre {
     margin: 0;
+  }
+  @keyframes slide-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  :global(.animate-slide-in) {
+    animation: slide-in 0.3s ease-out;
   }
 </style>
