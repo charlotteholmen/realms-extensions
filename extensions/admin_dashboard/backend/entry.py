@@ -204,7 +204,6 @@ def import_data(args):
         # Clear in-memory entity context to prevent state bloat across
         # successive canister calls (kybra persists the Python heap between calls)
         Entity._context.clear()
-        Entity.db().clear_registry()
 
         return {
             "success": True,
