@@ -221,65 +221,6 @@ def import_data(args):
         return {"success": False, "error": str(e)}
 
 
-def _import_record(record: Dict[str, Any]) -> "Entity":
-    """Import a single record efficiently, avoiding deep relationship loading.
-
-    Entity.deserialize() uses cls.load(entity_id, level=3) for the upsert
-    check, which recursively loads 3 levels of relationships per record.
-    This lightweight version uses level=1 (no relationship loading) since
-    we only need to check existence and update properties.
-    """
-    from kybra_simple_db.properties import Relation
-
-    if "_type" not in record:
-        raise ValueError("Record must contain '_type' field")
-
-    entity_type = record["_type"]
-    db = Entity.db()
-
-    # Resolve target class
-    target_class = db._entity_types.get(entity_type)
-    if not target_class:
-        class_name = db._extract_class_name(entity_type)
-        target_class = db._entity_types.get(class_name)
-    if not target_class:
-        raise ValueError(f"Unknown entity type: {entity_type}")
-
-    entity_id = record.get("_id")
-
-    # Cheap existence check: level=0 avoids all relationship loading
-    existing = None
-    if entity_id:
-        existing = target_class.load(str(entity_id), level=0)
-
-    if existing:
-        # UPDATE path — set properties without loading relationships
-        existing._do_not_save = True
-        for key, value in record.items():
-            if key.startswith("_"):
-                continue
-            prop = getattr(target_class, key, None)
-            if isinstance(prop, Relation):
-                continue
-            setattr(existing, key, value)
-        existing._do_not_save = False
-        existing._save()
-        return existing
-    else:
-        # CREATE path — build kwargs excluding relations and internals
-        kwargs = {}
-        if entity_id:
-            kwargs["_id"] = entity_id
-        for key, value in record.items():
-            if key.startswith("_") and key != "_id":
-                continue
-            prop = getattr(target_class, key, None)
-            if isinstance(prop, Relation):
-                continue
-            kwargs[key] = value
-        return target_class(**kwargs)
-
-
 def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Process bulk import data and create entities"""
     successful = 0
@@ -290,7 +231,7 @@ def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     for record in data:
         try:
-            entity = _import_record(record)
+            entity = Entity.deserialize(record, level=0)
             entity_type = record["_type"]
             if entity_type == "Codex":
                 if record["code"].startswith("base64:"):
