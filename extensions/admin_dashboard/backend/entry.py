@@ -201,6 +201,11 @@ def import_data(args):
         logger.debug(f"parsed_data: {parsed_data}")
         results = process_bulk_import(parsed_data)
 
+        # Clear in-memory entity context to prevent state bloat across
+        # successive canister calls (kybra persists the Python heap between calls)
+        Entity._context.clear()
+        Entity.db().clear_registry()
+
         return {
             "success": True,
             "message": "Successfully imported records",
@@ -227,29 +232,6 @@ def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     for record in data:
         try:
-
-            entity = Entity.deserialize(record)
-
-            # Example data
-            # d = [
-            #     {
-            #         'timestamp_created': '2025-09-12 23:17:07.522',
-            #         'timestamp_updated': '2025-09-12 23:17:07.522',
-            #         'creator': 'system', 'updater': 'system', 'owner': 'system',
-            #         '_type': 'Realm', '_id': '1',
-            #         'name': 'Generated Demo Realm',
-            #         'description': 'Generated demo realm with 51 citizens and 5 organizations',
-            #         'id': '0',
-            #         'created_at': '2025-09-12T23:17:07.522028',
-            #         'status': 'active',
-            #         'governance_type': 'democratic',
-            #         'population': 51,
-            #         'organization_count': 5,
-            #         'settings': {'voting_period_days': 7, 'proposal_threshold': 0.1, 'quorum_percentage': 0.3, 'tax_rate': 0.15, 'ubi_amount': 1000},
-            #         'treasury': '1'}, {'timestamp_created': '2025-09-12 23:17:07.522', 'timestamp_updated': '2025-09-12 23:17:07.522', 'creator': 'system', 'updater': 'system', 'owner': 'system', '_type': 'Treasury', '_id': '1', 'name': 'Generated Demo Realm Treasury', 'vault_principal_id': None, 'created_at': '2025-09-12T23:17:07.522258', 'updated_at': '2025-09-12T23:17:07.522261', 'realm': '1'}, {'timestamp_created': '2025-09-12 23:17:07.521', 'timestamp_updated': '2025-09-12 23:17:07.521', 'creator': 'system', 'updater': 'system', 'owner': 'system', '_type': 'UserProfile', '_id': '1', 'name': 'admin', 'description': 'Admin user profile', 'allowed_to': 'a,l,l'}, {'timestamp_created': '2025-09-12 23:17:07.521', 'timestamp_updated': '2025-09-12 23:17:07.521', 'creator': 'system', 'updater': 'system', 'owner': 'system', '_type': 'UserProfile', '_id': '2', 'name': 'member', 'description': 'Member user profile', 'allowed_to': ''
-            #         }
-            #     ]
-
             entity = Entity.deserialize(record)
             entity_type = record["_type"]
             if entity_type == "Codex":
