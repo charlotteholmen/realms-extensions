@@ -231,7 +231,7 @@ def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     for record in data:
         try:
-            entity = Entity.deserialize(record, level=0)
+            entity = Entity.deserialize(record, level=1)
             entity_type = record["_type"]
             if entity_type == "Codex":
                 if record["code"].startswith("base64:"):
