@@ -222,13 +222,13 @@
   
   function formatTimestamp(timestamp: number | null): string {
     if (!timestamp) return '-';
-    const date = new Date(timestamp / 1000000);
+    const date = new Date(timestamp);
     return date.toLocaleString();
   }
   
   function formatRelativeTime(timestamp: number | null): string {
     if (!timestamp) return '-';
-    const date = new Date(timestamp / 1000000);
+    const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffSec = Math.floor(diffMs / 1000);

@@ -523,10 +523,12 @@ if hasattr(_entry_result, '__next__'):
             if result.get("success"):
                 task_execution.status = "completed"
                 task_execution.result = str(result.get("result", ""))[:4999]
+                task.status = "completed"
                 msg = f"Task {task.name} executed successfully (codex: {codex_name})"
             else:
                 task_execution.status = "failed"
                 task_execution.result = str(result.get("error", ""))[:4999]
+                task.status = "failed"
                 msg = f"Task {task.name} execution failed (codex: {codex_name})"
 
             logger.info(msg)

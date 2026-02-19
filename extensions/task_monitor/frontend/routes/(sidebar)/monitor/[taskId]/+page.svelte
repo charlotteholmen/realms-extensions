@@ -259,12 +259,12 @@
 
   function formatTimestamp(timestamp: number | null): string {
     if (!timestamp) return '-';
-    return new Date(timestamp / 1000000).toLocaleString();
+    return new Date(timestamp).toLocaleString();
   }
 
-  function formatDuration(startNs: number | null, endNs: number | null): string {
-    if (!startNs || !endNs) return '-';
-    const durationMs = (endNs - startNs) / 1000000;
+  function formatDuration(startMs: number | null, endMs: number | null): string {
+    if (!startMs || !endMs) return '-';
+    const durationMs = endMs - startMs;
     if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
     if (durationMs < 60000) return `${(durationMs / 1000).toFixed(1)}s`;
     const minutes = Math.floor(durationMs / 60000);
