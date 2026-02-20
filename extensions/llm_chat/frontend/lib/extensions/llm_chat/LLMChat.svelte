@@ -216,7 +216,7 @@
 			console.log("Realm data fetched:", realmData);
 		} catch (err) {
 			console.error("Error fetching realm data:", err);
-			error = "Failed to get realm data. LLM responses may be less accurate.";
+			// Don't show error for realm data fetch - it's not critical
 		} finally {
 			isLoadingRealmData = false;
 		}
@@ -324,7 +324,15 @@
 
 		} catch (err) {
 			console.error("Error calling LLM:", err);
-			error = `AI service unavailable: Connection failed. Please try again in a moment.`;
+
+			// Determine the type of error and show appropriate i18n message
+			if (err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'))) {
+				error = $_('extensions.llm_chat.error_connection');
+			} else if (err instanceof Error && err.message.includes('HTTP error')) {
+				error = $_('extensions.llm_chat.error_server');
+			} else {
+				error = $_('extensions.llm_chat.error_response');
+			}
 			
 			// Remove the AI message if there was an error and it exists
 			if (messages.length > 0 && !messages[messages.length - 1].isUser) {

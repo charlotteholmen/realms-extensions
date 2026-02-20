@@ -9,6 +9,8 @@
   "message_placeholder": "Type your message...",
   "no_response": "No response from LLM",
   "error_response": "Failed to get response from LLM. Please try again.",
+  "error_connection": "Unable to connect to the AI service. The service may be temporarily unavailable. Please try again in a few moments.",
+  "error_server": "The AI service encountered an issue. Please try again later.",
   "loading": "Loading...",
   "suggestions_title": "Try asking:",
   "suggestion_1": "What is a realm?",
