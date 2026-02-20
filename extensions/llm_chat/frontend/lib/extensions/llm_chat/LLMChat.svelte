@@ -113,7 +113,47 @@
 				autoResizeTextarea();
 			}
 		}, 100);
+
+		// Check for ?explain=codex:<id> query param (e.g. from Codex Viewer "Explain" button)
+		handleExplainParam();
 	});
+
+	function handleExplainParam() {
+		try {
+			const params = new URLSearchParams(window.location.search);
+			const explain = params.get('explain');
+			if (!explain) return;
+
+			const [objType, objId] = explain.split(':');
+			if (objType === 'codex' && objId) {
+				// Fetch the codex details then auto-send an explanation request
+				backend.extension_sync_call({
+					extension_name: 'codex_viewer',
+					function_name: 'get_codex_details',
+					args: JSON.stringify({ codex_id: objId })
+				}).then((response: any) => {
+					if (response.success) {
+						const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+						if (data.codex) {
+							const codex = data.codex;
+							const codeSummary = codex.code && codex.code.length > 2000
+								? codex.code.substring(0, 2000) + '\n# ... (truncated)'
+								: codex.code || '';
+							newMessage = `Please explain this codex "${codex.name}":\n\n\`\`\`python\n${codeSummary}\n\`\`\``;
+							// Auto-send after a short delay to let the UI render
+							setTimeout(() => sendMessage(), 300);
+						}
+					}
+				}).catch((err: any) => {
+					console.error('Failed to fetch codex for explanation:', err);
+				});
+			}
+			// Clean the URL so the param doesn't persist on refresh
+			window.history.replaceState({}, '', window.location.pathname);
+		} catch (err) {
+			console.error('Error handling explain param:', err);
+		}
+	}
 
 	// Auto-scroll to bottom of messages when content changes
 	afterUpdate(() => {

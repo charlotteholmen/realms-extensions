@@ -440,7 +440,7 @@ def run_task_now(args):
         has_steps = hasattr(task, "steps") and len(list(task.steps)) > 0
 
         if has_steps:
-            # Normal flow: reset and trigger task manager
+            # Normal flow: reset task, steps, AND schedule so it triggers immediately
             if hasattr(task, "status"):
                 task.status = "pending"
             if hasattr(task, "step_to_execute"):
@@ -448,6 +448,10 @@ def run_task_now(args):
             for step in task.steps:
                 if hasattr(step, "status"):
                     step.status = "pending"
+            # Reset schedule.last_run_at so _update_timers sees it as never-run
+            if hasattr(task, "schedules"):
+                for schedule in task.schedules:
+                    schedule.last_run_at = 0
 
             manager = TaskManager()
             manager.add_task(task)
