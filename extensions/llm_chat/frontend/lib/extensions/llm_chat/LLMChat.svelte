@@ -25,6 +25,15 @@
 		realm_data?: any;
 	}
 
+	// Interface for assistant personas fetched from Geister API
+	interface AssistantPersona {
+		id: string;
+		name: string;
+		emoji: string;
+		description: string;
+		type: string;
+	}
+
 	 
 	// State variables
 	let messages: ChatMessage[] = [];
@@ -39,6 +48,11 @@
 	let suggestions: string[] = [];
 	let isLoadingSuggestions = false;
 	let textareaElement: HTMLTextAreaElement;
+
+	// Assistant persona state
+	let availableAssistants: AssistantPersona[] = [];
+	let selectedAssistant: AssistantPersona | null = null;
+	let isLoadingAssistants = false;
 	
 	// LLM API configuration
 
@@ -50,20 +64,23 @@
 	console.log("isLocalhost", isLocalhost);
 	
 	// Production API host via Cloudflare Tunnel
-	const PRODUCTION_API_HOST = 'https://ashoka-api.realmsgos.dev/';
+	const PRODUCTION_API_HOST = 'https://geister-api.realmsgos.dev/';
 	
 	// Determine API URL based on environment
 	let API_URL = '';
 	let SUGGESTIONS_API_URL = '';
+	let ASSISTANTS_API_URL = '';
 	
 	// Initialize API URL
 	const initializeApiUrl = () => {
 		if (isLocalhost) {
 			API_URL = "http://localhost:5000/api/ask";
 			SUGGESTIONS_API_URL = "http://localhost:5000/suggestions";
+			ASSISTANTS_API_URL = "http://localhost:5000/api/personas/assistants";
 		} else {
 			API_URL = `${PRODUCTION_API_HOST}api/ask`;
 			SUGGESTIONS_API_URL = `${PRODUCTION_API_HOST}suggestions`;
+			ASSISTANTS_API_URL = `${PRODUCTION_API_HOST}api/personas/assistants`;
 		}
 		console.log("API_URL set to:", API_URL);
 		console.log("SUGGESTIONS_API_URL set to:", SUGGESTIONS_API_URL);
@@ -83,6 +100,9 @@
 		
 		// Initialize API URL
 		initializeApiUrl();
+		
+		// Fetch available assistant personas
+		await fetchAssistants();
 		
 		// Fetch initial suggestions
 		await fetchSuggestions();
@@ -113,6 +133,31 @@
 		}
 	}
 
+	// Function to fetch available assistant personas from Geister API
+	async function fetchAssistants(): Promise<void> {
+		if (isLoadingAssistants || !ASSISTANTS_API_URL) return;
+		isLoadingAssistants = true;
+		try {
+			const response = await fetch(ASSISTANTS_API_URL, {
+				method: 'GET',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			const data = await response.json();
+			if (data.assistants && Array.isArray(data.assistants)) {
+				availableAssistants = data.assistants;
+				if (availableAssistants.length > 0 && !selectedAssistant) {
+					selectedAssistant = availableAssistants[0];
+				}
+				console.log("Fetched assistants:", availableAssistants);
+			}
+		} catch (err) {
+			console.error("Error fetching assistants:", err);
+		} finally {
+			isLoadingAssistants = false;
+		}
+	}
+
 	// Function to fetch suggestions from API
 	async function fetchSuggestions(): Promise<void> {
 		if (isLoadingSuggestions || !SUGGESTIONS_API_URL) return;
@@ -122,7 +167,8 @@
 			// Build URL with query parameters for contextual suggestions
 			const params = new URLSearchParams({
 				user_principal: userPrincipal || '',
-				realm_principal: REALM_CANISTER_ID || ''
+				realm_principal: REALM_CANISTER_ID || '',
+				persona: selectedAssistant?.id || 'ashoka'
 			});
 			const urlWithParams = `${SUGGESTIONS_API_URL}?${params.toString()}`;
 			
@@ -196,7 +242,8 @@
 				question: messageToSend,
 				realm_principal: REALM_CANISTER_ID,
 				user_principal: userPrincipal,
-				stream: true
+				stream: true,
+				persona: selectedAssistant?.id || 'ashoka'
 			};
 
 			console.log("Sending payload to LLM API:", payload);
@@ -277,7 +324,7 @@
 
 		} catch (err) {
 			console.error("Error calling LLM:", err);
-			error = `AI service unavailable: ${response?.status ? `HTTP ${response.status}` : 'Connection failed'}. Please try again in a moment.`;
+			error = `AI service unavailable: Connection failed. Please try again in a moment.`;
 			
 			// Remove the AI message if there was an error and it exists
 			if (messages.length > 0 && !messages[messages.length - 1].isUser) {
@@ -336,6 +383,25 @@
 	</h2>
 	
 	<div class="w-full flex flex-col flex-grow min-h-0">
+		<!-- Assistant Selector -->
+		{#if availableAssistants.length > 1}
+			<div class="flex gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+				{#each availableAssistants as assistant}
+					<button
+						class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors duration-200
+							{selectedAssistant?.id === assistant.id 
+								? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
+								: 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}"
+						on:click={() => { selectedAssistant = assistant; messages = []; fetchSuggestions(); }}
+						title={assistant.description}
+					>
+						<span class="text-lg">{assistant.emoji}</span>
+						<span class="text-sm font-medium">{assistant.name}</span>
+					</button>
+				{/each}
+			</div>
+		{/if}
+
 		<!-- Messages Container -->
 		<Card class="w-full flex-grow flex flex-col m-0 p-0 rounded-none border-0 max-w-none min-h-0">
 			<div 
@@ -344,20 +410,21 @@
 				style="min-height: 300px;"
 			>
 				{#if messages.length === 0}
-					<!-- Welcome message with Ashoka avatar -->
+					<!-- Welcome message with assistant avatar -->
 					<div class="flex justify-start mb-6 mt-8">
 						<div class="flex items-start space-x-4 max-w-[85%]">
-							<!-- Ashoka Avatar -->
-							<div class="flex-shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-lg">
-								<img src="/extensions/llm_chat/photos/ashoka.png" alt="Ashoka AI Assistant" class="w-full h-full object-cover" />
+							<!-- Assistant Avatar -->
+							<div class="flex-shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-lg flex items-center justify-center bg-white dark:bg-gray-700">
+								{#if selectedAssistant}
+									<span class="text-2xl">{selectedAssistant.emoji}</span>
+								{:else}
+									<img src="/extensions/llm_chat/photos/ashoka.png" alt="AI Assistant" class="w-full h-full object-cover" />
+								{/if}
 							</div>
 							
 							<!-- Welcome Chat Bubble -->
 							<div class="flex-1">
 								<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-md px-6 py-5 shadow-lg">
-									<!-- <div class="flex items-center mb-3">
-										<h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200"><SafeText key="extensions.llm_chat.title" spinnerSize="xs" /></h3>
-									</div> -->
 									{#if $isAuthenticated}
 										<div class="text-sm text-gray-600 dark:text-gray-400 space-y-3 leading-relaxed">
 											<p><SafeText key="extensions.llm_chat.welcome_authenticated" spinnerSize="xs" /></p>
@@ -376,11 +443,15 @@
 						<div class="mb-6 {message.isUser ? 'flex justify-end' : 'flex justify-start'}">
 							<div class="flex items-start space-x-4 max-w-[85%]">
 								{#if !message.isUser}
-									<!-- Ashoka AI Avatar -->
-									<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-md">
-										<img src="/extensions/llm_chat/photos/ashoka.png" alt="Ashoka AI Assistant" class="w-full h-full object-cover" />
-									</div>
-								{/if}
+								<!-- AI Assistant Avatar -->
+								<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-md flex items-center justify-center bg-white dark:bg-gray-700">
+									{#if selectedAssistant}
+										<span class="text-xl">{selectedAssistant.emoji}</span>
+									{:else}
+										<img src="/extensions/llm_chat/photos/ashoka.png" alt="AI Assistant" class="w-full h-full object-cover" />
+									{/if}
+								</div>
+							{/if}
 								
 								<div class="flex-1">
 									{#if message.isUser}
@@ -402,9 +473,13 @@
 					{#if isLoading}
 						<div class="mb-6 flex justify-start">
 							<div class="flex items-start space-x-4 max-w-[85%]">
-								<!-- Ashoka AI Avatar -->
-								<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-md">
-									<img src="/extensions/llm_chat/photos/ashoka.png" alt="Ashoka AI Assistant" class="w-full h-full object-cover" />
+								<!-- AI Assistant Avatar -->
+								<div class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-md flex items-center justify-center bg-white dark:bg-gray-700">
+									{#if selectedAssistant}
+										<span class="text-xl">{selectedAssistant.emoji}</span>
+									{:else}
+										<img src="/extensions/llm_chat/photos/ashoka.png" alt="AI Assistant" class="w-full h-full object-cover" />
+									{/if}
 								</div>
 								<div class="flex-1">
 									<div class="flex items-center space-x-3 text-gray-600 dark:text-gray-400">
