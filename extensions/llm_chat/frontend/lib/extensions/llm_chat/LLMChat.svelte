@@ -126,7 +126,7 @@
 
 			const [objType, objId] = explain.split(':');
 			if (objType === 'codex' && objId) {
-				// Fetch the codex details then auto-send an explanation request
+				// Fetch the codex details then auto-send a governance explanation request
 				backend.extension_sync_call({
 					extension_name: 'codex_viewer',
 					function_name: 'get_codex_details',
@@ -136,22 +136,110 @@
 						const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
 						if (data.codex) {
 							const codex = data.codex;
-							const codeSummary = codex.code && codex.code.length > 2000
-								? codex.code.substring(0, 2000) + '\n# ... (truncated)'
-								: codex.code || '';
-							newMessage = `Please explain this codex "${codex.name}":\n\n\`\`\`python\n${codeSummary}\n\`\`\``;
-							// Auto-send after a short delay to let the UI render
-							setTimeout(() => sendMessage(), 300);
+							// Send with a display message (link) different from the AI prompt (code + governance framing)
+							const codexLink = `/extensions/codex_viewer/${objId}`;
+							const displayMessage = `Please explain this codex: [${codex.name}](${codexLink})`;
+							const codexCode = codex.code || '# No code available';
+							const aiPrompt = `Explain the governance rules, purpose, and implications of this codex in plain language that a non-programmer citizen can understand. Do NOT explain the programming syntax or code structure. Focus on: what rules or policies this codex establishes, what it controls or automates, how it affects governance and citizens, and any safeguards or conditions it enforces.\n\nCodex name: "${codex.name}"\nCodex code:\n\`\`\`python\n${codexCode}\n\`\`\``;
+							setTimeout(() => sendExplainMessage(displayMessage, aiPrompt), 300);
 						}
 					}
 				}).catch((err: any) => {
 					console.error('Failed to fetch codex for explanation:', err);
 				});
 			}
-			// Clean the URL so the param doesn't persist on refresh
-			window.history.replaceState({}, '', window.location.pathname);
 		} catch (err) {
 			console.error('Error handling explain param:', err);
+		}
+	}
+
+	// Send an explain message: shows displayText in chat but sends aiPrompt to the API
+	async function sendExplainMessage(displayText: string, aiPrompt: string): Promise<void> {
+		// Add the user-visible message (with link, no code dump)
+		messages = [...messages, { text: displayText, isUser: true }];
+		isLoading = true;
+		error = '';
+
+		try {
+			const payload = {
+				question: aiPrompt,
+				realm_principal: REALM_CANISTER_ID,
+				user_principal: userPrincipal,
+				stream: true,
+				persona: selectedAssistant?.id || 'ashoka'
+			};
+
+			const response = await fetch(API_URL, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Accept': 'text/event-stream'
+				},
+				body: JSON.stringify(payload)
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! Status: ${response.status}`);
+			}
+
+			const reader = response.body?.getReader();
+			if (!reader) {
+				throw new Error('Response body is not readable');
+			}
+
+			const decoder = new TextDecoder();
+			let accumulatedText = '';
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					const chunk = decoder.decode(value, { stream: true });
+					accumulatedText += chunk;
+
+					if (messages.length === 0 || messages[messages.length - 1].isUser) {
+						messages = [...messages, { text: accumulatedText, isUser: false }];
+					} else {
+						messages = messages.map((msg, index) =>
+							index === messages.length - 1 && !msg.isUser
+								? { ...msg, text: accumulatedText }
+								: msg
+						);
+					}
+				}
+			} finally {
+				reader.releaseLock();
+			}
+
+			if (!accumulatedText.trim()) {
+				if (messages.length > 0 && !messages[messages.length - 1].isUser) {
+					messages = messages.map((msg, index) =>
+						index === messages.length - 1
+							? { ...msg, text: "No response from LLM" }
+							: msg
+					);
+				} else {
+					messages = [...messages, { text: "No response from LLM", isUser: false }];
+				}
+			}
+
+			isLoading = false;
+			await fetchSuggestions();
+		} catch (err) {
+			console.error("Error calling LLM:", err);
+			if (err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'))) {
+				error = $_('extensions.llm_chat.error_connection');
+			} else if (err instanceof Error && err.message.includes('HTTP error')) {
+				error = $_('extensions.llm_chat.error_server');
+			} else {
+				error = $_('extensions.llm_chat.error_response');
+			}
+			if (messages.length > 0 && !messages[messages.length - 1].isUser) {
+				messages = messages.slice(0, -1);
+			}
+		} finally {
+			isLoading = false;
 		}
 	}
 
