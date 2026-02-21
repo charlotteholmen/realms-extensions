@@ -101,11 +101,16 @@
 		// Initialize API URL
 		initializeApiUrl();
 		
+		// Check for ?explain=codex:<id> query param early (before suggestions load)
+		handleExplainParam();
+
 		// Fetch available assistant personas
 		await fetchAssistants();
 		
-		// Fetch initial suggestions
-		await fetchSuggestions();
+		// Fetch initial suggestions (skip if explain mode — the explain will trigger its own)
+		if (!isExplainMode) {
+			await fetchSuggestions();
+		}
 		
 		// Initialize textarea auto-resize
 		setTimeout(() => {
@@ -113,13 +118,12 @@
 				autoResizeTextarea();
 			}
 		}, 100);
-
-		// Check for ?explain=codex:<id> query param (e.g. from Codex Viewer "Explain" button)
-		handleExplainParam();
 	});
 
 	// Pending explain request: codex ID to pass as explain_codex_id in the next API call
 	let pendingExplainCodexId: string | null = null;
+	// Flag to suppress welcome message while explain is loading
+	let isExplainMode = false;
 
 	function handleExplainParam() {
 		try {
@@ -129,6 +133,7 @@
 
 			const [objType, objId] = explain.split(':');
 			if (objType === 'codex' && objId) {
+				isExplainMode = true;
 				// Fetch codex name for display, but let Geister API handle the code + governance framing
 				backend.extension_sync_call({
 					extension_name: 'codex_viewer',
@@ -146,6 +151,7 @@
 					}
 				}).catch((err: any) => {
 					console.error('Failed to fetch codex for explanation:', err);
+					isExplainMode = false;
 				});
 			}
 		} catch (err) {
@@ -459,7 +465,7 @@
 				class="flex-grow overflow-y-auto p-4 bg-gray-50 dark:bg-gray-800"
 				style="min-height: 300px;"
 			>
-				{#if messages.length === 0}
+				{#if messages.length === 0 && !isExplainMode}
 					<!-- Welcome message with assistant avatar -->
 					<div class="flex justify-start mb-6 mt-8">
 						<div class="flex items-start space-x-4 max-w-[85%]">
@@ -505,10 +511,10 @@
 								
 								<div class="flex-1">
 									{#if message.isUser}
-										<!-- User Message -->
-										<div class={cn(styles.button.primary(), "rounded-2xl rounded-br-md px-5 py-4 shadow-lg")}>
-											<pre class="text-sm leading-relaxed whitespace-pre-wrap font-sans m-0">{message.text}</pre>
-										</div>
+								<!-- User Message -->
+								<div class={cn(styles.button.primary(), "rounded-2xl rounded-br-md px-5 py-4 shadow-lg")}>
+									<div class="text-sm leading-relaxed whitespace-pre-wrap font-sans m-0 user-message-content"><SvelteMarkdown source={message.text} /></div>
+								</div>
 									{:else}
 										<!-- Ashoka AI Message (no bubble, just content) -->
 										<div class="markdown-content prose prose-sm max-w-none dark:prose-invert">
@@ -683,6 +689,21 @@
 		margin-bottom: 0;
 	}
 	
+	/* User message links (on primary/dark background) */
+	.user-message-content :global(a) {
+		color: inherit;
+		text-decoration: underline;
+	}
+
+	.user-message-content :global(a:hover) {
+		opacity: 0.85;
+	}
+
+	.user-message-content :global(p) {
+		margin: 0 !important;
+		display: inline;
+	}
+
 	.markdown-content :global(h1) {
 		font-size: 1.5rem;
 		font-weight: 700;
