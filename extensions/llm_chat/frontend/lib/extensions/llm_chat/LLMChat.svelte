@@ -329,19 +329,34 @@
 						break;
 					}
 
-        // Decode the chunk
+        // Decode the chunk (may contain multiple SSE lines)
         const chunk = decoder.decode(value, { stream: true });
-        console.log('Received chunk:', chunk);
         
-        // Since your server sends plain text, just accumulate it directly
-        accumulatedText += chunk;
+        // Parse SSE format: "data: {\"text\": \"...\"}\n\n"
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const payload = line.slice(6);
+            if (payload === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(payload);
+              if (parsed.text) {
+                accumulatedText += parsed.text;
+              }
+            } catch {
+              // Fallback: treat as plain text
+              accumulatedText += payload;
+            }
+          } else if (line.trim() && !line.startsWith(':')) {
+            // Plain text fallback (non-SSE server)
+            accumulatedText += line;
+          }
+        }
         
         // Add or update the AI message
-        if (messages.length === 0 || messages[messages.length - 1].isUser) {
-          // Add new AI message if the last message is from user or no messages
+        if (accumulatedText && (messages.length === 0 || messages[messages.length - 1].isUser)) {
           messages = [...messages, { text: accumulatedText, isUser: false }];
-        } else {
-          // Update the last AI message
+        } else if (accumulatedText) {
           messages = messages.map((msg, index) => 
             index === messages.length - 1 && !msg.isUser
               ? { ...msg, text: accumulatedText }
