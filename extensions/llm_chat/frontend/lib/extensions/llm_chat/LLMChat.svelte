@@ -118,6 +118,9 @@
 		handleExplainParam();
 	});
 
+	// Pending explain request: codex ID to pass as explain_codex_id in the next API call
+	let pendingExplainCodexId: string | null = null;
+
 	function handleExplainParam() {
 		try {
 			const params = new URLSearchParams(window.location.search);
@@ -126,7 +129,7 @@
 
 			const [objType, objId] = explain.split(':');
 			if (objType === 'codex' && objId) {
-				// Fetch the codex details then auto-send a governance explanation request
+				// Fetch codex name for display, but let Geister API handle the code + governance framing
 				backend.extension_sync_call({
 					extension_name: 'codex_viewer',
 					function_name: 'get_codex_details',
@@ -134,15 +137,12 @@
 				}).then((response: any) => {
 					if (response.success) {
 						const data = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-						if (data.codex) {
-							const codex = data.codex;
-							// Send with a display message (link) different from the AI prompt (code + governance framing)
-							const codexLink = `/extensions/codex_viewer/${objId}`;
-							const displayMessage = `Please explain this codex: [${codex.name}](${codexLink})`;
-							const codexCode = codex.code || '# No code available';
-							const aiPrompt = `Explain the governance rules, purpose, and implications of this codex in plain language that a non-programmer citizen can understand. Do NOT explain the programming syntax or code structure. Focus on: what rules or policies this codex establishes, what it controls or automates, how it affects governance and citizens, and any safeguards or conditions it enforces.\n\nCodex name: "${codex.name}"\nCodex code:\n\`\`\`python\n${codexCode}\n\`\`\``;
-							setTimeout(() => sendExplainMessage(displayMessage, aiPrompt), 300);
-						}
+						const codexName = data.codex?.name || `codex_${objId}`;
+						const codexLink = `/extensions/codex_viewer/${objId}`;
+						// Set the pending explain ID so sendMessage includes it in the payload
+						pendingExplainCodexId = objId;
+						newMessage = `Please explain this codex: [${codexName}](${codexLink})`;
+						setTimeout(() => sendMessage(), 300);
 					}
 				}).catch((err: any) => {
 					console.error('Failed to fetch codex for explanation:', err);
@@ -150,96 +150,6 @@
 			}
 		} catch (err) {
 			console.error('Error handling explain param:', err);
-		}
-	}
-
-	// Send an explain message: shows displayText in chat but sends aiPrompt to the API
-	async function sendExplainMessage(displayText: string, aiPrompt: string): Promise<void> {
-		// Add the user-visible message (with link, no code dump)
-		messages = [...messages, { text: displayText, isUser: true }];
-		isLoading = true;
-		error = '';
-
-		try {
-			const payload = {
-				question: aiPrompt,
-				realm_principal: REALM_CANISTER_ID,
-				user_principal: userPrincipal,
-				stream: true,
-				persona: selectedAssistant?.id || 'ashoka'
-			};
-
-			const response = await fetch(API_URL, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Accept': 'text/event-stream'
-				},
-				body: JSON.stringify(payload)
-			});
-
-			if (!response.ok) {
-				throw new Error(`HTTP error! Status: ${response.status}`);
-			}
-
-			const reader = response.body?.getReader();
-			if (!reader) {
-				throw new Error('Response body is not readable');
-			}
-
-			const decoder = new TextDecoder();
-			let accumulatedText = '';
-
-			try {
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-
-					const chunk = decoder.decode(value, { stream: true });
-					accumulatedText += chunk;
-
-					if (messages.length === 0 || messages[messages.length - 1].isUser) {
-						messages = [...messages, { text: accumulatedText, isUser: false }];
-					} else {
-						messages = messages.map((msg, index) =>
-							index === messages.length - 1 && !msg.isUser
-								? { ...msg, text: accumulatedText }
-								: msg
-						);
-					}
-				}
-			} finally {
-				reader.releaseLock();
-			}
-
-			if (!accumulatedText.trim()) {
-				if (messages.length > 0 && !messages[messages.length - 1].isUser) {
-					messages = messages.map((msg, index) =>
-						index === messages.length - 1
-							? { ...msg, text: "No response from LLM" }
-							: msg
-					);
-				} else {
-					messages = [...messages, { text: "No response from LLM", isUser: false }];
-				}
-			}
-
-			isLoading = false;
-			await fetchSuggestions();
-		} catch (err) {
-			console.error("Error calling LLM:", err);
-			if (err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'))) {
-				error = $_('extensions.llm_chat.error_connection');
-			} else if (err instanceof Error && err.message.includes('HTTP error')) {
-				error = $_('extensions.llm_chat.error_server');
-			} else {
-				error = $_('extensions.llm_chat.error_response');
-			}
-			if (messages.length > 0 && !messages[messages.length - 1].isUser) {
-				messages = messages.slice(0, -1);
-			}
-		} finally {
-			isLoading = false;
 		}
 	}
 
@@ -366,13 +276,19 @@
 		// We'll add the AI message when we start receiving content
 		
 		try {
-			const payload = {
+			const payload: Record<string, any> = {
 				question: messageToSend,
 				realm_principal: REALM_CANISTER_ID,
 				user_principal: userPrincipal,
 				stream: true,
 				persona: selectedAssistant?.id || 'ashoka'
 			};
+
+			// If this is a codex explain request, include the codex ID so the server fetches code + frames the prompt
+			if (pendingExplainCodexId) {
+				payload.explain_codex_id = pendingExplainCodexId;
+				pendingExplainCodexId = null;
+			}
 
 			console.log("Sending payload to LLM API:", payload);
 			
