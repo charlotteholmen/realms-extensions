@@ -391,7 +391,6 @@
 			// Set height based on content, with min and max constraints
 			const newHeight = Math.max(40, Math.min(textareaElement.scrollHeight, 120));
 			textareaElement.style.height = newHeight + 'px';
-			console.log('Auto-resize triggered, new height:', newHeight);
 		}
 	}
 
@@ -407,7 +406,6 @@
 
 	// Handle input changes for auto-resize
 	function handleInput(): void {
-		console.log('Input event triggered');
 		autoResizeTextarea();
 	}
 
