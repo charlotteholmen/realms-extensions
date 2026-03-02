@@ -3,6 +3,7 @@
 	import { Card, Spinner, Alert, Table, TableBody, TableBodyCell, TableBodyRow, TableHead, TableHeadCell, Badge, Button, Tooltip, Modal } from 'flowbite-svelte';
 	import { DollarOutline, CheckCircleOutline, ClockOutline, ExclamationCircleOutline, DownloadOutline, CreditCardOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
+	import { realmName } from '$lib/stores/realmInfo';
 	
 	// Props
 	export let userId: string;
@@ -28,6 +29,25 @@
 	
 	// Demo feature state
 	let demoPayingInvoiceId: string | null = null;
+
+	// Build GitHub issue URL with context
+	$: supportUrl = (() => {
+		let version = 'unknown';
+		let commitHash = 'unknown';
+		if (typeof document !== 'undefined') {
+			const vMeta = document.querySelector('meta[name="version"]');
+			if (vMeta) version = vMeta.getAttribute('content') || version;
+			const cMeta = document.querySelector('meta[name="commit-hash"]');
+			if (cMeta) commitHash = cMeta.getAttribute('content') || commitHash;
+		}
+		const name = $realmName || 'Unknown';
+		const page = typeof window !== 'undefined' ? window.location.href : '';
+		const title = encodeURIComponent(`[Support] Issue in realm ${name}`);
+		const body = encodeURIComponent(
+			`**Realm:** ${name}\n**Version:** ${version}\n**Commit:** ${commitHash}\n**Page:** ${page}\n\n**Description:**\n<!-- Please describe your issue here -->\n`
+		);
+		return `https://github.com/smart-social-contracts/realms/issues/new?title=${title}&body=${body}&labels=user-support`;
+	})();
 	
 	// Calculate percentages for the distribution bar
 	$: totalAmount = invoiceData ? (invoiceData.summary.total_paid + invoiceData.summary.total_pending + invoiceData.summary.total_overdue) : 0;
@@ -431,7 +451,7 @@
 				</div>
 				<div class="flex items-center space-x-3">
 					<Button color="light" size="sm">View FAQ</Button>
-					<Button color="dark" size="sm">Contact Support</Button>
+					<a href={supportUrl} target="_blank" rel="noopener noreferrer"><Button color="dark" size="sm">Contact Support</Button></a>
 				</div>
 			</div>
 		</div>
