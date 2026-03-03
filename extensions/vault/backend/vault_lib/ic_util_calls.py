@@ -1,8 +1,8 @@
 import traceback
 from typing import List, Optional
 
-from kybra import Async, Principal, nat
-from kybra_simple_logging import get_logger
+from basilisk import Async, Principal, nat
+from ic_python_logging import get_logger
 
 from .candid_types import (
     Account,
@@ -35,7 +35,7 @@ def set_account_mock_transaction(
     Returns:
         Dictionary containing the mock transaction data
     """
-    from kybra import ic
+    from basilisk import ic
 
     from .entities import Balance, VaultTransaction, test_mode_data
 

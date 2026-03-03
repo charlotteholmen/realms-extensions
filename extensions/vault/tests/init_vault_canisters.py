@@ -3,7 +3,7 @@
 import json
 import traceback
 
-from kybra import ic
+from basilisk import ic
 
 # Canister IDs will be injected here by test_entrypoint.sh
 CKBTC_LEDGER_ID = "PLACEHOLDER_LEDGER_ID"

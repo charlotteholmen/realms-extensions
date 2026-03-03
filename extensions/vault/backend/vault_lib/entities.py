@@ -1,4 +1,4 @@
-from kybra_simple_db import (
+from ic_python_db import (
     Boolean,
     Entity,
     Integer,

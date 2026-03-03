@@ -1,6 +1,6 @@
 """Test vault refresh to verify transactions are synced"""
 
-from kybra import ic
+from basilisk import ic
 
 
 async def test_refresh():

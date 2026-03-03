@@ -2,13 +2,13 @@ import json
 import secrets
 from urllib.parse import quote
 
-from kybra import Async, CallResult, ic, match, query, update
-from kybra.canisters.management import (
+from basilisk import Async, CallResult, ic, match, query, update
+from basilisk.canisters.management import (
     HttpResponse,
     management_canister,
 )
-from kybra_simple_logging import get_logger
-from kybra_simple_db import String
+from ic_python_logging import get_logger
+from ic_python_db import String
 from core.extensions import create_extension_entity_class
 
 logger = get_logger("passport_verification")

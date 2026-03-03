@@ -1,7 +1,7 @@
 import json
 import traceback
 
-from kybra import Opt, Principal, Record, Vec, blob, ic, nat64, text
+from basilisk import Opt, Principal, Record, Vec, blob, ic, nat64, text
 
 
 class LLMChatResponse(Record):

@@ -12,9 +12,9 @@ Handles:
 import json
 from typing import List, Optional, Dict, Any
 
-from kybra import ic
-from kybra_simple_db import Entity, String, Integer, Float, Boolean
-from kybra_simple_logging import get_logger
+from basilisk import ic
+from ic_python_db import Entity, String, Integer, Float, Boolean
+from ic_python_logging import get_logger
 
 logger = get_logger("marketplace")
 

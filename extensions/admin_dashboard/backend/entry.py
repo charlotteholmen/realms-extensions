@@ -12,8 +12,8 @@ from io import StringIO
 from typing import Any, Dict, List
 
 import ggg
-from kybra_simple_db import Entity
-from kybra_simple_logging import get_logger
+from ic_python_db import Entity
+from ic_python_logging import get_logger
 
 from .models import RegistrationCode
 

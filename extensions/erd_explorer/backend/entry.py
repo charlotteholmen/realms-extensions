@@ -35,7 +35,7 @@ from ggg import (
     Land, License, Mandate, Organization, Proposal, Realm, Task, TaskExecution,
     TaskSchedule, Trade, Transfer, Treasury, User, UserProfile, Vote,
 )
-from kybra_simple_db import (
+from ic_python_db import (
     Boolean,
     Entity,
     Float,

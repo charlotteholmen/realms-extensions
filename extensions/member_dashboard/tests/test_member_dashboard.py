@@ -45,7 +45,7 @@ def async_task():
     # Test 3: Test extension API - get_dashboard_summary
     print_info("Test 3: Test get_dashboard_summary API...")
     try:
-        from kybra import ic
+        from basilisk import ic
 
         # Call the extension API
         result_json = yield ic.call(

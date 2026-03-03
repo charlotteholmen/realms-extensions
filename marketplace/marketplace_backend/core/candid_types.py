@@ -3,7 +3,7 @@ Candid types for the Marketplace Backend Canister.
 Defines all record types for licenses, listings, purchases, and payouts.
 """
 
-from kybra import Record, Variant, Vec, Opt, nat64, text
+from basilisk import Record, Variant, Vec, Opt, nat64, text
 
 
 class DeveloperLicense(Record):

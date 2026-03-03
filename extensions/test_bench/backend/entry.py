@@ -1,4 +1,4 @@
-from kybra import Record, ic, text
+from basilisk import Record, ic, text
 
 """
 

@@ -10,8 +10,8 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from ggg import Proposal, User, Vote, Codex
-from kybra import Async
-from kybra_simple_logging import get_logger
+from basilisk import Async
+from ic_python_logging import get_logger
 from core.http_utils import download_file_from_url
 
 logger = get_logger("extensions.voting")

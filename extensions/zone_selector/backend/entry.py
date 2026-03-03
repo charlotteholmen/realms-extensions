@@ -14,7 +14,7 @@ except ImportError:
     H3_AVAILABLE = False
 
 from ggg import Zone, User
-from kybra_simple_logging import get_logger
+from ic_python_logging import get_logger
 
 logger = get_logger("extensions.zone_selector")
 

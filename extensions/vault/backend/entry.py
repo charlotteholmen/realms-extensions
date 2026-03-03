@@ -10,9 +10,9 @@ import traceback
 from typing import Any, Dict
 
 from ggg import Balance, Transfer
-from kybra import Async, Principal, ic
-from kybra_simple_db import Database
-from kybra_simple_logging import get_logger
+from basilisk import Async, Principal, ic
+from ic_python_db import Database
+from ic_python_logging import get_logger
 
 from .vault_lib import entities as vault_entities
 from .vault_lib.candid_types import Account, ICRCLedger, TransferArg

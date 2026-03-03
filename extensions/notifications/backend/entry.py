@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from ggg import Notification, User
-from kybra_simple_logging import get_logger
+from ic_python_logging import get_logger
 
 logger = get_logger("notifications.entry")
 

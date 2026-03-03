@@ -8,7 +8,7 @@ import traceback
 from typing import Any, Dict, List
 
 from ggg import Codex
-from kybra_simple_logging import get_logger
+from ic_python_logging import get_logger
 
 logger = get_logger("extensions.codex_viewer")
 

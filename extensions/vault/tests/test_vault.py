@@ -7,7 +7,7 @@ import traceback
 from pprint import pformat
 
 from ggg import Treasury
-from kybra import ic
+from basilisk import ic
 
 
 def async_task():

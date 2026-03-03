@@ -10,8 +10,8 @@ from typing import Any, Dict, List
 import ggg
 from core.task_manager import TaskManager
 from ggg import Codex, Task, TaskExecution, TaskSchedule
-from kybra import ic
-from kybra_simple_logging import get_logger
+from basilisk import ic
+from ic_python_logging import get_logger
 
 logger = get_logger("extensions.task_monitor")
 
@@ -346,7 +346,7 @@ def get_execution_logs(args):
         if not logger_name:
             return json.dumps({"success": False, "error": "logger_name is required"})
 
-        from kybra_simple_logging import get_logs
+        from ic_python_logging import get_logs
 
         all_logs = get_logs(max_entries=limit * 10)
         exec_logs = [
@@ -619,7 +619,7 @@ def get_task_logs(args):
             return json.dumps({"success": False, "error": "task_id is required"})
 
         # Import the logging module to access logs
-        from kybra_simple_logging import get_logs
+        from ic_python_logging import get_logs
 
         # Get logs for this task - logs are stored with pattern task_{task_id}_{execution_id}
         # We need to search for all logs that start with task_{task_id}_

@@ -35,7 +35,7 @@ from ggg import (
     appeal_file,
     appeal_decide,
 )
-from kybra_simple_logging import get_logger
+from ic_python_logging import get_logger
 
 logger = get_logger("extensions.justice_litigation")
 

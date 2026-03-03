@@ -8,8 +8,8 @@ import secrets
 import string
 from datetime import datetime, timedelta
 
-from kybra_simple_db import Entity, TimestampedMixin
-from kybra_simple_db.properties import Integer, String
+from ic_python_db import Entity, TimestampedMixin
+from ic_python_db.properties import Integer, String
 
 
 class RegistrationCode(Entity, TimestampedMixin):

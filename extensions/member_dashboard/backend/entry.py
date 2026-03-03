@@ -6,8 +6,8 @@ from typing import Any, Dict
 from datetime import datetime
 
 from ggg import Invoice, PaymentAccount, Service, User
-from kybra import Async, ic
-from kybra_simple_logging import get_logger
+from basilisk import Async, ic
+from ic_python_logging import get_logger
 
 # Initialize logger
 logger = get_logger("member_dashboard")
@@ -333,7 +333,7 @@ def check_invoice_payment(args: str) -> Async[str]:
         # Import vault utilities for ledger queries
         from extension_packages.vault.vault_lib.entities import Canisters
         from extension_packages.vault.vault_lib.candid_types import ICRCLedger, Account
-        from kybra import Principal
+        from basilisk import Principal
 
         # Get ledger canister
         ledger_canister = Canisters["ckBTC ledger"]

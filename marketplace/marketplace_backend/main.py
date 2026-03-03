@@ -9,7 +9,7 @@ Provides Candid endpoints for:
 - Marketplace statistics
 """
 
-from kybra import (
+from basilisk import (
     Opt,
     Principal,
     StableBTreeMap,
@@ -23,8 +23,8 @@ from kybra import (
     update,
     void,
 )
-from kybra_simple_db import Database
-from kybra_simple_logging import get_logger
+from ic_python_db import Database
+from ic_python_logging import get_logger
 
 from api.marketplace import (
     check_developer_license,

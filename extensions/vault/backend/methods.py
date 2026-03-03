@@ -8,8 +8,8 @@ These methods are registered via the vault extension manifest and
 dynamically bound to the core entities at runtime.
 """
 
-from kybra import Async
-from kybra_simple_logging import get_logger
+from basilisk import Async
+from ic_python_logging import get_logger
 
 from .entry import _refresh, _transfer
 
