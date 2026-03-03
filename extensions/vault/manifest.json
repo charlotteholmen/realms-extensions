@@ -32,9 +32,9 @@
   "url_path": null,
   "show_in_sidebar": true,
   "python_dependencies": [
-    "kybra==0.7.*",
-    "kybra-simple-db>=0.4.0",
-    "kybra-simple-logging==0.2.*"
+    "ic-basilisk==0.8.34",
+    "ic-python-db==0.7.1",
+    "ic-python-logging==0.3.1"
   ],
   "entity_method_overrides": [
     {

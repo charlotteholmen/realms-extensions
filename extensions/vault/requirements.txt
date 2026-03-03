@@ -1,9 +1,9 @@
 # Extension Python Dependencies
 # These will be checked during extension installation
 
-kybra==0.7.*
-kybra-simple-logging==0.2.*
-kybra-simple-db==0.5.1
+ic-basilisk==0.8.34
+ic-python-logging==0.3.1
+ic-python-db==0.7.1
 
 
 # Development dependencies (optional)
