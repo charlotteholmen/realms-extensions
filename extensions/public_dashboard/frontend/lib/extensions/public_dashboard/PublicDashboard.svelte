@@ -6,10 +6,12 @@
 	import { backend } from '$lib/canisters';
 	import { writable } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
-	import { Avatar, Card, Heading, Spinner } from 'flowbite-svelte';
+	import { Avatar, Badge, Card, Heading, Spinner } from 'flowbite-svelte';
 
 	// --- State ---
 	let statusData: any = null;
+	let realmInfo: any = null;
+	let codexes: any[] = [];
 	let latestUsers: any[] = [];
 	let loading = true;
 
@@ -152,8 +154,10 @@
 		loading = true;
 		try {
 			// Parallel: status + entity lists + latest users
-			const [statusResp, usersResp, orgsResp, transfersResp, latestResp] = await Promise.all([
+			const [statusResp, realmResp, codexResp, usersResp, orgsResp, transfersResp, latestResp] = await Promise.all([
 				backend.status(),
+				backend.get_objects_paginated("Realm", 0, 1, "asc"),
+				backend.get_objects_paginated("Codex", 0, 50, "asc"),
 				backend.get_objects_paginated("User", 0, 500, "asc"),
 				backend.get_objects_paginated("Organization", 0, 500, "asc"),
 				backend.get_objects_paginated("Transfer", 0, 500, "asc"),
@@ -163,6 +167,15 @@
 			if (statusResp?.success && statusResp?.data?.status) {
 				statusData = statusResp.data.status;
 			}
+
+			// Realm info (first realm)
+			const realms = parseEntities(realmResp);
+			if (realms.length > 0) {
+				realmInfo = realms[0];
+			}
+
+			// Codexes (filter out internal/temp ones starting with _)
+			codexes = parseEntities(codexResp).filter((c: any) => c.name && !c.name.startsWith('_'));
 
 			allUsers = parseEntities(usersResp);
 			allOrgs = parseEntities(orgsResp);
@@ -197,6 +210,30 @@
 			<span class="ml-3 text-gray-500">Loading dashboard...</span>
 		</div>
 	{:else}
+		<!-- Realm Hero Section -->
+		{#if realmInfo}
+			<Card size="xl" class="!p-6 bg-gradient-to-r from-blue-50 to-indigo-50">
+				<div class="flex items-start gap-6">
+					{#if realmInfo.logo}
+						<img
+							src={`/images/realm_logo.${realmInfo.logo.split('.').pop() || 'svg'}`}
+							alt={realmInfo.name || 'Realm'}
+							class="w-20 h-20 rounded-xl object-contain bg-white p-2 shadow-sm"
+						/>
+					{/if}
+					<div class="flex-1">
+						<h1 class="text-3xl font-bold text-gray-900 mb-2">{realmInfo.name || 'Realm'}</h1>
+						{#if realmInfo.description}
+							<p class="text-base text-gray-600 leading-relaxed mb-3">{realmInfo.description}</p>
+						{/if}
+						{#if realmInfo.welcome_message}
+							<p class="text-sm text-gray-500 italic">{realmInfo.welcome_message}</p>
+						{/if}
+					</div>
+				</div>
+			</Card>
+		{/if}
+
 		{#if kpiCards.length > 0}
 			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
 				{#each kpiCards as card}
@@ -261,6 +298,29 @@
 			color="#E11D48"
 			on:rangeChange={handleRangeChange}
 		/>
+
+		<!-- Codex List -->
+		{#if codexes.length > 0}
+			<Card size="xl" class="!p-6">
+				<Heading tag="h3" class="text-xl font-semibold mb-1">Codexes</Heading>
+				<p class="text-sm text-gray-500 mb-4">Smart social contracts governing this realm</p>
+				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+					{#each codexes as codex}
+						<div class="flex items-center gap-3 rounded-lg border border-gray-200 p-3 hover:bg-gray-50 transition-colors">
+							<div class="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+								<span class="text-indigo-600 font-bold text-sm">{(codex.name || '?')[0].toUpperCase()}</span>
+							</div>
+							<div class="flex-1 min-w-0">
+								<p class="text-sm font-medium text-gray-900 truncate">{codex.name}</p>
+								{#if codex.url}
+									<a href={codex.url} target="_blank" rel="noopener" class="text-xs text-blue-500 hover:underline truncate block">View source</a>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+			</Card>
+		{/if}
 
 		<OrganizationTable />
 		<div class="grid grid-cols-1 gap-4 xl:grid-cols-1">
