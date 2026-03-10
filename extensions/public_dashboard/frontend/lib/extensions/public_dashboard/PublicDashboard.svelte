@@ -212,8 +212,19 @@
 	{:else}
 		<!-- Realm Hero Section -->
 		{#if realmInfo}
-			<Card size="xl" class="!p-6 bg-gradient-to-r from-blue-50 to-indigo-50">
-				<div class="flex items-start gap-6">
+			{@const welcomeExt = realmInfo.welcome_image ? (realmInfo.welcome_image.split('.').pop() || 'png') : ''}
+			{@const bgImage = realmInfo.welcome_image ? `/images/welcome.${welcomeExt}` : ''}
+			<Card size="xl" class="!p-0 overflow-hidden relative">
+				{#if bgImage}
+					<div
+						class="absolute inset-0 bg-cover bg-center"
+						style="background-image: url('{bgImage}');"
+					></div>
+					<div class="absolute inset-0 bg-white/80 backdrop-blur-sm"></div>
+				{:else}
+					<div class="absolute inset-0 bg-gradient-to-r from-blue-50 to-indigo-50"></div>
+				{/if}
+				<div class="relative p-6 flex items-start gap-6">
 					{#if realmInfo.logo}
 						<img
 							src={`/images/realm_logo.${realmInfo.logo.split('.').pop() || 'svg'}`}
@@ -224,10 +235,10 @@
 					<div class="flex-1">
 						<h1 class="text-3xl font-bold text-gray-900 mb-2">{realmInfo.name || 'Realm'}</h1>
 						{#if realmInfo.description}
-							<p class="text-base text-gray-600 leading-relaxed mb-3">{realmInfo.description}</p>
+							<p class="text-base text-gray-700 leading-relaxed mb-3">{realmInfo.description}</p>
 						{/if}
 						{#if realmInfo.welcome_message}
-							<p class="text-sm text-gray-500 italic">{realmInfo.welcome_message}</p>
+							<p class="text-sm text-gray-600 italic">{realmInfo.welcome_message}</p>
 						{/if}
 					</div>
 				</div>
