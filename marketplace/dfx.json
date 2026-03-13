@@ -22,7 +22,7 @@
       "dependencies": ["marketplace_backend"]
     },
     "internet_identity": {
-      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "candid": "https://github.com/dfinity/internet-identity/releases/download/release-2026-03-09/internet_identity.did",
       "frontend": {},
       "remote": {
         "id": {
@@ -30,7 +30,7 @@
         }
       },
       "type": "custom",
-      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+      "wasm": "https://github.com/dfinity/internet-identity/releases/download/release-2026-03-09/internet_identity_dev.wasm.gz"
     }
   },
   "defaults": {
