@@ -7,15 +7,15 @@ No separate vault canister is required - all logic runs in the same canister for
 
 import json
 import traceback
-from typing import Any, Dict
+from typing import Dict
 
 from ggg import Balance, Transfer
 from basilisk import Async, Principal, ic
+from basilisk.os.wallet import Wallet
 from ic_python_db import Database
 from ic_python_logging import get_logger
 
 from .vault_lib import entities as vault_entities
-from .vault_lib.candid_types import Account, ICRCLedger, TransferArg
 from .vault_lib.constants import (
     CANISTER_PRINCIPALS,
     DEFAULT_TOKEN,
@@ -24,10 +24,10 @@ from .vault_lib.constants import (
     REFRESH_COOLDOWN,
 )
 from .vault_lib.entities import Canisters, KnownSubaccount, app_data
-from .vault_lib.ic_util_calls import (
-    get_account_transactions,
-    get_vault_balance_from_ledger,
-)
+from .vault_lib.ic_util_calls import get_account_transactions
+
+# Singleton Wallet instance — initialized in initialize()
+_wallet = Wallet()
 
 logger = get_logger("extensions.vault")
 
@@ -71,6 +71,10 @@ def register_entities():
     """Register vault entity types with the Database."""
 
     logger.info("Registering vault entity types...")
+
+    # Import Wallet entity types so they get registered alongside vault entities
+    from basilisk.os.entities import Token, WalletBalance, WalletTransfer
+
     vault_entity_types = [
         vault_entities.ApplicationData,
         vault_entities.TestModeData,
@@ -78,6 +82,9 @@ def register_entities():
         vault_entities.Category,
         # vault_entities.VaultTransaction,
         # vault_entities.Balance,
+        Token,
+        WalletBalance,
+        WalletTransfer,
     ]
 
     for entity_type in vault_entity_types:
@@ -95,38 +102,22 @@ def register_entities():
 def initialize(args: str):
     logger.info("Initializing vault...")
 
-    # Initialize all supported tokens from CANISTER_PRINCIPALS
+    # Register tokens via Basilisk Wallet (replaces manual Canisters entity creation)
     for token_name, token_config in CANISTER_PRINCIPALS.items():
+        _wallet.register_token(
+            name=token_name,
+            ledger=token_config["ledger"],
+            indexer=token_config["indexer"],
+        )
+
+        # Keep legacy Canisters entities in sync for backward compatibility
         ledger_id = f"{token_name} ledger"
         indexer_id = f"{token_name} indexer"
-        
+
         if not Canisters[ledger_id]:
-            logger.info(
-                f"Creating canister record '{ledger_id}' with principal: {token_config['ledger']}"
-            )
             Canisters(_id=ledger_id, principal=token_config["ledger"])
-        else:
-            logger.info(
-                f"Canister record '{ledger_id}' already exists with principal: {Canisters[ledger_id].principal}"
-            )
-
         if not Canisters[indexer_id]:
-            logger.info(
-                f"Creating canister record '{indexer_id}' with principal: {token_config['indexer']}"
-            )
             Canisters(_id=indexer_id, principal=token_config["indexer"])
-        else:
-            logger.info(
-                f"Canister record '{indexer_id}' already exists with principal: {Canisters[indexer_id].principal}"
-            )
-
-    # TODO: remove, not needed anymore
-    # if not app_data().admin_principal:
-    #     new_admin_principal = (
-    #         admin_principal.to_str() if admin_principal else ic.caller().to_str()
-    #     )
-    #     logger.info(f"Setting admin principal to {new_admin_principal}")
-    #     app_data().admin_principal = new_admin_principal
 
     if not app_data().max_results:
         logger.info(f"Setting max results to {MAX_RESULTS}")
@@ -137,7 +128,7 @@ def initialize(args: str):
         app_data().max_iteration_count = MAX_ITERATION_COUNT
 
     logger.info(
-        f"Canisters: {[canister.serialize() for canister in Canisters.instances()]}"
+        f"Tokens registered: {[t['name'] for t in _wallet.list_tokens()]}"
     )
     logger.info(f"Max results: {app_data().max_results}")
     logger.info(f"Max iteration_count: {app_data().max_iteration_count}")
@@ -354,6 +345,9 @@ def _transfer(
     """
     Perform an ICRC-1 transfer from the vault.
 
+    Delegates the inter-canister call to ``basilisk.os.Wallet.transfer()``
+    while keeping Realms-specific admin checks and entity updates.
+
     Args:
         to_principal: Recipient's principal ID
         amount: Amount to transfer in smallest units (e.g., satoshis for ckBTC)
@@ -381,100 +375,50 @@ def _transfer(
         if app.admin_principal and caller != app.admin_principal:
             return {"success": False, "error": "Only admin can transfer"}
 
-        # Get ledger canister for the specified token
-        ledger_id = f"{token} ledger"
-        ledger_canister = Canisters[ledger_id]
-        if not ledger_canister:
-            return {"success": False, "error": f"{token} ledger not configured"}
+        # Convert subaccount hex strings to bytes if provided
+        to_subaccount = bytes.fromhex(to_subaccount_hex) if to_subaccount_hex else None
+        from_subaccount = bytes.fromhex(from_subaccount_hex) if from_subaccount_hex else None
 
-        # Convert subaccount hex strings to byte lists if provided
-        to_subaccount = None
-        if to_subaccount_hex:
-            to_subaccount = list(bytes.fromhex(to_subaccount_hex))
-
-        from_subaccount = None
-        if from_subaccount_hex:
-            from_subaccount = bytes.fromhex(from_subaccount_hex)
-
-        # Perform ICRC transfer
-        ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
-        result = yield ledger.icrc1_transfer(
-            TransferArg(
-                to=Account(
-                    owner=Principal.from_str(to_principal), subaccount=to_subaccount
-                ),
-                fee=None,
-                memo=None,
-                from_subaccount=from_subaccount,
-                created_at_time=None,
-                amount=amount,
-            )
+        # Delegate to Basilisk Wallet
+        result = yield _wallet.transfer(
+            token_name=token,
+            to_principal=to_principal,
+            amount=amount,
+            from_subaccount=from_subaccount,
+            to_subaccount=to_subaccount,
         )
 
-        # Handle result
-        if hasattr(result, "Ok") and result.Ok is not None:
-            transfer_result = result.Ok
-            logger.info(f"Transfer call successful: {transfer_result}")
+        if "ok" in result:
+            tx_id = str(result["ok"])
 
-            # Check if the transfer itself succeeded
-            if isinstance(transfer_result, dict) and "Ok" in transfer_result:
-                tx_id = str(transfer_result["Ok"])
+            # Create Realms Transfer entity for accounting
+            Transfer(
+                id=tx_id,
+                principal_from=ic.id().to_str(),
+                principal_to=to_principal,
+                amount=amount,
+                timestamp=str(ic.time()),
+            )
 
-                # Create transaction record
-                Transfer(
-                    id=tx_id,
-                    principal_from=ic.id().to_str(),
-                    principal_to=to_principal,
-                    amount=amount,
-                    timestamp=str(ic.time()),
-                )
+            # Update Realms Balance entity
+            balance = Balance[to_principal] or Balance(id=to_principal, amount=0)
+            balance.amount -= amount
 
-                # Update balances
-                balance = Balance[to_principal] or Balance(id=to_principal, amount=0)
-                balance.amount -= amount
-
-                logger.info(
-                    f"Successfully transferred {amount} to {to_principal}, tx_id: {tx_id}"
-                )
-                return {
-                    "success": True,
-                    "data": {"TransactionId": {"transaction_id": int(tx_id)}},
-                }
-            elif isinstance(transfer_result, dict) and "Err" in transfer_result:
-                # Transfer failed with ICRC error
-                error = transfer_result["Err"]
-                logger.error(f"Transfer failed: {error}")
-                user_friendly_error = format_transfer_error(error)
-                return {"success": False, "error": user_friendly_error}
-            else:
-                # Unexpected format - treat as tx_id for backwards compatibility
-                tx_id = str(transfer_result)
-                logger.warning(f"Unexpected transfer result format: {transfer_result}")
-                Transfer(
-                    id=tx_id,
-                    principal_from=ic.id().to_str(),
-                    principal_to=to_principal,
-                    amount=amount,
-                    timestamp=str(ic.time()),
-                )
-                balance = Balance[to_principal] or Balance(id=to_principal, amount=0)
-                balance.amount -= amount
-                logger.info(
-                    f"Successfully transferred {amount} to {to_principal}, tx_id: {tx_id}"
-                )
-                return {
-                    "success": True,
-                    "data": {"TransactionId": {"transaction_id": int(tx_id)}},
-                }
-        else:
-            # Inter-canister call failed
-            error = result.Err if hasattr(result, "Err") else "Unknown error"
-            logger.error(f"Transfer call failed: {error}")
+            logger.info(
+                f"Successfully transferred {amount} to {to_principal}, tx_id: {tx_id}"
+            )
             return {
-                "success": False,
-                "error": str(error),
-                "traceback": traceback.format_exc(),
+                "success": True,
+                "data": {"TransactionId": {"transaction_id": int(tx_id)}},
             }
+        elif "err" in result:
+            error = result["err"]
+            logger.error(f"Transfer failed: {error}")
+            user_friendly_error = format_transfer_error(error)
+            return {"success": False, "error": user_friendly_error}
+        else:
+            logger.error(f"Unexpected transfer result: {result}")
+            return {"success": False, "error": f"Unexpected result: {result}"}
 
     except Exception as e:
         logger.error(f"Error in transfer: {str(e)}\n{traceback.format_exc()}")
@@ -908,6 +852,9 @@ def refresh_vault_balance(args: str) -> Async[str]:
     """
     Refresh the vault's balance from the ledger.
 
+    Delegates to ``Wallet.balance_of()`` which queries the ledger and
+    updates the cached WalletBalance entity automatically.
+
     Args:
         args: JSON string with optional parameters:
             - token: str - Token symbol (e.g., "ckBTC", "REALM"). Defaults to DEFAULT_TOKEN.
@@ -915,7 +862,7 @@ def refresh_vault_balance(args: str) -> Async[str]:
     try:
         params = json.loads(args) if args else {}
         token = params.get("token") or DEFAULT_TOKEN
-        
+
         logger.info(f"vault.refresh_vault_balance called for token: {token}")
 
         # Validate token
@@ -924,23 +871,11 @@ def refresh_vault_balance(args: str) -> Async[str]:
                 {"success": False, "error": f"Unknown token: {token}. Supported: {list(CANISTER_PRINCIPALS.keys())}"}
             )
 
-        # Get ledger canister for the specified token
-        ledger_id = f"{token} ledger"
-        ledger_canister = Canisters[ledger_id]
-        if not ledger_canister:
-            return json.dumps(
-                {"success": False, "error": f"{token} ledger not configured"}
-            )
+        # Delegate to Basilisk Wallet — queries ledger and caches result
+        vault_principal_str = ic.id().to_str()
+        balance_amount_int = yield _wallet.balance_of(token)
 
-        # Query vault's balance from ledger using utility function
-        vault_principal = ic.id()
-        vault_principal_str = vault_principal.to_str()
-
-        balance_amount_int = yield get_vault_balance_from_ledger(
-            ledger_canister.principal, vault_principal
-        )
-
-        # Update or create Balance entity (use token-specific key)
+        # Also update Realms Balance entity for backward compatibility
         balance_key = f"{vault_principal_str}:{token}"
         balance = Balance[balance_key]
         if not balance:
