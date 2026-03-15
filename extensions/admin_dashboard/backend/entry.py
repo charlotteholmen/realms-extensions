@@ -240,9 +240,6 @@ def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
                     entity.code = record["code"]
 
             successful += 1
-            # Clear in-memory entity context after each record to prevent
-            # accumulation within the canister call (reduces heap size)
-            Entity._context.clear()
         except Exception as e:
             logger.error(f"Error creating entity: {str(e)}\n{traceback.format_exc()}")
             failed += 1
