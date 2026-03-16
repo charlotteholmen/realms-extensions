@@ -12,7 +12,8 @@ from typing import Any, Dict, List
 from ggg import Proposal, User, Vote, Codex
 from basilisk import Async, ic
 from ic_python_logging import get_logger
-from core.http_utils import download_file_from_url
+# Lazy import: core.http_utils is a wasi-stub at module load time
+# download_file_from_url is imported inside functions that use it
 
 logger = get_logger("extensions.voting")
 
@@ -279,6 +280,7 @@ def fetch_proposal_code(args: str) -> Async[str]:
             return json.dumps({"success": False, "error": "Proposal has no code URL"})
 
         # Fetch code from URL using main.py's download function
+        from core.http_utils import download_file_from_url
         logger.info(f"Fetching code from: {code_url}")
         success, result = yield download_file_from_url(code_url)
         
@@ -390,6 +392,7 @@ def execute_proposal(args: str) -> Async[str]:
         if not code_url:
             return json.dumps({"success": False, "error": "Proposal has no code URL"})
 
+        from core.http_utils import download_file_from_url
         logger.info(f"Fetching code from: {code_url}")
         success, result = yield download_file_from_url(code_url)
         
