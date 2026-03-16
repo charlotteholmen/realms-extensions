@@ -213,7 +213,7 @@ def cast_vote(args: str) -> Dict[str, Any]:
             (
                 v
                 for v in all_votes
-                if v.proposal.id == proposal.id and v.voter.id == voter.id
+                if v.proposal._id == proposal._id and v.voter.id == voter.id
             ),
             None,
         )
@@ -471,7 +471,7 @@ def get_user_vote(args: str) -> str:
         all_votes = Vote.instances()
         user_vote = next(
             (v for v in all_votes 
-             if v.proposal.id == proposal.id and v.voter.id == voter_id),
+             if v.proposal._id == proposal._id and v.voter.id == voter_id),
             None
         )
 
