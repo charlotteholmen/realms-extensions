@@ -134,7 +134,7 @@ def submit_proposal(args: str) -> Dict[str, Any]:
 
         # Generate unique proposal ID using hash to avoid loading all proposals
         import time
-        proposal_id = f"prop_{hashlib.md5(f'{proposer_id}_{time.time()}'.encode()).hexdigest()[:8]}"
+        proposal_id = f"prop_{hashlib.sha256(f'{proposer_id}_{time.time()}'.encode()).hexdigest()[:8]}"
 
         # Create new proposal in database
         new_proposal = Proposal(
