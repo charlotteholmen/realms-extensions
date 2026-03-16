@@ -92,11 +92,8 @@ def get_proposal(args: str) -> Dict[str, Any]:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Find proposal in database
-        all_proposals = Proposal.instances()
-        proposal = next(
-            (p for p in all_proposals if p.proposal_id == proposal_id), None
-        )
+        # Direct lookup by alias (proposal_id)
+        proposal = Proposal[proposal_id]
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -125,8 +122,7 @@ def submit_proposal(args: str) -> Dict[str, Any]:
 
         # Security: always use ic.caller() as the proposer identity
         proposer_id = ic.caller().to_str()
-        all_users = User.instances()
-        proposer = next((u for u in all_users if u.id == proposer_id), None)
+        proposer = User[proposer_id]
 
         if not proposer:
             return json.dumps(
@@ -136,10 +132,9 @@ def submit_proposal(args: str) -> Dict[str, Any]:
         # Use provided checksum or leave empty for later verification
         code_checksum = args_dict.get("code_checksum", "")
 
-        # Generate unique proposal ID
-        existing_proposals = Proposal.instances()
-        proposal_num = len(existing_proposals) + 1
-        proposal_id = f"prop_{proposal_num:03d}"
+        # Generate unique proposal ID using hash to avoid loading all proposals
+        import time
+        proposal_id = f"prop_{hashlib.md5(f'{proposer_id}_{time.time()}'.encode()).hexdigest()[:8]}"
 
         # Create new proposal in database
         new_proposal = Proposal(
@@ -191,32 +186,30 @@ def cast_vote(args: str) -> Dict[str, Any]:
                 {"success": False, "error": "vote must be 'yes', 'no', or 'abstain'"}
             )
 
-        # Find proposal
-        all_proposals = Proposal.instances()
-        proposal = next(
-            (p for p in all_proposals if p.proposal_id == proposal_id), None
-        )
+        # Direct lookup by alias
+        proposal = Proposal[proposal_id]
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
 
-        # Find voter
-        all_users = User.instances()
-        voter = next((u for u in all_users if u.id == voter_id), None)
+        # Direct lookup by alias (User.__alias__ = "id")
+        voter = User[voter_id]
 
         if not voter:
             return json.dumps({"success": False, "error": f"User {voter_id} not found"})
 
-        # Check if user already voted
-        all_votes = Vote.instances()
-        existing_vote = next(
-            (
-                v
-                for v in all_votes
-                if v.proposal._id == proposal._id and v.voter.id == voter.id
-            ),
-            None,
-        )
+        # Check if user already voted using proposal.votes relation
+        existing_vote = None
+        try:
+            for v in proposal.votes:
+                try:
+                    if v.voter._id == voter._id:
+                        existing_vote = v
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
         if existing_vote:
             # Update existing vote counts
@@ -266,11 +259,8 @@ def fetch_proposal_code(args: str) -> Async[str]:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Find proposal
-        all_proposals = Proposal.instances()
-        proposal = next(
-            (p for p in all_proposals if p.proposal_id == proposal_id), None
-        )
+        # Direct lookup by alias
+        proposal = Proposal[proposal_id]
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -317,11 +307,8 @@ def approve_proposal(args: str) -> str:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Find proposal
-        all_proposals = Proposal.instances()
-        proposal = next(
-            (p for p in all_proposals if p.proposal_id == proposal_id), None
-        )
+        # Direct lookup by alias
+        proposal = Proposal[proposal_id]
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -364,11 +351,8 @@ def execute_proposal(args: str) -> Async[str]:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Find proposal
-        all_proposals = Proposal.instances()
-        proposal = next(
-            (p for p in all_proposals if p.proposal_id == proposal_id), None
-        )
+        # Direct lookup by alias
+        proposal = Proposal[proposal_id]
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -458,22 +442,26 @@ def get_user_vote(args: str) -> str:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Find proposal
-        all_proposals = Proposal.instances()
-        proposal = next(
-            (p for p in all_proposals if p.proposal_id == proposal_id), None
-        )
+        # Direct lookup by alias
+        proposal = Proposal[proposal_id]
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
 
-        # Find user's vote
-        all_votes = Vote.instances()
-        user_vote = next(
-            (v for v in all_votes 
-             if v.proposal._id == proposal._id and v.voter.id == voter_id),
-            None
-        )
+        # Find user's vote using proposal.votes relation
+        voter = User[voter_id]
+        user_vote = None
+        if voter:
+            try:
+                for v in proposal.votes:
+                    try:
+                        if v.voter._id == voter._id:
+                            user_vote = v
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
 
         if user_vote:
             return json.dumps({
