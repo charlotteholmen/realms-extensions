@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from ggg import Proposal, User, Vote, Codex
-from basilisk import Async
+from basilisk import Async, ic
 from ic_python_logging import get_logger
 from core.http_utils import download_file_from_url
 
@@ -117,13 +117,13 @@ def submit_proposal(args: str) -> Dict[str, Any]:
         else:
             args_dict = args
 
-        required_fields = ["title", "description", "code_url", "proposer"]
+        required_fields = ["title", "description", "code_url"]
         for field in required_fields:
             if field not in args_dict:
                 return json.dumps({"success": False, "error": f"{field} is required"})
 
-        # Find proposer user
-        proposer_id = args_dict["proposer"]
+        # Security: always use ic.caller() as the proposer identity
+        proposer_id = ic.caller().to_str()
         all_users = User.instances()
         proposer = next((u for u in all_users if u.id == proposer_id), None)
 
@@ -177,11 +177,12 @@ def cast_vote(args: str) -> Dict[str, Any]:
 
         proposal_id = args_dict.get("proposal_id")
         vote_choice = args_dict.get("vote")  # 'yes', 'no', 'abstain'
-        voter_id = args_dict.get("voter")
+        # Security: always use ic.caller() as the voter identity
+        voter_id = ic.caller().to_str()
 
-        if not all([proposal_id, vote_choice, voter_id]):
+        if not all([proposal_id, vote_choice]):
             return json.dumps(
-                {"success": False, "error": "proposal_id, vote, and voter are required"}
+                {"success": False, "error": "proposal_id and vote are required"}
             )
 
         if vote_choice not in ["yes", "no", "abstain"]:
@@ -448,10 +449,11 @@ def get_user_vote(args: str) -> str:
             args_dict = args
 
         proposal_id = args_dict.get("proposal_id")
-        voter_id = args_dict.get("voter")
+        # Security: always use ic.caller() as the voter identity
+        voter_id = ic.caller().to_str()
 
-        if not proposal_id or not voter_id:
-            return json.dumps({"success": False, "error": "proposal_id and voter are required"})
+        if not proposal_id:
+            return json.dumps({"success": False, "error": "proposal_id is required"})
 
         # Find proposal
         all_proposals = Proposal.instances()

@@ -18,7 +18,8 @@
     "enabled": true,
     "test_files": [
       "tests/test_imports.py",
-      "tests/test_member_dashboard.py"
+      "tests/test_member_dashboard.py",
+      "tests/test_invoice_flow.py"
     ]
   }
 }

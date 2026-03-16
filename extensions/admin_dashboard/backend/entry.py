@@ -1,6 +1,13 @@
 """
 Admin Dashboard Backend Extension Entry Point
-Provides administrative operations and data aggregation for the GGG system.
+
+Provides a web UI for administrative operations: entity export/import,
+registration code management, and data exploration.
+
+Note: The Basilisk shell provides equivalent CLI access to entity
+export/import via ``%db`` commands (types, list, show, search,
+export, import, delete). This extension is a user-friendly wrapper
+for the same underlying ic_python_db primitives.
 """
 
 import base64
@@ -11,8 +18,7 @@ from datetime import datetime
 from io import StringIO
 from typing import Any, Dict, List
 
-import ggg
-from ic_python_db import Entity
+from ic_python_db import Database, Entity
 from ic_python_logging import get_logger
 
 from .models import RegistrationCode
@@ -21,11 +27,20 @@ logger = get_logger("extensions.admin_dashboard")
 
 
 def get_entity_types(args=None):
-    """Return available GGG entity types for the admin dashboard dropdown."""
-    return {
-        "success": True,
-        "data": ggg.classes()
-    }
+    """Return available entity types for the admin dashboard dropdown.
+
+    Uses ic_python_db's entity type registry directly instead of
+    ggg.classes(), making this portable across any basilisk canister.
+    """
+    db = Database.get_instance()
+    seen = set()
+    types = []
+    for cls in db._entity_types.values():
+        name = cls.__name__
+        if name not in seen:
+            seen.add(name)
+            types.append(name)
+    return {"success": True, "data": sorted(types)}
 
 
 def extension_sync_call(method_name: str, args: dict):
@@ -57,75 +72,58 @@ def extension_sync_call(method_name: str, args: dict):
 
 
 def export_data(args):
-    """
-    Export all data from the realm (entities and codexes)
+    """Export entities from the database.
+
+    Uses ic_python_db's entity type registry directly.  Codex entities
+    are separated into their own list when ``include_codexes`` is True.
+
+    Equivalent CLI: ``%db export <Type> [file.json]``
     """
     try:
-        # Parse args if it's a JSON string
         if isinstance(args, str):
             args = json.loads(args)
 
-        entity_types = args.get("entity_types", None)
+        requested_types = args.get("entity_types", None)
         include_codexes = args.get("include_codexes", True)
 
-        logger.debug(
-            f"Exporting data - entity_types: {entity_types}, include_codexes: {include_codexes}"
-        )
+        logger.debug(f"Exporting data - entity_types: {requested_types}, include_codexes: {include_codexes}")
 
-        # Get all entity classes from ggg module
+        db = Database.get_instance()
         all_entities = []
         codexes = []
 
-        # Get entity classes dynamically from ggg module
-        entity_classes = ggg.classes()
+        # Iterate registered entity types (de-duplicated)
+        seen = set()
+        for cls in db._entity_types.values():
+            name = cls.__name__
+            if name in seen:
+                continue
+            seen.add(name)
 
-        # Filter entity classes if specific types requested
-        if entity_types:
-            entity_classes = [ec for ec in entity_classes if ec in entity_types]
-
-        # Export each entity type
-        for entity_class_name in entity_classes:
-            try:
-                # Get the entity class from ggg module
-                if hasattr(ggg, entity_class_name):
-                    entity_class = getattr(ggg, entity_class_name)
-
-                    # Get all instances of this entity type
-                    instances = list(entity_class.instances())
-
-                    logger.debug(
-                        f"Found {len(instances)} instances of {entity_class_name}"
-                    )
-
-                    for instance in instances:
-                        try:
-                            # Serialize the entity
-                            serialized = instance.serialize()
-
-                            # Separate codexes from regular entities
-                            if entity_class_name == "Codex" and include_codexes:
-                                codexes.append(
-                                    {
-                                        "name": serialized.get("name", ""),
-                                        "code": serialized.get("code", ""),
-                                        "_id": serialized.get("_id", ""),
-                                    }
-                                )
-                            else:
-                                all_entities.append(serialized)
-                        except Exception as e:
-                            logger.error(
-                                f"Error serializing {entity_class_name} instance: {str(e)}"
-                            )
-                            continue
-
-            except Exception as e:
-                logger.error(
-                    f"Error processing entity class {entity_class_name}: {str(e)}"
-                )
+            # Filter if specific types requested
+            if requested_types and name not in requested_types:
                 continue
 
-        # Prepare response data
+            try:
+                instances = cls.instances()
+                logger.debug(f"Found {len(instances)} instances of {name}")
+
+                for instance in instances:
+                    try:
+                        serialized = instance.serialize()
+                        if name == "Codex" and include_codexes:
+                            codexes.append({
+                                "name": serialized.get("name", ""),
+                                "code": serialized.get("code", ""),
+                                "_id": serialized.get("_id", ""),
+                            })
+                        else:
+                            all_entities.append(serialized)
+                    except Exception as e:
+                        logger.error(f"Error serializing {name} instance: {e}")
+            except Exception as e:
+                logger.error(f"Error processing entity class {name}: {e}")
+
         response_data = {
             "entities": all_entities,
             "codexes": codexes,
@@ -133,17 +131,12 @@ def export_data(args):
             "total_codexes": len(codexes),
         }
 
-        # Serialize to JSON string for transport
-        data_json = json.dumps(response_data)
-
-        logger.debug(
-            f"Export complete - {len(all_entities)} entities, {len(codexes)} codexes"
-        )
+        logger.debug(f"Export complete - {len(all_entities)} entities, {len(codexes)} codexes")
 
         return {
             "success": True,
             "message": f"Successfully exported {len(all_entities)} entities and {len(codexes)} codexes",
-            "data": data_json,
+            "data": json.dumps(response_data),
         }
 
     except Exception as e:
@@ -152,53 +145,41 @@ def export_data(args):
 
 
 def import_data(args):
-    """
-    Import data from direct data input
+    """Import entities via Entity.deserialize (upsert semantics).
+
+    Supports JSON and CSV formats.  Base64-encoded args are accepted
+    to avoid shell escaping issues.
+
+    Equivalent CLI: ``%db import <file.json>``
     """
     try:
-        # Parse args if it's a JSON string
         if isinstance(args, str):
-            # Handle base64 encoded args to avoid shell escaping issues
             if args.startswith("base64:"):
-                import base64
-
                 args = base64.b64decode(args[7:]).decode("utf-8")
             args = json.loads(args)
 
         data_format = args.get("format", "json")
         data_content = args.get("data", "")
 
-        logger.debug(f"data_content: {data_content}")
         logger.debug(f"data_format: {data_format}")
 
         if not data_content:
             return {"success": False, "error": "No data provided"}
 
-        # Parse data based on format
+        # Parse input
         parsed_data = []
         if data_format == "csv":
-            # Handle CSV data
-            import io
-
-            csv_reader = csv.DictReader(
-                io.StringIO(data_content)
-            )  # TODO: this might not work on Kybra
+            csv_reader = csv.DictReader(StringIO(data_content))
             parsed_data = list(csv_reader)
         else:
-            # Handle JSON data
             try:
-                if isinstance(data_content, str):
-                    parsed_data = json.loads(data_content)
-                else:
-                    parsed_data = data_content
-
+                parsed_data = json.loads(data_content) if isinstance(data_content, str) else data_content
                 if not isinstance(parsed_data, list):
                     parsed_data = [parsed_data]
             except json.JSONDecodeError as e:
-                return {"success": False, "error": f"Invalid JSON data: {str(e)}"}
+                return {"success": False, "error": f"Invalid JSON data: {e}"}
 
-        # Process data in batches
-        logger.debug(f"parsed_data: {parsed_data}")
+        logger.debug(f"Importing {len(parsed_data)} records")
         results = process_bulk_import(parsed_data)
 
         # Clear in-memory entity context to prevent state bloat across
@@ -222,33 +203,34 @@ def import_data(args):
 
 
 def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Process bulk import data and create entities"""
+    """Deserialize a list of entity dicts via Entity.deserialize (upsert).
+
+    Handles Codex entities specially: decodes base64-encoded code fields.
+    """
     successful = 0
     failed = 0
     errors = []
 
-    logger.debug(f"data: {data}")
-
     for record in data:
         try:
             entity = Entity.deserialize(record, level=1)
-            entity_type = record["_type"]
-            if entity_type == "Codex":
-                if record["code"].startswith("base64:"):
-                    entity.code = base64.b64decode(record["code"][7:]).decode()
-                else:
-                    entity.code = record["code"]
+
+            # Codex entities may have base64-encoded code
+            if record.get("_type") == "Codex" and "code" in record:
+                code_val = record["code"]
+                if isinstance(code_val, str) and code_val.startswith("base64:"):
+                    entity.code = base64.b64decode(code_val[7:]).decode()
 
             successful += 1
         except Exception as e:
-            logger.error(f"Error creating entity: {str(e)}\n{traceback.format_exc()}")
+            logger.error(f"Error creating entity: {e}\n{traceback.format_exc()}")
             failed += 1
-            errors.append(f"Record {record}: {str(e)}")
+            errors.append(f"{record.get('_type', '?')}#{record.get('_id', '?')}: {e}")
 
     return {
         "successful": successful,
         "failed": failed,
-        "errors": errors[:10],  # Limit to first 10 errors
+        "errors": errors[:10],
     }
 
 
