@@ -12,8 +12,7 @@ from typing import Any, Dict, List
 from ggg import Proposal, User, Vote, Codex
 from basilisk import Async, ic
 from ic_python_logging import get_logger
-# Lazy import: core.http_utils is a wasi-stub at module load time
-# download_file_from_url is imported inside functions that use it
+from main import download_file_from_url
 
 logger = get_logger("extensions.voting")
 
@@ -92,8 +91,11 @@ def get_proposal(args: str) -> Dict[str, Any]:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Direct lookup by alias (proposal_id)
-        proposal = Proposal[proposal_id]
+        # Find proposal in database
+        all_proposals = Proposal.instances()
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -122,7 +124,8 @@ def submit_proposal(args: str) -> Dict[str, Any]:
 
         # Security: always use ic.caller() as the proposer identity
         proposer_id = ic.caller().to_str()
-        proposer = User[proposer_id]
+        all_users = User.instances()
+        proposer = next((u for u in all_users if u.id == proposer_id), None)
 
         if not proposer:
             return json.dumps(
@@ -132,9 +135,10 @@ def submit_proposal(args: str) -> Dict[str, Any]:
         # Use provided checksum or leave empty for later verification
         code_checksum = args_dict.get("code_checksum", "")
 
-        # Generate unique proposal ID using hash to avoid loading all proposals
-        import time
-        proposal_id = f"prop_{hashlib.sha256(f'{proposer_id}_{time.time()}'.encode()).hexdigest()[:8]}"
+        # Generate unique proposal ID
+        existing_proposals = Proposal.instances()
+        proposal_num = len(existing_proposals) + 1
+        proposal_id = f"prop_{proposal_num:03d}"
 
         # Create new proposal in database
         new_proposal = Proposal(
@@ -186,30 +190,32 @@ def cast_vote(args: str) -> Dict[str, Any]:
                 {"success": False, "error": "vote must be 'yes', 'no', or 'abstain'"}
             )
 
-        # Direct lookup by alias
-        proposal = Proposal[proposal_id]
+        # Find proposal
+        all_proposals = Proposal.instances()
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
 
-        # Direct lookup by alias (User.__alias__ = "id")
-        voter = User[voter_id]
+        # Find voter
+        all_users = User.instances()
+        voter = next((u for u in all_users if u.id == voter_id), None)
 
         if not voter:
             return json.dumps({"success": False, "error": f"User {voter_id} not found"})
 
-        # Check if user already voted using proposal.votes relation
-        existing_vote = None
-        try:
-            for v in proposal.votes:
-                try:
-                    if v.voter._id == voter._id:
-                        existing_vote = v
-                        break
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        # Check if user already voted
+        all_votes = Vote.instances()
+        existing_vote = next(
+            (
+                v
+                for v in all_votes
+                if v.proposal.proposal_id == proposal.proposal_id and v.voter.id == voter.id
+            ),
+            None,
+        )
 
         if existing_vote:
             # Update existing vote counts
@@ -259,8 +265,11 @@ def fetch_proposal_code(args: str) -> Async[str]:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Direct lookup by alias
-        proposal = Proposal[proposal_id]
+        # Find proposal
+        all_proposals = Proposal.instances()
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -268,9 +277,6 @@ def fetch_proposal_code(args: str) -> Async[str]:
         code_url = proposal.code_url
         if not code_url:
             return json.dumps({"success": False, "error": "Proposal has no code URL"})
-
-        # Fetch code from URL using main.py's download function
-        from core.http_utils import download_file_from_url
         logger.info(f"Fetching code from: {code_url}")
         success, result = yield download_file_from_url(code_url)
         
@@ -307,8 +313,11 @@ def approve_proposal(args: str) -> str:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Direct lookup by alias
-        proposal = Proposal[proposal_id]
+        # Find proposal
+        all_proposals = Proposal.instances()
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -351,8 +360,11 @@ def execute_proposal(args: str) -> Async[str]:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Direct lookup by alias
-        proposal = Proposal[proposal_id]
+        # Find proposal
+        all_proposals = Proposal.instances()
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
@@ -376,7 +388,6 @@ def execute_proposal(args: str) -> Async[str]:
         if not code_url:
             return json.dumps({"success": False, "error": "Proposal has no code URL"})
 
-        from core.http_utils import download_file_from_url
         logger.info(f"Fetching code from: {code_url}")
         success, result = yield download_file_from_url(code_url)
         
@@ -442,26 +453,22 @@ def get_user_vote(args: str) -> str:
         if not proposal_id:
             return json.dumps({"success": False, "error": "proposal_id is required"})
 
-        # Direct lookup by alias
-        proposal = Proposal[proposal_id]
+        # Find proposal
+        all_proposals = Proposal.instances()
+        proposal = next(
+            (p for p in all_proposals if p.proposal_id == proposal_id), None
+        )
 
         if not proposal:
             return json.dumps({"success": False, "error": "Proposal not found"})
 
-        # Find user's vote using proposal.votes relation
-        voter = User[voter_id]
-        user_vote = None
-        if voter:
-            try:
-                for v in proposal.votes:
-                    try:
-                        if v.voter._id == voter._id:
-                            user_vote = v
-                            break
-                    except Exception:
-                        continue
-            except Exception:
-                pass
+        # Find user's vote
+        all_votes = Vote.instances()
+        user_vote = next(
+            (v for v in all_votes 
+             if v.proposal.proposal_id == proposal.proposal_id and v.voter.id == voter_id),
+            None
+        )
 
         if user_vote:
             return json.dumps({
