@@ -32,6 +32,26 @@ class AppConfig(ExtensionEntity):
 RARIMO_API_BASE = "https://api.app.rarime.com"
 
 
+def register_entities():
+    """Register passport_verification entity types with the Database."""
+    from ic_python_db import Database
+
+    logger.info("Registering passport_verification entity types...")
+
+    entity_types = [AppConfig]
+
+    for entity_type in entity_types:
+        try:
+            logger.info(f"Registering entity type {entity_type.__name__}")
+            Database.get_instance().register_entity_type(entity_type)
+        except Exception as e:
+            logger.error(
+                f"Error registering entity type {entity_type.__name__}: {str(e)}"
+            )
+
+    logger.info("✅ Passport verification entity types registered")
+
+
 def initialize(args: str):
     """Initialize extension - generate application ID if not exists.
 
@@ -43,20 +63,12 @@ def initialize(args: str):
     config = AppConfig["application_id"]
 
     if not config:
-        # First time initialization - generate timestamp-based decimal ID
-        # IC time is in nanoseconds, convert to seconds
+        # First time initialization - use unix timestamp as ID
         timestamp_ns = ic.time()
-        timestamp_s = timestamp_ns // 1_000_000_000
+        app_id = str(timestamp_ns // 1_000_000_000)
 
-        # Format: YYYYMMDDhhmmss as decimal string
-        from datetime import datetime, timezone
-
-        dt = datetime.fromtimestamp(timestamp_s, tz=timezone.utc)
-        app_id = dt.strftime("%Y%m%d%H%M%S")
-
-        # Store in ExtensionEntity
         AppConfig(key="application_id", value=app_id)
-        logger.info(f"🆕 Generated new application ID (timestamp): {app_id}")
+        logger.info(f"🆕 Generated new application ID: {app_id}")
     else:
         logger.info(f"📋 Application ID already exists: {config.value}")
 
@@ -70,12 +82,21 @@ def get_session_id(args: str) -> str:
 def get_event_id(args: str) -> str:
     """Get the application ID (event_id for Rarimo) from storage.
 
-    The ID is generated once during initialization and persists in stable storage.
+    The ID is generated once and persists in stable storage.
+    If not found, generates it on-the-fly (self-healing).
     """
     config = AppConfig["application_id"]
-    if not config or not config.value:
-        raise ValueError("Application ID not found")
-    return config.value
+    if config and config.value:
+        return config.value
+
+    # Self-healing: generate application ID if missing
+    logger.warning("Application ID not found in storage, generating now...")
+    timestamp_ns = ic.time()
+    app_id = str(timestamp_ns // 1_000_000_000)
+
+    AppConfig(key="application_id", value=app_id)
+    logger.info(f"🆕 Generated application ID on-the-fly: {app_id}")
+    return app_id
 
 
 @update

@@ -4,7 +4,7 @@
   import { CheckCircleSolid, ExclamationCircleSolid, ClipboardListSolid } from 'flowbite-svelte-icons';
   import { styles, cn } from '../../theme/utilities';
   
-  export let userId: string;
+  export let userId: string = '';
   
   let verificationStatus = 'idle'; // idle, generating, pending, verified, failed, error
   let verificationLink = '';
