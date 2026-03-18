@@ -9,10 +9,8 @@
 	// --- State ---
 	let statusData: any = null;
 	let realmInfo: any = null;
-	let codexes: any[] = [];
 	let zones: any[] = [];
 	let latestUsers: any[] = [];
-	let latestOrgs: any[] = [];
 	let loading = true;
 	let mapContainer: HTMLDivElement;
 	let askText = '';
@@ -31,13 +29,11 @@
 	async function loadData() {
 		loading = true;
 		try {
-			const [statusResp, realmResp, codexResp, zonesResp, latestResp, latestOrgsResp] = await Promise.all([
+			const [statusResp, realmResp, zonesResp, latestResp] = await Promise.all([
 				backend.status(),
 				backend.get_objects_paginated("Realm", 0, 1, "asc"),
-				backend.get_objects_paginated("Codex", 0, 50, "desc"),
 				backend.get_objects_paginated("Zone", 0, 200, "asc"),
 				backend.get_objects_paginated("User", 0, 8, "desc"),
-				backend.get_objects_paginated("Organization", 0, 8, "desc"),
 			]);
 
 			if (statusResp?.success && statusResp?.data?.status) {
@@ -50,12 +46,6 @@
 				realmInfo = realms[0];
 			}
 
-			// Codexes (filter out internal/temp ones starting with _)
-			const allCodexes = parseEntities(codexResp);
-			console.log('All codexes:', allCodexes.length, allCodexes.map((c: any) => c.name));
-			codexes = allCodexes.filter((c: any) => c.name && !c.name.startsWith('_'));
-			console.log('Filtered codexes:', codexes.length);
-
 			// Zones with valid H3 indexes or coordinates
 			const allZones = parseEntities(zonesResp);
 			console.log('Zone data sample:', allZones.length > 0 ? JSON.stringify(allZones[0]) : 'no zones');
@@ -63,7 +53,6 @@
 			console.log('Filtered zones with data:', zones.length);
 
 			latestUsers = parseEntities(latestResp);
-			latestOrgs = parseEntities(latestOrgsResp);
 		} catch (e) {
 			console.error('Error loading dashboard data:', e);
 		}
@@ -318,79 +307,7 @@
 			</Card>
 		{/if}
 
-		<!-- Latest Organizations Section -->
-		{#if latestOrgs.length > 0}
-			<Card size="xl" class="!p-6">
-				<Heading tag="h3" class="text-lg font-semibold mb-4">Latest Organizations</Heading>
-				<div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
-					{#each latestOrgs as org}
-						<div class="flex flex-col items-center space-y-2">
-							<div class="w-14 h-14 rounded-full bg-purple-100 ring-2 ring-gray-200 hover:ring-gray-300 transition-all duration-200 flex items-center justify-center">
-								<span class="text-purple-600 font-bold text-lg">{(org.name || '?')[0].toUpperCase()}</span>
-							</div>
-							<span class="text-xs text-gray-600 text-center truncate w-full" title={org.name || org.id}>
-								{org.name || org.id?.substring(0, 8)}
-							</span>
-						</div>
-					{/each}
-				</div>
-			</Card>
-		{/if}
 
-		<!-- Codex List -->
-		{#if codexes.length > 0}
-			<Card size="xl" class="!p-6">
-				<Heading tag="h3" class="text-xl font-semibold mb-1">Codexes</Heading>
-				<p class="text-sm text-gray-500 mb-4">
-					Codexes are smart social contracts — auditable Python packages that define the rules, governance, and logic of this realm.
-					Each codex is open-source and verifiable via its SHA-256 checksum.
-				</p>
-				<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-					{#each codexes as codex}
-						{@const codexLink = codex.url || `https://pypi.org/project/${codex.name}/`}
-						{@const createdDate = codex.timestamp_created ? new Date(codex.timestamp_created.replace(' ', 'T')) : null}
-						<div class="rounded-lg border border-gray-200 p-4 hover:border-indigo-200 transition-colors">
-							<div class="flex items-start gap-3">
-								<div class="flex-shrink-0 w-11 h-11 rounded-lg bg-indigo-100 flex items-center justify-center">
-									<span class="text-indigo-600 font-bold text-lg">{(codex.name || '?')[0].toUpperCase()}</span>
-								</div>
-								<div class="flex-1 min-w-0">
-									<p class="text-base font-semibold text-gray-900 truncate">{codex.name}</p>
-									{#if createdDate && !isNaN(createdDate.getTime())}
-										<p class="text-xs text-gray-400 mt-0.5">
-											Enacted {createdDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-										</p>
-									{/if}
-								</div>
-							</div>
-							{#if codex.checksum}
-								<div class="mt-3 flex items-center gap-2 bg-gray-50 rounded-md px-3 py-1.5">
-									<svg class="w-3.5 h-3.5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-									</svg>
-									<span class="text-xs text-gray-500 font-mono truncate" title={codex.checksum}>
-										SHA-256: {codex.checksum.substring(0, 16)}…
-									</span>
-								</div>
-							{/if}
-							<div class="mt-3 flex items-center gap-2">
-								<a
-									href={codexLink}
-									target="_blank"
-									rel="noopener"
-									class="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 no-underline"
-								>
-									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-									</svg>
-									View source on PyPI
-								</a>
-							</div>
-						</div>
-					{/each}
-				</div>
-			</Card>
-		{/if}
 
 		<ActivityList />
 	{/if}
