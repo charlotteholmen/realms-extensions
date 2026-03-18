@@ -4,9 +4,12 @@ Voting Extension End-to-End Tests
 Tests the full citizen voting flow against a deployed test realm:
 1. Join realm as a citizen
 2. Submit a proposal (verify proposer == ic.caller())
-3. Cast a vote (verify voter == ic.caller())
-4. Query proposals and votes
-5. Security: verify identity spoofing is prevented
+3. Start voting on the proposal
+4. Cast a vote (verify voter == ic.caller())
+5. Auto-approval when threshold met
+6. Auto-execution: download codex, verify checksum, exec() code
+7. Query proposals and votes
+8. Security: verify identity spoofing is prevented
 
 Prerequisites:
     - A deployed realm with the voting extension installed
@@ -18,6 +21,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import traceback
 import uuid
 
@@ -48,6 +52,14 @@ def call_voting(function_name: str, args: dict) -> dict:
     result = call_realm_extension("voting", function_name, json.dumps(args))
     if result is None:
         return {"success": False, "error": "Extension call returned None"}
+    return result
+
+
+def call_voting_async(function_name: str, args: dict) -> dict:
+    """Call a voting extension async function and return parsed response."""
+    result = call_realm_extension("voting", function_name, json.dumps(args), async_call=True)
+    if result is None:
+        return {"success": False, "error": "Extension async call returned None"}
     return result
 
 
@@ -114,15 +126,17 @@ def test_submit_proposal():
         print_error(f"No proposal_id in response: {data}")
         return False
 
-    # Security check: proposer must match ic.caller()
     if proposer != principal:
         print_error(
             f"SECURITY: proposer mismatch! Expected {principal}, got {proposer}"
         )
         return False
 
-    print_ok(f"Proposal {proposal_id} created by {proposer} (matches caller)")
-    # Store for later tests
+    if data.get("status") != "pending_review":
+        print_error(f"Expected status 'pending_review', got '{data.get('status')}'")
+        return False
+
+    print_ok(f"Proposal {proposal_id} created by {proposer} (status=pending_review)")
     global _test_proposal_id
     _test_proposal_id = proposal_id
     return True
@@ -141,6 +155,52 @@ def test_get_proposal():
     return True
 
 
+def test_cast_vote_before_voting_rejected():
+    """Casting a vote before start_voting should fail."""
+    print_info("Test: cast_vote before start_voting (should fail)...")
+    result = call_voting("cast_vote", {
+        "proposal_id": _test_proposal_id,
+        "vote": "yes",
+    })
+    if result and result.get("success"):
+        print_error("Expected failure: voting not yet open")
+        return False
+    print_ok("Vote correctly rejected: proposal not in voting status")
+    return True
+
+
+def test_start_voting():
+    """Open proposal for voting."""
+    print_info("Test: start_voting...")
+    result = call_voting("start_voting", {"proposal_id": _test_proposal_id})
+    if not result or not result.get("success"):
+        print_error(f"start_voting failed: {result}")
+        return False
+
+    data = result.get("data", {})
+    if data.get("status") != "voting":
+        print_error(f"Expected status 'voting', got '{data.get('status')}'")
+        return False
+
+    if not data.get("voting_deadline"):
+        print_error("Expected voting_deadline to be set")
+        return False
+
+    print_ok(f"Voting started, deadline={data.get('voting_deadline')}")
+    return True
+
+
+def test_start_voting_twice_rejected():
+    """Starting voting again on an already-voting proposal should fail."""
+    print_info("Test: start_voting twice (should fail)...")
+    result = call_voting("start_voting", {"proposal_id": _test_proposal_id})
+    if result and result.get("success"):
+        print_error("Expected failure: proposal already in voting")
+        return False
+    print_ok("Double start_voting correctly rejected")
+    return True
+
+
 def test_cast_vote_yes():
     """Cast a 'yes' vote on the test proposal."""
     print_info("Test: cast_vote (yes)...")
@@ -151,7 +211,9 @@ def test_cast_vote_yes():
     if not result or not result.get("success"):
         print_error(f"cast_vote failed: {result}")
         return False
-    print_ok("Vote cast successfully")
+
+    data = result.get("data", {})
+    print_ok(f"Vote cast successfully (auto_approved={data.get('auto_approved', 'N/A')})")
     return True
 
 
@@ -188,7 +250,6 @@ def test_cast_vote_change():
         print_error(f"cast_vote change failed: {result}")
         return False
 
-    # Verify the change
     check = call_voting("get_user_vote", {"proposal_id": _test_proposal_id})
     if not check or not check.get("success"):
         print_error(f"get_user_vote after change failed: {check}")
@@ -234,7 +295,6 @@ def test_submit_proposal_missing_fields():
     """Submitting proposal without required fields should fail."""
     print_info("Test: submit_proposal (missing fields)...")
 
-    # Missing description
     result = call_voting("submit_proposal", {
         "title": "Incomplete proposal",
         "code_url": "https://example.com/test.py",
@@ -290,13 +350,130 @@ def test_proposal_vote_counts():
     return True
 
 
+def test_auto_approve_and_execute():
+    """Full flow: submit → start_voting → cast yes → auto-approve → auto-execute.
+
+    Uses a real code_url pointing to a simple codex that sets a variable.
+    After auto-execution the proposal status should become 'executed'.
+    """
+    print_info("Test: FULL FLOW - auto-approve and auto-execute...")
+
+    # Submit a new proposal with a real downloadable codex URL
+    # Using a raw GitHub URL for a simple Python script
+    code_url = (
+        "https://raw.githubusercontent.com/"
+        "smart-social-contracts/realms/main/"
+        "codices/codices/agora/satoshi_transfer_codex.py"
+    )
+    title = f"Auto-Execute Test {uuid.uuid4().hex[:8]}"
+    result = call_voting("submit_proposal", {
+        "title": title,
+        "description": "Test auto-approve and auto-execute flow",
+        "code_url": code_url,
+        "codex_name": "test_auto_exec_codex",
+    })
+    if not result or not result.get("success"):
+        print_error(f"submit_proposal failed: {result}")
+        return False
+
+    pid = result.get("data", {}).get("id")
+    print_info(f"  Submitted proposal {pid}")
+
+    # Start voting
+    result = call_voting("start_voting", {"proposal_id": pid})
+    if not result or not result.get("success"):
+        print_error(f"start_voting failed: {result}")
+        return False
+    print_info(f"  Voting started for {pid}")
+
+    # Cast a 'yes' vote — with only 1 voter and threshold 0.6,
+    # this should auto-approve and schedule execution
+    result = call_voting("cast_vote", {"proposal_id": pid, "vote": "yes"})
+    if not result or not result.get("success"):
+        print_error(f"cast_vote failed: {result}")
+        return False
+
+    data = result.get("data", {})
+    if not data.get("auto_approved"):
+        print_error(f"Expected auto_approved=True, got: {data}")
+        return False
+    print_info(f"  Auto-approved! Status: {data.get('proposal', {}).get('status')}")
+
+    # Wait for the timer-triggered execution to complete
+    # The timer fires at delay=0 but needs an IC round or two
+    print_info("  Waiting for auto-execution (timer callback)...")
+    for i in range(15):
+        time.sleep(2)
+        check = call_voting("get_proposal", {"proposal_id": pid})
+        if check and check.get("success"):
+            status = check.get("data", {}).get("status")
+            print_info(f"  Poll {i+1}: status={status}")
+            if status == "executed":
+                print_ok(f"Proposal {pid} fully executed!")
+                return True
+            if status == "failed":
+                meta = check.get("data", {}).get("metadata", "{}")
+                print_error(f"Proposal {pid} FAILED: {meta}")
+                return False
+
+    print_error(f"Proposal {pid} did not reach 'executed' status after 30s")
+    return False
+
+
+def test_manual_approve_and_execute():
+    """Manual flow: submit → approve_proposal → execute_proposal (async call)."""
+    print_info("Test: MANUAL approve + execute...")
+
+    code_url = (
+        "https://raw.githubusercontent.com/"
+        "smart-social-contracts/realms/main/"
+        "codices/codices/agora/satoshi_transfer_codex.py"
+    )
+    title = f"Manual Execute Test {uuid.uuid4().hex[:8]}"
+    result = call_voting("submit_proposal", {
+        "title": title,
+        "description": "Test manual approve and execute",
+        "code_url": code_url,
+        "codex_name": "test_manual_exec_codex",
+    })
+    if not result or not result.get("success"):
+        print_error(f"submit_proposal failed: {result}")
+        return False
+
+    pid = result.get("data", {}).get("id")
+    print_info(f"  Submitted proposal {pid}")
+
+    # Manual approve (skips voting)
+    result = call_voting("approve_proposal", {"proposal_id": pid})
+    if not result or not result.get("success"):
+        print_error(f"approve_proposal failed: {result}")
+        return False
+    print_info(f"  Approved {pid}, execution scheduled via timer")
+
+    # Wait for timer-triggered execution
+    print_info("  Waiting for execution...")
+    for i in range(15):
+        time.sleep(2)
+        check = call_voting("get_proposal", {"proposal_id": pid})
+        if check and check.get("success"):
+            status = check.get("data", {}).get("status")
+            print_info(f"  Poll {i+1}: status={status}")
+            if status == "executed":
+                print_ok(f"Proposal {pid} manually approved and executed!")
+                return True
+            if status == "failed":
+                meta = check.get("data", {}).get("metadata", "{}")
+                print_error(f"Proposal {pid} FAILED: {meta}")
+                return False
+
+    print_error(f"Proposal {pid} did not reach 'executed' status after 30s")
+    return False
+
+
 def test_security_voter_identity():
     """
     Security test: verify that the voter field from args is ignored
     and ic.caller() is used instead.
-
-    We cast a vote, then check that the vote belongs to the actual caller,
-    not to a spoofed voter ID.
     """
     print_info("Test: SECURITY - voter identity cannot be spoofed...")
 
@@ -305,8 +482,6 @@ def test_security_voter_identity():
         print_error("Cannot get current principal")
         return False
 
-    # Try to cast a vote with a fake voter ID in args
-    # The security fix should ignore this and use ic.caller()
     result = call_voting("cast_vote", {
         "proposal_id": _test_proposal_id,
         "vote": "abstain",
@@ -317,7 +492,6 @@ def test_security_voter_identity():
         print_error(f"cast_vote with spoofed voter failed unexpectedly: {result}")
         return False
 
-    # Verify the vote is recorded under our real principal, not the fake one
     check = call_voting("get_user_vote", {"proposal_id": _test_proposal_id})
     if not check or not check.get("success"):
         print_error(f"get_user_vote failed: {check}")
@@ -399,6 +573,9 @@ def async_task():
         test_get_proposals_empty,
         test_submit_proposal,
         test_get_proposal,
+        test_cast_vote_before_voting_rejected,
+        test_start_voting,
+        test_start_voting_twice_rejected,
         test_cast_vote_yes,
         test_get_user_vote,
         test_cast_vote_change,
@@ -409,6 +586,8 @@ def async_task():
         test_proposal_vote_counts,
         test_security_voter_identity,
         test_security_proposer_identity,
+        test_auto_approve_and_execute,
+        test_manual_approve_and_execute,
     ]
 
     passed = 0

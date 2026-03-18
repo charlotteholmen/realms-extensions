@@ -12,6 +12,12 @@
   "no_proposals": "No proposals found",
   "no_proposals_hint": "Be the first to submit a proposal!",
   "no_code": "No code available for this proposal",
+  "pagination": {
+    "showing": "Showing",
+    "of": "of",
+    "prev": "Previous",
+    "next": "Next"
+  },
   "lines": "Lines",
   "proposal_details": "Proposal Details",
   "proposal_not_found": "Proposal not found",
@@ -25,6 +31,7 @@
   "total_votes": "Total Votes",
   "threshold_required": "Threshold Required",
   "approval_progress": "Approval Progress",
+  "explain_ai": "Explain with AI",
   "tabs": {
     "proposals": "Proposals",
     "submit": "Submit Proposal"
@@ -34,7 +41,9 @@
     "pending_vote": "Pending Vote",
     "voting": "Voting Active",
     "accepted": "Accepted",
+    "executing": "Executing...",
     "executed": "Executed",
+    "failed": "Failed",
     "rejected": "Rejected"
   },
   "votes": {
@@ -76,7 +85,9 @@
     "buttons": {
       "submit": "Submit Proposal",
       "submitting": "Submitting...",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "calculate_checksum": "Calculate",
+      "calculating": "Calculating..."
     },
     "validation": {
       "required_fields": "All fields are required",
@@ -128,12 +139,15 @@
     }
   },
   "demo_feature": {
-    "title": "Demo Feature",
-    "badge": "Demo Feature",
+    "title": "Demo Actions",
+    "badge": "Demo Mode",
     "description": "In demo mode, you can approve and execute proposals instantly without waiting for the voting period to end.",
+    "demo_note": "This section is only available in demo mode. It bypasses the normal voting process and forces the proposal to be approved and executed immediately.",
     "approve": "Approve Proposal",
     "approving": "Approving...",
     "execute": "Execute Codex",
-    "executing": "Executing..."
+    "executing": "Executing...",
+    "approve_and_execute": "Force Approve & Execute",
+    "explain_ai": "Explain with AI"
   }
 }

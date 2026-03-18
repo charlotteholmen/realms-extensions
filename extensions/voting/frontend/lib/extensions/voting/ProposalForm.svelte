@@ -13,6 +13,7 @@
 	let codeUrl = '';
 	let codeChecksum = '';
 	let submitting = false;
+	let calculatingChecksum = false;
 	let error = '';
 	let success = '';
 	
@@ -89,6 +90,42 @@
 			return true;
 		} catch (_) {
 			return false;
+		}
+	}
+	
+	async function calculateChecksum() {
+		if (!codeUrl.trim() || !isValidUrl(codeUrl)) {
+			error = $_('extensions.voting.form.validation.invalid_url');
+			return;
+		}
+		try {
+			calculatingChecksum = true;
+			error = '';
+			
+			const response = await backend.extension_async_call({
+				extension_name: "voting",
+				function_name: "fetch_proposal_code",
+				args: JSON.stringify({ code_url: codeUrl.trim() })
+			});
+			
+			if (response.success) {
+				const data = typeof response.response === 'string'
+					? JSON.parse(response.response)
+					: response.response;
+				
+				if (data.success) {
+					codeChecksum = data.data.checksum;
+				} else {
+					error = data.error || 'Failed to fetch code for checksum';
+				}
+			} else {
+				error = 'Failed to communicate with backend';
+			}
+		} catch (e) {
+			console.error('Error calculating checksum:', e);
+			error = 'Error: ' + e.message;
+		} finally {
+			calculatingChecksum = false;
 		}
 	}
 </script>
@@ -168,12 +205,33 @@
 				<Label for="code-checksum" class="mb-2">
 					{$_('extensions.voting.form.fields.code_checksum')}
 				</Label>
-				<Input
-					id="code-checksum"
-					bind:value={codeChecksum}
-					placeholder={$_('extensions.voting.form.placeholders.code_checksum')}
-					disabled={submitting}
-				/>
+				<div class="flex gap-2">
+					<div class="flex-1">
+						<Input
+							id="code-checksum"
+							bind:value={codeChecksum}
+							placeholder={$_('extensions.voting.form.placeholders.code_checksum')}
+							disabled={submitting || calculatingChecksum}
+						/>
+					</div>
+					<Button
+						color="light"
+						size="sm"
+						on:click={calculateChecksum}
+						disabled={submitting || calculatingChecksum || !codeUrl.trim()}
+						class="whitespace-nowrap"
+					>
+						{#if calculatingChecksum}
+							<div class="w-4 h-4 mr-1 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+							{$_('extensions.voting.form.buttons.calculating')}
+						{:else}
+							<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+							</svg>
+							{$_('extensions.voting.form.buttons.calculate_checksum')}
+						{/if}
+					</Button>
+				</div>
 				<p class="text-sm text-gray-500 mt-1">
 					{$_('extensions.voting.form.help.code_checksum')}
 				</p>

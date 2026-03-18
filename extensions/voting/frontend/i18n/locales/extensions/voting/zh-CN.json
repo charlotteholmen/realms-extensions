@@ -12,6 +12,12 @@
   "no_proposals": "未找到提案",
   "no_proposals_hint": "成为第一个提交提案的人！",
   "no_code": "此提案没有可用代码",
+  "pagination": {
+    "showing": "显示",
+    "of": "/",
+    "prev": "上一页",
+    "next": "下一页"
+  },
   "lines": "行数",
   "proposal_details": "提案详情",
   "proposal_not_found": "未找到提案",
@@ -25,6 +31,7 @@
   "total_votes": "总票数",
   "threshold_required": "所需阈值",
   "approval_progress": "批准进度",
+  "explain_ai": "AI 解释",
   "tabs": {
     "proposals": "提案",
     "submit": "提交提案"
@@ -34,7 +41,9 @@
     "pending_vote": "待投票",
     "voting": "投票中",
     "accepted": "已通过",
+    "executing": "执行中...",
     "executed": "已执行",
+    "failed": "失败",
     "rejected": "已拒绝"
   },
   "votes": {
@@ -73,7 +82,9 @@
     "buttons": {
       "submit": "提交提案",
       "submitting": "提交中...",
-      "cancel": "取消"
+      "cancel": "取消",
+      "calculate_checksum": "计算",
+      "calculating": "计算中..."
     },
     "validation": {
       "required_fields": "所有字段都是必需的",
@@ -125,12 +136,15 @@
     }
   },
   "demo_feature": {
-    "title": "演示功能",
-    "badge": "演示功能",
+    "title": "演示操作",
+    "badge": "演示模式",
     "description": "在演示模式下，您可以立即批准和执行提案，无需等待投票期结束。",
+    "demo_note": "此部分仅在演示模式下可用。它绕过正常的投票流程，强制立即批准和执行提案。",
     "approve": "批准提案",
     "approving": "批准中...",
     "execute": "执行代码",
-    "executing": "执行中..."
+    "executing": "执行中...",
+    "approve_and_execute": "强制批准并执行",
+    "explain_ai": "AI 解释"
   }
 }

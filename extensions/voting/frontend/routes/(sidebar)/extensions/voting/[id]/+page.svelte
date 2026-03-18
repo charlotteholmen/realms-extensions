@@ -70,9 +70,9 @@
 	<title>{proposal?.title || $_('extensions.voting.proposal_details')} - {$_('extensions.voting.title')}</title>
 </svelte:head>
 
-<div class="w-full px-6 max-w-none">
+<div class="w-full px-6 pt-8 max-w-none">
 	<div class="mb-6">
-		<Button color="light" size="sm" on:click={handleClose}>
+		<Button color="alternative" size="sm" on:click={handleClose} class="shadow-sm hover:shadow">
 			<ArrowLeftOutline class="w-4 h-4 mr-2" />
 			{$_('extensions.voting.back_to_list')}
 		</Button>

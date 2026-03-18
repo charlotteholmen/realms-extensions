@@ -95,7 +95,7 @@
 	<title>{$_('extensions.voting.title')}</title>
 </svelte:head>
 
-<div class="w-full px-6 max-w-none">
+<div class="w-full px-6 pt-8 max-w-none">
 	<div class="mb-8">
 		<h1 class="text-3xl font-bold text-gray-900 mb-2">
 			{$_('extensions.voting.title')}
@@ -116,14 +116,14 @@
 		<div class="flex justify-between items-center mb-4">
 			<div class="flex space-x-4">
 				<Button 
-					color={activeTab === 'list' ? 'blue' : 'light'}
+					color={activeTab === 'list' ? 'dark' : 'alternative'}
 					on:click={() => { activeTab = 'list'; showForm = false; }}
 				>
 					<ListOutline class="w-4 h-4 mr-2" />
 					{$_('extensions.voting.tabs.proposals')}
 				</Button>
 				<Button 
-					color={showForm ? 'blue' : 'light'}
+					color={showForm ? 'dark' : 'alternative'}
 					on:click={() => { showForm = true; activeTab = 'form'; }}
 				>
 					<PlusOutline class="w-4 h-4 mr-2" />

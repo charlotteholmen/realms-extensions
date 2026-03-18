@@ -65,20 +65,22 @@
 		<ButtonGroup class="w-full">
 			<Button 
 				color="green"
+				outline
 				size={compact ? "xs" : "sm"}
 				disabled={voting}
 				on:click={() => castVote('yes')}
-				class="flex-1"
+				class="flex-1 !text-green-700 !border-green-600 hover:!bg-green-600 hover:!text-white"
 			>
 				<CheckOutline class="w-3 h-3 mr-1" />
 				{$_('extensions.voting.vote.yes')}
 			</Button>
 			<Button 
 				color="red"
+				outline
 				size={compact ? "xs" : "sm"}
 				disabled={voting}
 				on:click={() => castVote('no')}
-				class="flex-1"
+				class="flex-1 !text-red-700 !border-red-600 hover:!bg-red-600 hover:!text-white"
 			>
 				<CloseOutline class="w-3 h-3 mr-1" />
 				{$_('extensions.voting.vote.no')}
