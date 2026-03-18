@@ -332,7 +332,10 @@ if [ "$BACKEND_TESTS_ENABLED" = "true" ] && [ "$TEST_TYPE" != "e2e_only" ]; then
             if [ -f "$TEST_PATH" ]; then
                 echo "[INFO] Running test: $TEST_FILE (execution=$BACKEND_EXECUTION)"
                 if [ "$BACKEND_EXECUTION" = "host" ]; then
+                    # Run from realm folder so dfx can find the local replica
+                    pushd "$REALM_FOLDER" > /dev/null
                     python3 "$TEST_PATH"
+                    popd > /dev/null
                 else
                     realms run --file "$TEST_PATH" --wait
                 fi
