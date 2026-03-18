@@ -150,6 +150,9 @@ docker exec "$CONTAINER_NAME" bash -c "
     cp -f /app/realms_cli.log /app/test-logs/ 2>/dev/null || true && \
     cp -f /tmp/deploy.log /app/test-logs/ 2>/dev/null || true && \
     cp -f /app/generated_realm/.dfx/network/local/dfx.log /app/test-logs/realm_dfx.log 2>/dev/null || true && \
+    for f in /app/.realms/realm_*/realms.log; do cp -f \"\$f\" /app/test-logs/realms_deploy.log 2>/dev/null || true; done && \
+    for f in /app/.realms/realm_*/dfx.log; do cp -f \"\$f\" /app/test-logs/realm_folder_dfx.log 2>/dev/null || true; done && \
+    for f in /app/.realms/realm_*/dfx2.log; do cp -f \"\$f\" /app/test-logs/realm_folder_dfx2.log 2>/dev/null || true; done && \
     ls -lah /app/test-logs/ || true
 "
 

@@ -85,6 +85,10 @@ fi
 echo '[INFO] Installing realms cli...'
 pip install -e cli/ --force
 
+# Ensure pkg_resources is available (setuptools>=71 removed it, but modulegraph/basilisk needs it)
+echo '[INFO] Ensuring pkg_resources is available...'
+python3 -c "import pkg_resources" 2>/dev/null || pip install "setuptools<71"
+
 # Download test artifacts if script exists
 if [ -f /.dockerenv ]; then
     DOWNLOAD_SCRIPT="/app/extension-root/tests/download_test_artifacts.sh"
@@ -190,9 +194,9 @@ if [ "$TEST_CANISTERS_ENABLED" = "true" ]; then
     fi
 fi
 
-# Deploy realm
+# Deploy realm (use --plain-logs so build errors appear in CI output)
 echo '[INFO] Deploying realm...'
-realms realm deploy --folder "$REALM_FOLDER"
+realms realm deploy --folder "$REALM_FOLDER" --plain-logs
 
 # Deploy test canisters if enabled
 if [ "$TEST_CANISTERS_ENABLED" = "true" ] && [ -n "$TEST_CANISTERS_DEPLOY" ]; then
