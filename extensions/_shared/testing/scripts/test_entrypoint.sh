@@ -47,6 +47,7 @@ TEST_CANISTERS_INIT=$(jq -r '.test_canisters.init_script // ""' "$CONFIG_FILE")
 BACKEND_TESTS_ENABLED=$(jq -r '.backend_tests.enabled // true' "$CONFIG_FILE")
 BACKEND_PRE_SETUP=$(jq -r '.backend_tests.pre_setup // ""' "$CONFIG_FILE")
 BACKEND_TEST_FILES=$(jq -r '.backend_tests.test_files // [] | join(" ")' "$CONFIG_FILE")
+BACKEND_EXECUTION=$(jq -r '.backend_tests.execution // "canister"' "$CONFIG_FILE")
 
 E2E_TESTS_ENABLED=$(jq -r '.e2e_tests.enabled // false' "$CONFIG_FILE")
 E2E_BASE_PATH=$(jq -r '.e2e_tests.base_path // ""' "$CONFIG_FILE")
@@ -329,8 +330,12 @@ if [ "$BACKEND_TESTS_ENABLED" = "true" ] && [ "$TEST_TYPE" != "e2e_only" ]; then
             fi
             
             if [ -f "$TEST_PATH" ]; then
-                echo "[INFO] Running test: $TEST_FILE"
-                realms run --file "$TEST_PATH" --wait
+                echo "[INFO] Running test: $TEST_FILE (execution=$BACKEND_EXECUTION)"
+                if [ "$BACKEND_EXECUTION" = "host" ]; then
+                    python3 "$TEST_PATH"
+                else
+                    realms run --file "$TEST_PATH" --wait
+                fi
             else
                 echo "[WARNING] Test file not found: $TEST_PATH"
             fi
