@@ -15,10 +15,4 @@ else
     exit 1
 fi
 
-# Install extension-specific npm dependencies
-if [ -f "$SCRIPT_DIR/package.json" ]; then
-    echo "📦 Installing extension E2E dependencies..."
-    cd "$SCRIPT_DIR" && npm install 2>/dev/null
-fi
-
 bash "$SHARED_RUNNER" --config "$CONFIG_PATH" "$@"
