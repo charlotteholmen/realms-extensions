@@ -184,7 +184,7 @@
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 </svelte:head>
 
-<div class="mt-px space-y-4">
+<div class="mt-px pt-20 space-y-4">
 	<!-- KPI Stat Cards -->
 	{#if loading}
 		<div class="flex items-center justify-center py-12">
@@ -196,13 +196,11 @@
 		{#if realmInfo}
 			{@const welcomeExt = realmInfo.welcome_image ? (realmInfo.welcome_image.split('.').pop() || 'png') : ''}
 			{@const bgImage = realmInfo.welcome_image ? `/images/welcome.${welcomeExt}` : '/images/default_welcome.jpg'}
-			<Card size="xl" class="!p-0 overflow-hidden relative">
-				<div
-					class="absolute inset-0 bg-cover bg-center"
-					style="background-image: url('{bgImage}');"
-				></div>
-				<div class="absolute inset-0 bg-white/70 backdrop-blur-sm"></div>
-				<div class="relative p-8">
+			<div
+				class="rounded-lg border border-gray-200 shadow-md relative"
+				style="background: linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('{bgImage}') center/cover no-repeat;"
+			>
+				<div class="p-8">
 					<div class="flex items-center gap-3 mb-3">
 						<img
 							src={realmInfo.logo ? `/images/realm_logo.${realmInfo.logo.split('.').pop() || 'svg'}` : '/images/logo_sphere_only.svg'}
@@ -239,7 +237,7 @@
 						</svg>
 					</a>
 				</div>
-			</Card>
+			</div>
 		{/if}
 
 		<!-- AI Assistant -->
