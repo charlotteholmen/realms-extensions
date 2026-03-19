@@ -522,15 +522,16 @@ def get_personal_data(args: str) -> str:
 
 
 def _validate_address(address: str, network: str) -> tuple[bool, str]:
-    """Validate address format based on network"""
+    """Validate address format based on network (no regex — frozen re is limited)"""
     if not address or len(address) == 0:
         return False, "Address cannot be empty"
 
     if network == "ICP":
-        # ICP principals: one or more 5-char segments,
-        # ending with 3-char checksum
-        pattern = r"^([a-z0-9]{5}-)+[a-z0-9]{3}$"
-        if not re.match(pattern, address):
+        # ICP principals: groups of lowercase alnum separated by dashes
+        parts = address.split("-")
+        if len(parts) < 2:
+            return False, "Invalid ICP principal format"
+        if not all(p.isalnum() and p == p.lower() for p in parts):
             return False, "Invalid ICP principal format"
     elif network == "Bitcoin":
         if not (
@@ -540,10 +541,11 @@ def _validate_address(address: str, network: str) -> tuple[bool, str]:
         ):
             return False, "Invalid Bitcoin address format"
     elif network == "Ethereum":
-        if not re.match(r"^0x[a-fA-F0-9]{40}$", address):
+        if not (address.startswith("0x") and len(address) == 42 and all(c in "0123456789abcdefABCDEF" for c in address[2:])):
             return False, "Invalid Ethereum address format"
     elif network == "SEPA":
-        if not re.match(r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$", address.upper()):
+        iban = address.upper().replace(" ", "")
+        if len(iban) < 5 or not iban[:2].isalpha() or not iban[2:4].isdigit() or not iban[4:].isalnum():
             return False, "Invalid IBAN format"
 
     return True, ""
