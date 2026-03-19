@@ -4,6 +4,7 @@
 	import { CreditCardOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { realmName } from '$lib/stores/realmInfo';
+	import { CONFIG } from '$lib/config.js';
 	
 	// Props
 	export let userId: string;
@@ -19,6 +20,9 @@
 	let paymentInfo = null;
 	let selectedRecord = null;
 	let copied = false;
+	let copiedAgo = false;
+
+	const AGO_PER_BTC = 2.0;
 	
 	// Metadata modal state
 	let showMetadataModal = false;
@@ -418,8 +422,40 @@
 					</button>
 				</div>
 				
-				<p class="text-sm text-gray-500 dark:text-gray-400">
+					<p class="text-sm text-gray-500 dark:text-gray-400">
 					Run this command in your terminal to transfer <strong>{paymentInfo.amount_due} {paymentInfo.currency}</strong> to this invoice.
+				</p>
+			</div>
+
+			<!-- ICW Command (AGO) -->
+			<div class="space-y-3">
+				<h4 class="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+					</svg>
+					Or pay with AGO tokens
+				</h4>
+				
+				<div class="bg-gray-900 rounded-lg p-4 relative">
+					<pre class="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">icw transfer {paymentInfo.amount_due * AGO_PER_BTC} \{`\n`}  --to {paymentInfo.owner} \{`\n`}  --subaccount {paymentInfo.subaccount} \{`\n`}  --token {CONFIG.token_backend_canister_id}</pre>
+					<button 
+						class="absolute top-2 right-2 p-2 rounded hover:bg-gray-700 transition-colors"
+						on:click={() => { navigator.clipboard.writeText(`icw transfer ${paymentInfo.amount_due * AGO_PER_BTC} --to ${paymentInfo.owner} --subaccount ${paymentInfo.subaccount} --token ${CONFIG.token_backend_canister_id}`); copiedAgo = true; setTimeout(() => { copiedAgo = false; }, 2000); }}
+					>
+						{#if copiedAgo}
+							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+							</svg>
+						{:else}
+							<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+							</svg>
+						{/if}
+					</button>
+				</div>
+				
+				<p class="text-sm text-gray-500 dark:text-gray-400">
+					Run this command to transfer <strong>{paymentInfo.amount_due * AGO_PER_BTC} AGO</strong> to this invoice.
 				</p>
 			</div>
 			
