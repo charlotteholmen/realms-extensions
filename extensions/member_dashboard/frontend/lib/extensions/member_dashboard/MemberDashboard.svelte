@@ -301,7 +301,6 @@
 		
 		<!-- Payment Accounts Section -->
 		<section>
-			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Payment Accounts</h2>
 			<PaymentAccounts />
 		</section>
 	{:else}
