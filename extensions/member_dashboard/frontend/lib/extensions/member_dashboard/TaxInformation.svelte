@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Card, Spinner, Alert, Table, TableBody, TableBodyCell, TableBodyRow, TableHead, TableHeadCell, Badge, Button, Tooltip, Modal } from 'flowbite-svelte';
-	import { DollarOutline, CheckCircleOutline, ClockOutline, ExclamationCircleOutline, DownloadOutline, CreditCardOutline, RefreshOutline } from 'flowbite-svelte-icons';
+	import { Spinner, Alert, Badge, Button, Modal } from 'flowbite-svelte';
+	import { CreditCardOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { realmName } from '$lib/stores/realmInfo';
 	
@@ -49,30 +49,16 @@
 		return `https://github.com/smart-social-contracts/realms/issues/new?title=${title}&body=${body}&labels=user-support`;
 	})();
 	
-	// Calculate percentages for the distribution bar
-	$: totalAmount = invoiceData ? (invoiceData.summary.total_paid + invoiceData.summary.total_pending + invoiceData.summary.total_overdue) : 0;
-	$: paidPercentage = totalAmount > 0 ? (invoiceData.summary.total_paid / totalAmount) * 100 : 0;
-	$: pendingPercentage = totalAmount > 0 ? (invoiceData.summary.total_pending / totalAmount) * 100 : 0;
-	$: overduePercentage = totalAmount > 0 ? (invoiceData.summary.total_overdue / totalAmount) * 100 : 0;
-	
 	// Format date for display
 	function formatDate(dateStr) {
 		if (!dateStr) return 'N/A';
 		const date = new Date(dateStr);
+		if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'N/A';
 		return date.toLocaleDateString('en-US', { 
 			year: 'numeric', 
 			month: 'short', 
 			day: 'numeric' 
 		});
-	}
-	
-	// Format currency for display
-	function formatCurrency(amount) {
-		if (amount === undefined || amount === null) return 'N/A';
-		return new Intl.NumberFormat('en-US', { 
-			style: 'currency', 
-			currency: 'USD' 
-		}).format(amount);
 	}
 	
 	// Get status badge color based on status value
@@ -246,21 +232,11 @@
 </script>
 
 <div class="w-full">
-	<!-- Header with Actions -->
+	<!-- Header -->
 	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
 		<div>
-			<h3 class="text-2xl font-bold text-gray-900 dark:text-white">Invoice Overview</h3>
-			<p class="text-gray-500 dark:text-gray-400 mt-1">Manage your invoices and payment records</p>
-		</div>
-		<div class="flex items-center space-x-3 mt-4 sm:mt-0">
-			<Button color="light" size="sm" class="flex items-center">
-				<DownloadOutline class="w-4 h-4 mr-2" />
-				Download Statement
-			</Button>
-			<Button color="dark" size="sm" class="flex items-center">
-				<CreditCardOutline class="w-4 h-4 mr-2" />
-				Pay Now
-			</Button>
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white">Invoices</h2>
+			<p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">Manage your invoices and payment records</p>
 		</div>
 	</div>
 	
@@ -274,186 +250,94 @@
 			<span class="font-medium">Error:</span> {error}
 		</Alert>
 	{:else if invoiceData}
-		<!-- Payment Distribution Visual -->
-		<div class="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-2xl p-6 mb-6 border border-gray-200 dark:border-gray-700">
-			<div class="flex items-center justify-between mb-4">
-				<h4 class="text-lg font-semibold text-gray-900 dark:text-white">Payment Distribution</h4>
-				<span class="text-sm text-gray-500 dark:text-gray-400">Total: {formatCurrency(totalAmount)}</span>
-			</div>
-			
-			<!-- Visual Progress Bar -->
-			<div class="h-4 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex mb-4">
-				{#if paidPercentage > 0}
-					<div class="bg-gray-900 dark:bg-white h-full transition-all duration-500" style="width: {paidPercentage}%"></div>
-				{/if}
-				{#if pendingPercentage > 0}
-					<div class="bg-gray-500 h-full transition-all duration-500" style="width: {pendingPercentage}%"></div>
-				{/if}
-				{#if overduePercentage > 0}
-					<div class="bg-gray-300 dark:bg-gray-600 h-full transition-all duration-500" style="width: {overduePercentage}%"></div>
-				{/if}
-			</div>
-			
-			<!-- Legend Cards -->
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-				<!-- Paid -->
-				<div class="flex items-center p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
-					<div class="p-2 bg-gray-900 dark:bg-white rounded-lg mr-3">
-						<CheckCircleOutline class="w-5 h-5 text-white dark:text-gray-900" />
-					</div>
-					<div class="flex-1">
-						<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Paid</p>
-						<p class="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(invoiceData.summary.total_paid)}</p>
-					</div>
-					<div class="text-right">
-						<span class="text-sm font-medium text-gray-900 dark:text-white">{paidPercentage.toFixed(0)}%</span>
-					</div>
+		<!-- Invoice Records -->
+		<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+			{#if invoiceData.invoices && invoiceData.invoices.length > 0}
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+						<thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+							<tr>
+								<th class="px-4 py-3">Description</th>
+								<th class="px-4 py-3">Amount</th>
+								<th class="px-4 py-3">Currency</th>
+								<th class="px-4 py-3">Status</th>
+								<th class="px-4 py-3">Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each invoiceData.invoices as record}
+								<tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+									<td class="px-4 py-3">
+										<div class="font-medium text-gray-900 dark:text-white text-sm">
+											{record.metadata || 'Invoice'}
+										</div>
+									</td>
+									<td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+										{record.amount}
+									</td>
+									<td class="px-4 py-3 text-gray-700 dark:text-gray-300">
+										{record.currency || 'ckBTC'}
+									</td>
+									<td class="px-4 py-3">
+										<Badge color={getStatusColor(record.status)} rounded class="px-2.5 py-0.5">{record.status}</Badge>
+									</td>
+									<td class="px-4 py-3">
+										{#if record.status === 'Pending' || record.status === 'Overdue'}
+											<div class="flex items-center gap-2">
+												<Button 
+													size="xs" 
+													color="dark"
+													class="px-3 py-1"
+													on:click={() => openPaymentModal(record)}
+												>
+													Pay
+												</Button>
+												<Button 
+													size="xs" 
+													color="light"
+													class="px-2 py-1"
+													disabled={refreshingInvoiceId === record.id}
+													on:click={() => refreshInvoice(record)}
+												>
+													{#if refreshingInvoiceId === record.id}
+														<Spinner size="3" />
+													{:else}
+														<RefreshOutline class="w-3 h-3" />
+													{/if}
+												</Button>
+												<Button 
+													size="xs" 
+													color="light"
+													class="px-2 py-1 text-xs"
+													disabled={demoPayingInvoiceId === record.id}
+													on:click={() => demoMarkAsPaid(record)}
+												>
+													{#if demoPayingInvoiceId === record.id}
+														<Spinner size="3" />
+													{:else}
+														Demo Pay
+													{/if}
+												</Button>
+											</div>
+										{:else}
+											<span class="text-xs text-gray-400">{formatDate(record.paid_on)}</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
-				
-				<!-- Pending -->
-				<div class="flex items-center p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700">
-					<div class="p-2 bg-gray-500 rounded-lg mr-3">
-						<ClockOutline class="w-5 h-5 text-white" />
-					</div>
-					<div class="flex-1">
-						<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pending</p>
-						<p class="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(invoiceData.summary.total_pending)}</p>
-					</div>
-					<div class="text-right">
-						<span class="text-sm font-medium text-gray-500">{pendingPercentage.toFixed(0)}%</span>
-					</div>
+			{:else}
+				<div class="p-6 text-center text-gray-500 dark:text-gray-400">
+					No invoices yet.
 				</div>
-				
-				<!-- Overdue -->
-				<div class="flex items-center p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 {invoiceData.summary.total_overdue > 0 ? 'ring-2 ring-gray-300 dark:ring-gray-600' : ''}">
-					<div class="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg mr-3">
-						<ExclamationCircleOutline class="w-5 h-5 text-gray-700 dark:text-gray-300" />
-					</div>
-					<div class="flex-1">
-						<p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Overdue</p>
-						<p class="text-xl font-bold text-gray-900 dark:text-white">{formatCurrency(invoiceData.summary.total_overdue)}</p>
-					</div>
-					<div class="text-right">
-						<span class="text-sm font-medium text-gray-400">{overduePercentage.toFixed(0)}%</span>
-					</div>
-				</div>
-			</div>
-		</div>
-		
-		<!-- Invoice Records Table -->
-		<div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-			<div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-				<h4 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Invoices</h4>
-			</div>
-			<Table hoverable={true}>
-				<TableHead class="bg-gray-50 dark:bg-gray-900">
-					<TableHeadCell class="font-semibold">Recipient</TableHeadCell>
-					<TableHeadCell class="font-semibold">Amount</TableHeadCell>
-					<TableHeadCell class="font-semibold">Currency</TableHeadCell>
-					<TableHeadCell class="font-semibold">Due On</TableHeadCell>
-					<TableHeadCell class="font-semibold">Type</TableHeadCell>
-					<TableHeadCell class="font-semibold">Metadata</TableHeadCell>
-					<TableHeadCell class="font-semibold">Status</TableHeadCell>
-					<TableHeadCell class="font-semibold">Paid On</TableHeadCell>
-					<TableHeadCell class="font-semibold text-right">Action</TableHeadCell>
-				</TableHead>
-				<TableBody>
-					{#each invoiceData.invoices as record}
-						<TableBodyRow class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-							<TableBodyCell>
-								<div class="font-medium text-gray-900 dark:text-white">{record.recipient || 'N/A'}</div>
-							</TableBodyCell>
-							<TableBodyCell class="font-semibold text-gray-900 dark:text-white">
-								{record.amount}
-							</TableBodyCell>
-							<TableBodyCell class="text-gray-700 dark:text-gray-300">
-								{record.currency || 'ckBTC'}
-							</TableBodyCell>
-							<TableBodyCell class="text-gray-700 dark:text-gray-300">
-								{formatDate(record.due_on)}
-							</TableBodyCell>
-							<TableBodyCell class="text-gray-700 dark:text-gray-300">
-								{record.type || 'N/A'}
-							</TableBodyCell>
-							<TableBodyCell>
-								{#if record.metadata}
-									<button 
-										class="text-gray-600 dark:text-gray-300 underline hover:text-gray-900 dark:hover:text-white cursor-pointer text-sm"
-										on:click={() => openMetadataModal(record)}
-									>
-										View
-									</button>
-								{:else}
-									<span class="text-gray-400">—</span>
-								{/if}
-							</TableBodyCell>
-							<TableBodyCell>
-								<Badge color={getStatusColor(record.status)} rounded class="px-3 py-1">{record.status}</Badge>
-							</TableBodyCell>
-							<TableBodyCell class="text-gray-700 dark:text-gray-300">
-								{formatDate(record.paid_on)}
-							</TableBodyCell>
-							<TableBodyCell class="text-right">
-								{#if record.status === 'Pending' || record.status === 'Overdue'}
-									<div class="flex items-center justify-end gap-2">
-										<Button 
-											size="xs" 
-											color="light"
-											class="px-3 py-1.5"
-											disabled={refreshingInvoiceId === record.id}
-											on:click={() => refreshInvoice(record)}
-										>
-											{#if refreshingInvoiceId === record.id}
-												<Spinner size="3" class="mr-1.5" />
-											{:else}
-												<RefreshOutline class="w-3.5 h-3.5 mr-1.5" />
-											{/if}
-											Refresh
-										</Button>
-										<Button 
-											size="xs" 
-											color="dark"
-											class="px-4 py-1.5"
-											on:click={() => openPaymentModal(record)}
-										>
-											<CreditCardOutline class="w-3.5 h-3.5 mr-1.5" />
-											Pay
-										</Button>
-										<Button 
-											size="xs" 
-											color="light"
-											class="px-3 py-1.5 text-xs"
-											disabled={demoPayingInvoiceId === record.id}
-											on:click={() => demoMarkAsPaid(record)}
-										>
-											{#if demoPayingInvoiceId === record.id}
-												<Spinner size="3" class="mr-1" />
-											{/if}
-											Demo: Set as paid
-										</Button>
-									</div>
-								{:else}
-									<Button size="xs" color="light" class="px-3">View</Button>
-								{/if}
-							</TableBodyCell>
-						</TableBodyRow>
-					{/each}
-				</TableBody>
-			</Table>
+			{/if}
 		</div>
 		
 		<!-- Help Section -->
-		<div class="mt-6 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800/50 dark:to-gray-900/50 rounded-2xl p-6 border border-gray-200 dark:border-gray-700">
-			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-				<div class="mb-4 sm:mb-0">
-					<h4 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Need help with your invoices?</h4>
-					<p class="text-gray-600 dark:text-gray-400">Our invoice help desk is available Monday-Friday, 9am-5pm</p>
-				</div>
-				<div class="flex items-center space-x-3">
-					<Button color="light" size="sm">View FAQ</Button>
-					<a href={supportUrl} target="_blank" rel="noopener noreferrer"><Button color="dark" size="sm">Contact Support</Button></a>
-				</div>
-			</div>
+		<div class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+			Need help? <a href={supportUrl} target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Contact Support</a>
 		</div>
 	{:else}
 		<Alert color="dark" class="mb-4">

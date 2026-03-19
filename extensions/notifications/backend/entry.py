@@ -1,6 +1,6 @@
 import json
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List
 
 from ggg import Notification, User
@@ -106,6 +106,32 @@ def mark_as_read(args: str):
 
     except Exception as e:
         error_msg = f"Error updating notification read status: {e}\n{traceback.format_exc()}"
+        logger.error(error_msg)
+        return json.dumps({"error": error_msg})
+
+
+def delete_notification(args: str):
+    """Delete a notification by ID"""
+    try:
+        args_dict = json.loads(args) if args else {}
+        notification_id = args_dict.get("id")
+
+        if not notification_id:
+            return json.dumps({"error": "id is required"})
+
+        logger.info(f"Deleting notification {notification_id}")
+
+        notification = Notification.get(notification_id)
+        if notification:
+            notification.delete()
+            logger.info(f"Successfully deleted notification {notification_id}")
+            return json.dumps({"success": True, "id": notification_id})
+
+        logger.warning(f"Notification {notification_id} not found")
+        return json.dumps({"error": f"Notification {notification_id} not found"})
+
+    except Exception as e:
+        error_msg = f"Error deleting notification: {e}\n{traceback.format_exc()}"
         logger.error(error_msg)
         return json.dumps({"error": error_msg})
 

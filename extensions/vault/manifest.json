@@ -36,19 +36,5 @@
     "ic-python-db==0.7.1",
     "ic-python-logging==0.3.1"
   ],
-  "entity_method_overrides": [
-    {
-      "entity": "Transfer",
-      "method": "execute",
-      "implementation": "methods.execute_transfer",
-      "description": "Execute external blockchain transfer via vault"
-    },
-    {
-      "entity": "Balance",
-      "method": "refresh",
-      "type": "classmethod",
-      "implementation": "methods.refresh_balance",
-      "description": "Sync all balances with vault state"
-    }
-  ]
+  "entity_method_overrides": []
 }

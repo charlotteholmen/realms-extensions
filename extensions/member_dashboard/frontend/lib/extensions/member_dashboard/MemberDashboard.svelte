@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import { Card, Spinner, Alert, Tabs, TabItem, Button } from 'flowbite-svelte';
-	import { UserCircleOutline, FileDocOutline, DollarOutline, WalletOutline, ClockOutline, ExclamationCircleOutline, ChevronRightOutline, CalendarMonthOutline } from 'flowbite-svelte-icons';
+	import { Spinner, Alert, Button } from 'flowbite-svelte';
+	import { FileDocOutline, DollarOutline, UserCircleOutline, WalletOutline, ClockOutline, ExclamationCircleOutline, BellOutline, TrashBinOutline, EnvelopeOpenOutline, EnvelopeOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { principal } from '$lib/stores/auth';
 	import { _ } from 'svelte-i18n';
@@ -11,29 +11,12 @@
 	import PersonalData from './PersonalData.svelte';
 	import PaymentAccounts from './PaymentAccounts.svelte';
 	
-	// Tab name to index mapping
-	const tabMap: Record<string, number> = {
-		'public_services': 0,
-		'my_taxes': 1,
-		'personal_data': 2,
-		'payment_accounts': 3
-	};
-	
 	// Component state
 	let loading = true;
 	let error = '';
 	let summaryData = null;
-	let activeTab = 0;
-	
-	// Check URL hash and set active tab
-	function setTabFromHash() {
-		if (browser && window.location.hash) {
-			const hash = window.location.hash.substring(1); // Remove #
-			if (hash in tabMap) {
-				activeTab = tabMap[hash];
-			}
-		}
-	}
+	let notifications = [];
+	let notificationsLoading = true;
 	
 	// Get greeting based on time of day
 	function getGreeting(): string {
@@ -43,53 +26,25 @@
 		return 'Good evening';
 	}
 	
-	// Format the current date nicely
-	function formatCurrentDate(): string {
-		return new Date().toLocaleDateString('en-US', { 
-			weekday: 'long', 
-			year: 'numeric', 
-			month: 'long', 
-			day: 'numeric' 
-		});
-	}
-	
 	// Get dashboard summary data for the user
 	async function getDashboardSummary() {
 		try {
-			// Prepare call parameters
-			const callParams = { 
-				user_id: $principal || 'demo-user'
-			};
-			
-			// Log the request details
-			console.log('Calling get_dashboard_summary with parameters:', callParams);
-			
-			// Use the extension_async_call API method
+			const callParams = { user_id: $principal || 'demo-user' };
 			const response = await backend.extension_sync_call({
 				extension_name: "member_dashboard",
 				function_name: "get_dashboard_summary",
 				args: JSON.stringify(callParams)
 			});
 			
-			console.log('Dashboard summary response:', response);
-			
 			if (response.success) {
-				// Parse the JSON response
 				const data = JSON.parse(response.response);
-				console.log('Parsed dashboard summary:', data);
-				
 				if (data.success) {
-					// Handle successful response
 					summaryData = data.data;
-					console.log('Dashboard summary set:', summaryData);
 				} else {
-					// Handle error
 					error = `Failed to get dashboard summary: ${data.error || 'Unknown error'}`;
-					console.error(error);
 				}
 			} else {
 				error = `Failed to get dashboard summary: ${response.response}`;
-				console.error(error);
 			}
 		} catch (err) {
 			console.error('Error fetching dashboard summary:', err);
@@ -99,16 +54,85 @@
 		}
 	}
 	
+	// Fetch notifications for the user
+	async function getNotifications() {
+		try {
+			const response = await backend.extension_sync_call({
+				extension_name: "notifications",
+				function_name: "get_notifications",
+				args: JSON.stringify({ user_id: $principal || '' })
+			});
+			if (response.success) {
+				const data = JSON.parse(response.response);
+				if (data.notifications) {
+					notifications = data.notifications;
+				}
+			}
+		} catch (err) {
+			console.error('[MemberDashboard] Error fetching notifications:', err);
+		} finally {
+			notificationsLoading = false;
+		}
+	}
+	
+	// Toggle read/unread status
+	async function toggleRead(notif) {
+		try {
+			const newRead = !notif.read;
+			const response = await backend.extension_sync_call({
+				extension_name: "notifications",
+				function_name: "mark_as_read",
+				args: JSON.stringify({ id: notif.id, read: newRead })
+			});
+			if (response.success) {
+				notifications = notifications.map(n =>
+					n.id === notif.id ? { ...n, read: newRead } : n
+				);
+			}
+		} catch (err) {
+			console.error('[MemberDashboard] Error toggling notification:', err);
+		}
+	}
+	
+	// Delete a notification
+	async function deleteNotification(notif) {
+		try {
+			const response = await backend.extension_sync_call({
+				extension_name: "notifications",
+				function_name: "delete_notification",
+				args: JSON.stringify({ id: notif.id })
+			});
+			if (response.success) {
+				notifications = notifications.filter(n => n.id !== notif.id);
+			}
+		} catch (err) {
+			console.error('[MemberDashboard] Error deleting notification:', err);
+		}
+	}
+	
+	$: unreadCount = notifications.filter(n => !n.read).length;
+	let expandedId = null;
+	
+	function toggleExpand(notif) {
+		if (expandedId === notif.id) {
+			expandedId = null;
+		} else {
+			expandedId = notif.id;
+			if (!notif.read) {
+				toggleRead(notif);
+			}
+		}
+	}
+	
 	// Initialize component
 	onMount(async () => {
-		setTabFromHash();
-		await getDashboardSummary();
+		await Promise.all([getDashboardSummary(), getNotifications()]);
 	});
 </script>
 
-<div class="w-full max-w-none px-4 py-6">
-	<!-- Hero Header Section -->
-	<div class="mb-8">
+<div class="w-full max-w-none px-4 py-6 pt-20 space-y-8">
+	<!-- Header -->
+	<div>
 		<h1 class="text-3xl font-bold text-gray-900 dark:text-white">
 			{getGreeting()}, <span class="text-gray-600 dark:text-gray-400">{summaryData?.user_name || 'Member'}</span>
 		</h1>
@@ -124,121 +148,174 @@
 			<span class="font-medium">{$_('common.error')}:</span> {error}
 		</Alert>
 	{:else if summaryData}
-		<!-- Summary Cards Grid -->
-		<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-			<!-- Public Services Card -->
-			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
-						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
-						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
-				 on:click={() => activeTab = 0} on:keypress={() => activeTab = 0} role="button" tabindex="0">
-				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
-						<FileDocOutline class="w-6 h-6 text-white dark:text-gray-900" />
-					</div>
-					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+		<!-- Notifications Inbox -->
+		<section>
+			<div class="flex items-center justify-between mb-4">
+				<div class="flex items-center gap-2">
+					<h2 class="text-xl font-bold text-gray-900 dark:text-white">Notifications</h2>
+					{#if unreadCount > 0}
+						<span class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">{unreadCount}</span>
+					{/if}
 				</div>
-				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{summaryData.services_count || 0}</h3>
-				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{$_('extensions.member_dashboard.tabs.public_services')}</p>
+			</div>
+			{#if notificationsLoading}
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 flex justify-center">
+					<Spinner size="8" />
+				</div>
+			{:else if notifications.length === 0}
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center text-gray-500 dark:text-gray-400">
+					<BellOutline class="w-8 h-8 mx-auto mb-2 text-gray-300" />
+					No notifications
+				</div>
+			{:else}
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+					<table class="w-full">
+						<thead>
+							<tr class="bg-gray-50 dark:bg-gray-750 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 uppercase tracking-wider">
+								<th class="w-8 px-3 py-2"></th>
+								<th class="text-left px-3 py-2">Subject</th>
+								<th class="text-left px-3 py-2 whitespace-nowrap">Date</th>
+								<th class="w-20 px-3 py-2 text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each notifications as notif (notif.id)}
+								<tr
+									class="border-b border-gray-100 dark:border-gray-700 last:border-b-0 cursor-pointer transition-colors {notif.read ? 'hover:bg-gray-50 dark:hover:bg-gray-750' : 'bg-blue-50/50 dark:bg-blue-900/10 hover:bg-blue-50 dark:hover:bg-blue-900/20'}"
+									on:click={() => toggleExpand(notif)}
+								>
+									<td class="px-3 py-3 align-top">
+										{#if !notif.read}
+											<div class="w-2 h-2 bg-blue-500 rounded-full mt-1.5"></div>
+										{/if}
+									</td>
+									<td class="px-3 py-3">
+										<div class="truncate {notif.read ? 'text-sm text-gray-600 dark:text-gray-400' : 'text-sm font-semibold text-gray-900 dark:text-white'}">{notif.title}</div>
+										{#if expandedId === notif.id}
+											<div class="mt-2 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{notif.message}</div>
+										{/if}
+									</td>
+									<td class="px-3 py-3 align-top text-xs text-gray-400 whitespace-nowrap">{notif.timestamp || ''}</td>
+									<td class="px-3 py-3 align-top">
+										<!-- svelte-ignore a11y-click-events-have-key-events -->
+										<div class="flex justify-end gap-1" on:click|stopPropagation>
+											<button
+												on:click={() => toggleRead(notif)}
+												title={notif.read ? 'Mark as unread' : 'Mark as read'}
+												class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-gray-600 transition-colors"
+											>
+												{#if notif.read}
+													<EnvelopeOutline class="w-3.5 h-3.5" />
+												{:else}
+													<EnvelopeOpenOutline class="w-3.5 h-3.5" />
+												{/if}
+											</button>
+											<button
+												on:click={() => deleteNotification(notif)}
+												title="Delete"
+												class="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
+											>
+												<TrashBinOutline class="w-3.5 h-3.5" />
+											</button>
+										</div>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+		
+		<!-- Summary Cards Grid -->
+		<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+			<!-- Public Services Card -->
+			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+				<div class="flex items-center gap-3 mb-3">
+					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
+						<FileDocOutline class="w-5 h-5 text-white dark:text-gray-900" />
+					</div>
+					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Public Services</p>
+				</div>
+				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">{summaryData.services_count || 0}</h3>
 				{#if summaryData.services_approaching > 0}
-					<div class="flex items-center text-gray-700 dark:text-gray-300 text-sm font-medium bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-full w-fit">
-						<ClockOutline class="w-4 h-4 mr-1.5" />
+					<p class="text-xs text-amber-600 mt-1 flex items-center gap-1">
+						<ClockOutline class="w-3 h-3" />
 						{summaryData.services_approaching} approaching
-					</div>
+					</p>
 				{:else}
-					<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
-						✓ All on track
-					</div>
+					<p class="text-xs text-gray-500 mt-1">All on track</p>
 				{/if}
 			</div>
 			
 			<!-- Invoices Card -->
-			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
-						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
-						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
-				 on:click={() => activeTab = 1} on:keypress={() => activeTab = 1} role="button" tabindex="0">
-				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
-						<DollarOutline class="w-6 h-6 text-white dark:text-gray-900" />
+			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+				<div class="flex items-center gap-3 mb-3">
+					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
+						<DollarOutline class="w-5 h-5 text-white dark:text-gray-900" />
 					</div>
-					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Invoices</p>
 				</div>
-				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{summaryData.tax_records || 0}</h3>
-				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Invoices</p>
+				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">{summaryData.tax_records || 0}</h3>
 				{#if summaryData.tax_overdue > 0}
-					<div class="flex items-center text-gray-700 dark:text-gray-300 text-sm font-medium bg-gray-200 dark:bg-gray-700 px-3 py-1.5 rounded-full w-fit">
-						<ExclamationCircleOutline class="w-4 h-4 mr-1.5" />
+					<p class="text-xs text-red-600 mt-1 flex items-center gap-1">
+						<ExclamationCircleOutline class="w-3 h-3" />
 						{summaryData.tax_overdue} overdue
-					</div>
+					</p>
 				{:else}
-					<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
-						✓ No overdue payments
-					</div>
+					<p class="text-xs text-gray-500 mt-1">No overdue payments</p>
 				{/if}
 			</div>
 			
 			<!-- Personal Data Card -->
-			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
-						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
-						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
-				 on:click={() => activeTab = 2} on:keypress={() => activeTab = 2} role="button" tabindex="0">
-				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
-						<UserCircleOutline class="w-6 h-6 text-white dark:text-gray-900" />
+			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+				<div class="flex items-center gap-3 mb-3">
+					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
+						<UserCircleOutline class="w-5 h-5 text-white dark:text-gray-900" />
 					</div>
-					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Personal Data</p>
 				</div>
-				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{summaryData.personal_data_items || 0}</h3>
-				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{$_('extensions.member_dashboard.tabs.personal_data')}</p>
-				{#if summaryData.personal_data_updated > 0}
-					<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
-						↑ {summaryData.personal_data_updated} recently updated
-					</div>
-				{:else}
-					<div class="flex items-center text-gray-500 dark:text-gray-400 text-sm">
-						No recent changes
-					</div>
-				{/if}
+				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">{summaryData.personal_data_items || 0}</h3>
+				<p class="text-xs text-gray-500 mt-1">
+					{summaryData.personal_data_updated > 0 ? `${summaryData.personal_data_updated} recently updated` : 'No recent changes'}
+				</p>
 			</div>
 			
 			<!-- Payment Accounts Card -->
-			<div class="group relative bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/30 
-						rounded-2xl p-6 border border-gray-200/50 dark:border-gray-600/50 
-						shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer"
-				 on:click={() => activeTab = 3} on:keypress={() => activeTab = 3} role="button" tabindex="0">
-				<div class="flex items-center justify-between mb-4">
-					<div class="p-3 bg-gray-900 dark:bg-white rounded-xl shadow-lg shadow-gray-500/30">
-						<WalletOutline class="w-6 h-6 text-white dark:text-gray-900" />
+			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+				<div class="flex items-center gap-3 mb-3">
+					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
+						<WalletOutline class="w-5 h-5 text-white dark:text-gray-900" />
 					</div>
-					<ChevronRightOutline class="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Accounts</p>
 				</div>
-				<h3 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">—</h3>
-				<p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">{$_('extensions.member_dashboard.tabs.payment_accounts')}</p>
-				<div class="flex items-center text-gray-600 dark:text-gray-400 text-sm font-medium">
-					<span class="underline">Set up accounts →</span>
-				</div>
+				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">—</h3>
+				<p class="text-xs text-gray-500 mt-1">Set up accounts below</p>
 			</div>
 		</div>
 		
-		<!-- Content Tabs Section -->
-		<div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-			<Tabs style="underline" contentClass="p-6 bg-white dark:bg-gray-800">
-				<TabItem open={activeTab === 0} title={$_('extensions.member_dashboard.tabs.public_services')} class="p-4">
-					<ServicesList userId={$principal || 'demo-user'} />
-				</TabItem>
-				
-				<TabItem open={activeTab === 1} title="Invoices" class="p-4">
-					<TaxInformation userId={$principal || 'demo-user'} />
-				</TabItem>
-				
-				<TabItem open={activeTab === 2} title={$_('extensions.member_dashboard.tabs.personal_data')} class="p-4">
-					<PersonalData userId={$principal || 'demo-user'} />
-				</TabItem>
-				
-				<TabItem open={activeTab === 3} title={$_('extensions.member_dashboard.tabs.payment_accounts')} class="p-4">
-					<PaymentAccounts />
-				</TabItem>
-			</Tabs>
-		</div>
+		<!-- Invoices Section -->
+		<section>
+			<TaxInformation userId={$principal || 'demo-user'} />
+		</section>
+		
+		<!-- Public Services Section -->
+		<section>
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Public Services</h2>
+			<ServicesList userId={$principal || 'demo-user'} />
+		</section>
+		
+		<!-- Personal Data Section -->
+		<section>
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Personal Data</h2>
+			<PersonalData userId={$principal || 'demo-user'} />
+		</section>
+		
+		<!-- Payment Accounts Section -->
+		<section>
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Payment Accounts</h2>
+			<PaymentAccounts />
+		</section>
 	{:else}
 		<Alert color="blue" class="mb-4 rounded-xl">
 			{$_('extensions.member_dashboard.no_data')}
