@@ -145,6 +145,67 @@ def get_public_services(args: str) -> Async[str]:
         return json.dumps({"success": False, "error": str(e)})
 
 
+def get_citizenship_status(args: str) -> str:
+    """Get citizenship activation status for a user.
+
+    Checks two requirements:
+    1. Registration invoice paid
+    2. Passport verified (user has 'verified' flag or passport identity)
+    """
+    try:
+        params = json.loads(args)
+        user_id = params.get("user_id", "")
+        logger.info(f"get_citizenship_status called for user: {user_id}")
+
+        # Check invoice payment status
+        all_invoices = Invoice.instances()
+        user_invoices = [i for i in all_invoices if i.user and i.user.id == user_id]
+        has_pending = any(i.status == "Pending" for i in user_invoices)
+        all_paid = len(user_invoices) > 0 and all(i.status == "Paid" for i in user_invoices)
+        invoice_paid = all_paid
+
+        # Check passport verification
+        # Look for passport identity in extension entities
+        passport_verified = False
+        try:
+            user = User.load(user_id)
+            if user:
+                # Check if user has been marked as verified
+                meta = getattr(user, 'metadata', '') or ''
+                if 'passport_verified' in meta:
+                    passport_verified = True
+                # Also check profiles for active status
+                profiles = getattr(user, 'profiles', []) or []
+                if 'active_citizen' in profiles:
+                    passport_verified = True
+                    invoice_paid = True
+        except Exception:
+            pass
+
+        # Overall status
+        if invoice_paid and passport_verified:
+            status = "active"
+            status_label = "Active Citizen"
+        else:
+            status = "pending"
+            status_label = "Pending Activation"
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "status": status,
+                "status_label": status_label,
+                "invoice_paid": invoice_paid,
+                "passport_verified": passport_verified,
+                "total_invoices": len(user_invoices),
+                "paid_invoices": len([i for i in user_invoices if i.status == "Paid"]),
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error in get_citizenship_status: {str(e)}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
 def get_tax_information(args: str) -> str:
     """
     Get invoice information for the member (tax/billing data).
