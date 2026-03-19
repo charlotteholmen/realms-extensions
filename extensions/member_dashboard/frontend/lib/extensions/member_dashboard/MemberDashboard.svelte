@@ -186,7 +186,7 @@
 		{#if citizenshipStatus}
 			<section>
 				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-					<div class="flex items-center justify-between mb-4">
+					<div class="flex items-center justify-between">
 						<h2 class="text-xl font-bold text-gray-900 dark:text-white">Citizenship Status</h2>
 						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold
 							{citizenshipStatus.status === 'active'
@@ -199,47 +199,6 @@
 							{/if}
 							{citizenshipStatus.status_label}
 						</span>
-					</div>
-					{#if citizenshipStatus.status !== 'active'}
-						<p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Complete the following steps to become an active citizen:</p>
-					{/if}
-					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<!-- Invoice Payment -->
-						<div class="flex items-start gap-3 p-4 rounded-lg {citizenshipStatus.invoice_paid ? 'bg-green-50 dark:bg-green-900/10' : 'bg-gray-50 dark:bg-gray-700/30'}">
-							{#if citizenshipStatus.invoice_paid}
-								<CheckCircleSolid class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-							{:else}
-								<CloseCircleSolid class="w-5 h-5 text-gray-300 dark:text-gray-500 mt-0.5 flex-shrink-0" />
-							{/if}
-							<div>
-								<div class="font-medium text-sm {citizenshipStatus.invoice_paid ? 'text-green-800 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}">Registration Invoice</div>
-								<div class="text-xs mt-0.5 {citizenshipStatus.invoice_paid ? 'text-green-600 dark:text-green-500' : 'text-gray-500 dark:text-gray-400'}">
-									{#if citizenshipStatus.invoice_paid}
-										Paid ({citizenshipStatus.paid_invoices}/{citizenshipStatus.total_invoices})
-									{:else}
-										Pending — pay from the Invoices section below
-									{/if}
-								</div>
-							</div>
-						</div>
-						<!-- Passport Verification -->
-						<div class="flex items-start gap-3 p-4 rounded-lg {citizenshipStatus.passport_verified ? 'bg-green-50 dark:bg-green-900/10' : 'bg-gray-50 dark:bg-gray-700/30'}">
-							{#if citizenshipStatus.passport_verified}
-								<CheckCircleSolid class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-							{:else}
-								<CloseCircleSolid class="w-5 h-5 text-gray-300 dark:text-gray-500 mt-0.5 flex-shrink-0" />
-							{/if}
-							<div>
-								<div class="font-medium text-sm {citizenshipStatus.passport_verified ? 'text-green-800 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}">Passport Verification</div>
-								<div class="text-xs mt-0.5 {citizenshipStatus.passport_verified ? 'text-green-600 dark:text-green-500' : 'text-gray-500 dark:text-gray-400'}">
-									{#if citizenshipStatus.passport_verified}
-										Verified via ZK Passport
-									{:else}
-										Pending — use the <a href="/extensions/passport_verification" class="text-blue-600 underline hover:text-blue-800">Passport Verification</a> extension
-									{/if}
-								</div>
-							</div>
-						</div>
 					</div>
 				</div>
 			</section>

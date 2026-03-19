@@ -335,10 +335,6 @@
 			{/if}
 		</div>
 		
-		<!-- Help Section -->
-		<div class="mt-4 text-sm text-gray-500 dark:text-gray-400">
-			Need help? <a href={supportUrl} target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Contact Support</a>
-		</div>
 	{:else}
 		<Alert color="dark" class="mb-4">
 			No invoice information available at this time.
