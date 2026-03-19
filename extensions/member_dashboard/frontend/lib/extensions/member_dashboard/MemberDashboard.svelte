@@ -6,9 +6,7 @@
 	import { backend } from '$lib/canisters';
 	import { principal } from '$lib/stores/auth';
 	import { _ } from 'svelte-i18n';
-	import ServicesList from './ServicesList.svelte';
 	import TaxInformation from './TaxInformation.svelte';
-	import PersonalData from './PersonalData.svelte';
 	import PaymentAccounts from './PaymentAccounts.svelte';
 	
 	// Component state
@@ -257,18 +255,6 @@
 		<!-- Invoices Section -->
 		<section>
 			<TaxInformation userId={$principal || 'demo-user'} />
-		</section>
-		
-		<!-- Public Services Section -->
-		<section>
-			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Public Services</h2>
-			<ServicesList userId={$principal || 'demo-user'} />
-		</section>
-		
-		<!-- Personal Data Section -->
-		<section>
-			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Personal Data</h2>
-			<PersonalData userId={$principal || 'demo-user'} />
 		</section>
 		
 		<!-- Payment Accounts Section -->
