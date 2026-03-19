@@ -64,7 +64,7 @@
       "title": "Proposal Title",
       "description": "Description",
       "code_url": "Code URL",
-      "code_checksum": "Code Checksum (Optional)"
+      "code_checksum": "Code Checksum"
     },
     "placeholders": {
       "title": "Enter a clear, descriptive title for your proposal",
@@ -74,7 +74,7 @@
     },
     "help": {
       "code_url": "Link to the Python code that will be executed if this proposal passes",
-      "code_checksum": "Optional SHA-256 checksum to verify the code has not been tampered with"
+      "code_checksum": "SHA-256 checksum to verify the code has not been tampered with"
     },
     "security": {
       "title": "Security Notice",

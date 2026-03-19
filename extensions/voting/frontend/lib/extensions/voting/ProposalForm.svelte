@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import { Card, Button, Input, Label, Textarea, Alert } from 'flowbite-svelte';
+	import { Button, Input, Label, Textarea, Alert } from 'flowbite-svelte';
 	import { CheckOutline, CloseOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { principal } from '$lib/stores/auth';
@@ -18,7 +18,7 @@
 	let success = '';
 	
 	async function handleSubmit() {
-		if (!title.trim() || !description.trim() || !codeUrl.trim()) {
+		if (!title.trim() || !description.trim() || !codeUrl.trim() || !codeChecksum.trim()) {
 			error = $_('extensions.voting.form.validation.required_fields');
 			return;
 		}
@@ -40,7 +40,7 @@
 					title: title.trim(),
 					description: description.trim(),
 					code_url: codeUrl.trim(),
-					code_checksum: codeChecksum.trim() || undefined,
+					code_checksum: codeChecksum.trim(),
 					proposer: $principal || 'anonymous'
 				})
 			});
@@ -130,9 +130,7 @@
 	}
 </script>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-	<!-- Left Column: Form -->
-	<Card>
+<div class="w-full">
 		<div class="mb-6">
 			<h2 class="text-xl font-semibold text-gray-900 mb-2">
 				{$_('extensions.voting.form.title')}
@@ -203,7 +201,7 @@
 
 			<div>
 				<Label for="code-checksum" class="mb-2">
-					{$_('extensions.voting.form.fields.code_checksum')}
+					{$_('extensions.voting.form.fields.code_checksum')} *
 				</Label>
 				<div class="flex gap-2">
 					<div class="flex-1">
@@ -259,7 +257,7 @@
 				</Button>
 				<Button 
 					type="submit"
-					disabled={submitting || !title.trim() || !description.trim() || !codeUrl.trim()}
+					disabled={submitting || !title.trim() || !description.trim() || !codeUrl.trim() || !codeChecksum.trim()}
 				>
 					{#if submitting}
 						<div class="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -271,128 +269,4 @@
 				</Button>
 			</div>
 		</form>
-	</Card>
-
-	<!-- Right Column: Preview -->
-	<Card class="bg-gray-50">
-		<div class="mb-4">
-			<h3 class="text-lg font-semibold text-gray-800 mb-2">
-				{$_('extensions.voting.form.preview.title')}
-			</h3>
-			<p class="text-sm text-gray-600">
-				{$_('extensions.voting.form.preview.description')}
-			</p>
-		</div>
-
-		<div class="space-y-4">
-			<!-- Title Preview -->
-			<div>
-				<h4 class="text-sm font-medium text-gray-700 mb-1">
-					{$_('extensions.voting.form.fields.title')}
-				</h4>
-				<div class="bg-white border rounded-lg p-3 min-h-[2.5rem] flex items-center">
-					{#if title.trim()}
-						<span class="text-gray-900 font-medium">{title}</span>
-					{:else}
-						<span class="text-gray-400 italic">{$_('extensions.voting.form.preview.empty_title')}</span>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Description Preview -->
-			<div>
-				<h4 class="text-sm font-medium text-gray-700 mb-1">
-					{$_('extensions.voting.form.fields.description')}
-				</h4>
-				<div class="bg-white border rounded-lg p-3 min-h-[6rem]">
-					{#if description.trim()}
-						<p class="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">{description}</p>
-					{:else}
-						<span class="text-gray-400 italic text-sm">{$_('extensions.voting.form.preview.empty_description')}</span>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Code URL Preview -->
-			<div>
-				<h4 class="text-sm font-medium text-gray-700 mb-1">
-					{$_('extensions.voting.form.fields.code_url')}
-				</h4>
-				<div class="bg-white border rounded-lg p-3 min-h-[2.5rem] flex items-center">
-					{#if codeUrl.trim()}
-						<a 
-							href={codeUrl} 
-							target="_blank" 
-							rel="noopener noreferrer"
-							class="text-blue-600 hover:underline text-sm break-all"
-						>
-							{codeUrl}
-						</a>
-					{:else}
-						<span class="text-gray-400 italic text-sm">{$_('extensions.voting.form.preview.empty_code_url')}</span>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Proposal Summary -->
-			{#if title.trim() && description.trim() && codeUrl.trim()}
-				<div class="mt-6 pt-4 border-t border-gray-200">
-					<h4 class="text-sm font-medium text-gray-700 mb-2">
-						{$_('extensions.voting.form.preview.summary')}
-					</h4>
-					<div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-						<div class="flex items-center gap-2 mb-2">
-							<div class="w-2 h-2 bg-blue-500 rounded-full"></div>
-							<span class="text-sm font-medium text-blue-800">
-								{$_('extensions.voting.form.preview.ready_to_submit')}
-							</span>
-						</div>
-						<ul class="text-xs text-blue-700 space-y-1">
-							<li>✓ {$_('extensions.voting.form.preview.check_title')}</li>
-							<li>✓ {$_('extensions.voting.form.preview.check_description')}</li>
-							<li>✓ {$_('extensions.voting.form.preview.check_code_url')}</li>
-						</ul>
-					</div>
-				</div>
-			{:else}
-				<div class="mt-6 pt-4 border-t border-gray-200">
-					<h4 class="text-sm font-medium text-gray-700 mb-2">
-						{$_('extensions.voting.form.preview.checklist')}
-					</h4>
-					<div class="space-y-2">
-						<div class="flex items-center gap-2">
-							<div class="w-4 h-4 rounded border-2 {title.trim() ? 'bg-green-500 border-green-500' : 'border-gray-300'}">
-								{#if title.trim()}
-									<CheckOutline class="w-3 h-3 text-white" />
-								{/if}
-							</div>
-							<span class="text-sm {title.trim() ? 'text-green-700' : 'text-gray-500'}">
-								{$_('extensions.voting.form.preview.check_title')}
-							</span>
-						</div>
-						<div class="flex items-center gap-2">
-							<div class="w-4 h-4 rounded border-2 {description.trim() ? 'bg-green-500 border-green-500' : 'border-gray-300'}">
-								{#if description.trim()}
-									<CheckOutline class="w-3 h-3 text-white" />
-								{/if}
-							</div>
-							<span class="text-sm {description.trim() ? 'text-green-700' : 'text-gray-500'}">
-								{$_('extensions.voting.form.preview.check_description')}
-							</span>
-						</div>
-						<div class="flex items-center gap-2">
-							<div class="w-4 h-4 rounded border-2 {codeUrl.trim() ? 'bg-green-500 border-green-500' : 'border-gray-300'}">
-								{#if codeUrl.trim()}
-									<CheckOutline class="w-3 h-3 text-white" />
-								{/if}
-							</div>
-							<span class="text-sm {codeUrl.trim() ? 'text-green-700' : 'text-gray-500'}">
-								{$_('extensions.voting.form.preview.check_code_url')}
-							</span>
-						</div>
-					</div>
-				</div>
-			{/if}
-		</div>
-	</Card>
 </div>
