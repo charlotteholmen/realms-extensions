@@ -52,6 +52,9 @@
 					// Handle successful response
 					personalData = data.data.personal_data;
 					console.log('Personal data set:', personalData);
+				} else if (data.error && data.error.includes('User not found')) {
+					// User profile not created yet — not an error
+					personalData = null;
 				} else {
 					// Handle error
 					error = `Failed to get personal data: ${data.error || 'Unknown error'}`;

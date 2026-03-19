@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Spinner, Alert, Button } from 'flowbite-svelte';
-	import { FileDocOutline, DollarOutline, UserCircleOutline, WalletOutline, ClockOutline, ExclamationCircleOutline, BellOutline, TrashBinOutline, EnvelopeOpenOutline, EnvelopeOutline } from 'flowbite-svelte-icons';
+	import { BellOutline, TrashBinOutline, EnvelopeOpenOutline, EnvelopeOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { principal } from '$lib/stores/auth';
 	import { _ } from 'svelte-i18n';
@@ -226,73 +226,6 @@
 				</div>
 			{/if}
 		</section>
-		
-		<!-- Summary Cards Grid -->
-		<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-			<!-- Public Services Card -->
-			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
-				<div class="flex items-center gap-3 mb-3">
-					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
-						<FileDocOutline class="w-5 h-5 text-white dark:text-gray-900" />
-					</div>
-					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Public Services</p>
-				</div>
-				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">{summaryData.services_count || 0}</h3>
-				{#if summaryData.services_approaching > 0}
-					<p class="text-xs text-amber-600 mt-1 flex items-center gap-1">
-						<ClockOutline class="w-3 h-3" />
-						{summaryData.services_approaching} approaching
-					</p>
-				{:else}
-					<p class="text-xs text-gray-500 mt-1">All on track</p>
-				{/if}
-			</div>
-			
-			<!-- Invoices Card -->
-			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
-				<div class="flex items-center gap-3 mb-3">
-					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
-						<DollarOutline class="w-5 h-5 text-white dark:text-gray-900" />
-					</div>
-					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Invoices</p>
-				</div>
-				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">{summaryData.tax_records || 0}</h3>
-				{#if summaryData.tax_overdue > 0}
-					<p class="text-xs text-red-600 mt-1 flex items-center gap-1">
-						<ExclamationCircleOutline class="w-3 h-3" />
-						{summaryData.tax_overdue} overdue
-					</p>
-				{:else}
-					<p class="text-xs text-gray-500 mt-1">No overdue payments</p>
-				{/if}
-			</div>
-			
-			<!-- Personal Data Card -->
-			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
-				<div class="flex items-center gap-3 mb-3">
-					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
-						<UserCircleOutline class="w-5 h-5 text-white dark:text-gray-900" />
-					</div>
-					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Personal Data</p>
-				</div>
-				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">{summaryData.personal_data_items || 0}</h3>
-				<p class="text-xs text-gray-500 mt-1">
-					{summaryData.personal_data_updated > 0 ? `${summaryData.personal_data_updated} recently updated` : 'No recent changes'}
-				</p>
-			</div>
-			
-			<!-- Payment Accounts Card -->
-			<div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
-				<div class="flex items-center gap-3 mb-3">
-					<div class="p-2.5 bg-gray-900 dark:bg-white rounded-lg">
-						<WalletOutline class="w-5 h-5 text-white dark:text-gray-900" />
-					</div>
-					<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Accounts</p>
-				</div>
-				<h3 class="text-2xl font-bold text-gray-900 dark:text-white">—</h3>
-				<p class="text-xs text-gray-500 mt-1">Set up accounts below</p>
-			</div>
-		</div>
 		
 		<!-- Invoices Section -->
 		<section>
