@@ -93,11 +93,10 @@ def mark_as_read(args: str):
         logger.info(f"Setting notification {notification_id} read={read_value}")
 
         # Find notification in database by _id
-        notification = Notification.get(notification_id)
+        notification = Notification.load(str(notification_id))
 
         if notification:
             notification.read = read_value
-            notification.save()
             logger.info(f"Successfully set notification {notification_id} read={read_value}")
             return json.dumps({"success": True, "id": notification_id, "read": read_value})
 
@@ -121,7 +120,7 @@ def delete_notification(args: str):
 
         logger.info(f"Deleting notification {notification_id}")
 
-        notification = Notification.get(notification_id)
+        notification = Notification.load(str(notification_id))
         if notification:
             notification.delete()
             logger.info(f"Successfully deleted notification {notification_id}")
