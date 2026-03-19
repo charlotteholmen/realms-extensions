@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { Spinner, Alert, Button } from 'flowbite-svelte';
-	import { BellOutline, TrashBinOutline, EnvelopeOpenOutline, EnvelopeOutline } from 'flowbite-svelte-icons';
+	import { BellOutline, TrashBinOutline, EnvelopeOpenOutline, EnvelopeOutline, EyeOutline, EyeSlashOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { principal } from '$lib/stores/auth';
 	import { _ } from 'svelte-i18n';
@@ -112,6 +112,22 @@
 	
 	$: unreadCount = notifications.filter(n => !n.read).length;
 	let expandedId = null;
+
+	// Simple markdown to HTML converter
+	function mdToHtml(text) {
+		if (!text) return '';
+		return text
+			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+			.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+			.replace(/\*(.+?)\*/g, '<em>$1</em>')
+			.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-600 underline hover:text-blue-800" target="_blank" rel="noopener">$1</a>')
+			.replace(/`([^`]+)`/g, '<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-xs">$1</code>')
+			.replace(/^\s*[-*]\s+(.+)$/gm, '<li class="ml-4">$1</li>')
+			.replace(/(<li.*<\/li>\n?)+/g, (m) => '<ul class="list-disc ml-2 space-y-1">' + m + '</ul>')
+			.replace(/\n{2,}/g, '</p><p class="mt-2">')
+			.replace(/\n/g, '<br>')
+			.replace(/^/, '<p>').replace(/$/, '</p>');
+	}
 	
 	function toggleExpand(notif) {
 		if (expandedId === notif.id) {
@@ -192,13 +208,24 @@
 									<td class="px-3 py-3">
 										<div class="truncate {notif.read ? 'text-sm text-gray-600 dark:text-gray-400' : 'text-sm font-semibold text-gray-900 dark:text-white'}">{notif.title}</div>
 										{#if expandedId === notif.id}
-											<div class="mt-2 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{notif.message}</div>
+											<div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 leading-relaxed prose prose-sm dark:prose-invert max-w-none">{@html mdToHtml(notif.message)}</div>
 										{/if}
 									</td>
 									<td class="px-3 py-3 align-top text-xs text-gray-400 whitespace-nowrap">{notif.timestamp || ''}</td>
 									<td class="px-3 py-3 align-top">
 										<!-- svelte-ignore a11y-click-events-have-key-events -->
 										<div class="flex justify-end gap-1" on:click|stopPropagation>
+											<button
+												on:click={() => toggleExpand(notif)}
+												title={expandedId === notif.id ? 'Collapse' : 'Read message'}
+												class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 {expandedId === notif.id ? 'text-blue-500' : 'text-gray-400'} hover:text-gray-600 transition-colors"
+											>
+												{#if expandedId === notif.id}
+													<EyeSlashOutline class="w-3.5 h-3.5" />
+												{:else}
+													<EyeOutline class="w-3.5 h-3.5" />
+												{/if}
+											</button>
 											<button
 												on:click={() => toggleRead(notif)}
 												title={notif.read ? 'Mark as unread' : 'Mark as read'}
