@@ -191,23 +191,17 @@
 	async function refreshInvoice(record) {
 		refreshingInvoiceId = record.id;
 		try {
-			const response = await backend.extension_async_call({
-				extension_name: "vault",
-				function_name: "refresh_invoice",
-				args: JSON.stringify({ invoice_id: record.id })
-			});
+			const rawResponse = await backend.refresh_invoice(
+				JSON.stringify({ invoice_id: record.id })
+			);
 			
-			console.log('Refresh invoice response:', response);
+			console.log('Refresh invoice response:', rawResponse);
 			
-			if (response.success) {
-				const data = JSON.parse(response.response);
-				if (data.success && data.data?.invoice) {
-					// Update the record status if it changed
-					const updatedInvoice = data.data.invoice;
-					if (updatedInvoice.status !== record.status) {
-						// Refresh the entire invoice data to get updated summary
-						await getInvoiceInformation();
-					}
+			const data = JSON.parse(rawResponse);
+			if (data.success && data.data) {
+				if (data.data.status !== record.status) {
+					// Refresh the entire invoice data to get updated summary
+					await getInvoiceInformation();
 				}
 			}
 		} catch (err) {
