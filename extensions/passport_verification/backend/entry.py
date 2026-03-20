@@ -245,16 +245,17 @@ def set_application_id(new_app_id: str) -> str:
 def create_passport_identity(args: str) -> str:
     """Create passport identity after successful verification"""
     try:
+        from ggg import User
+        from ggg.identity.human import Human
+        from ggg.identity.identity import Identity
+
         session_id = get_session_id(args)
         logger.info(f"🆔 Creating passport identity for session: {session_id}")
-        logger.info(f"📝 Received args: {args}")
-        logger.info(f"📝 Args type: {type(args)}")
 
         verification_data = {}
         if args and args.strip():
             try:
                 verification_data = json.loads(args)
-                logger.info(f"📊 Parsed verification data: {verification_data}")
             except json.JSONDecodeError as json_err:
                 logger.error(f"❌ JSON decode error: {json_err}")
                 return json.dumps(
@@ -264,23 +265,41 @@ def create_passport_identity(args: str) -> str:
                     }
                 )
 
-        result = {
+        user = User[session_id]
+        if not user:
+            logger.error(f"❌ User not found: {session_id}")
+            return json.dumps({"success": False, "error": "User not found"})
+
+        human = user.human
+        if not human:
+            human = Human(name=session_id, user=user)
+            logger.info(f"Created Human for user {session_id}")
+
+        # Check if passport identity already exists
+        for identity in human.identities:
+            if identity.type == "passport":
+                logger.info(f"Passport identity already exists for {session_id}")
+                return json.dumps({
+                    "success": True,
+                    "session_id": session_id,
+                    "identity_created": False,
+                    "already_exists": True,
+                })
+
+        # Create the passport Identity
+        Identity(type="passport", metadata=json.dumps(verification_data), human=human)
+        logger.info(f"✅ Passport identity created for session: {session_id}")
+
+        return json.dumps({
             "success": True,
             "session_id": session_id,
             "identity_created": True,
             "timestamp": str(ic.time()),
             "verification_data": verification_data,
-        }
-
-        logger.info(f"✅ Passport identity created for session: {session_id}")
-
-        return json.dumps(result)
+        })
 
     except Exception as e:
         logger.error(f"❌ Error creating passport identity: {str(e)}")
-        logger.error(f"❌ Exception type: {type(e)}")
         import traceback
-
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
-
         return json.dumps({"success": False, "error": str(e)})

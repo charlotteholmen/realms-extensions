@@ -60,10 +60,9 @@ def _invoice_to_dict(
 
 def get_dashboard_summary(args: str) -> Async[str]:
     try:
-        args = "{}"
         logger.info(f"get_dashboard_summary called with args: {args}")
-        params = json.loads(args)
-        user_id = params.get("user_id", "anonymous")
+        params = json.loads(args) if args and args.strip() else {}
+        user_id = params.get("user_id", "") or ic.caller().to_str()
 
         # Get data from database
         all_services = Service.instances()
@@ -154,7 +153,7 @@ def get_citizenship_status(args: str) -> str:
     """
     try:
         params = json.loads(args)
-        user_id = params.get("user_id", "")
+        user_id = params.get("user_id", "") or ic.caller().to_str()
         logger.info(f"get_citizenship_status called for user: {user_id}")
 
         # Check invoice payment status
@@ -165,22 +164,38 @@ def get_citizenship_status(args: str) -> str:
         invoice_paid = all_paid
 
         # Check passport verification
-        # Look for passport identity in extension entities
+        # Look for passport Identity entity linked to user's Human
         passport_verified = False
         try:
             user = User.load(user_id)
+            logger.info(f"get_citizenship_status: User.load({user_id}) = {user}")
+            if not user:
+                user = User[user_id]
+                logger.info(f"get_citizenship_status: User[{user_id}] = {user}")
             if user:
-                # Check if user has been marked as verified
-                meta = getattr(user, 'metadata', '') or ''
-                if 'passport_verified' in meta:
-                    passport_verified = True
+                human = user.human
+                logger.info(f"get_citizenship_status: user.human = {human}")
+                if human:
+                    identities_list = list(human.identities)
+                    logger.info(f"get_citizenship_status: human.identities = {identities_list}")
+                    for identity in identities_list:
+                        logger.info(f"get_citizenship_status: identity.type = {identity.type}")
+                        if identity.type == "passport":
+                            passport_verified = True
+                            break
+                else:
+                    logger.info(f"get_citizenship_status: no human for user {user_id}")
                 # Also check profiles for active status
                 profiles = getattr(user, 'profiles', []) or []
                 if 'active_citizen' in profiles:
                     passport_verified = True
                     invoice_paid = True
-        except Exception:
-            pass
+            else:
+                logger.info(f"get_citizenship_status: user not found for {user_id}")
+        except Exception as e:
+            logger.error(f"get_citizenship_status: error checking passport: {e}")
+            import traceback as tb
+            logger.error(f"get_citizenship_status: {tb.format_exc()}")
 
         # Overall status
         if invoice_paid and passport_verified:
