@@ -790,11 +790,55 @@ def refresh_invoice(args: str) -> Async[str]:
                 invoice_id=invoice_id,
             )
 
-        # Refresh this specific subaccount (skip cooldown)
+        # Refresh this specific subaccount via indexer (skip cooldown)
         result = yield _refresh(force=True, subaccount_hex=subaccount_hex)
 
         # Re-fetch invoice to get updated status
         invoice = Invoice[invoice_id]
+
+        # If still Pending after indexer refresh, directly check balances
+        # on both ckBTC and AGO/REALMS ledgers
+        if invoice.status == "Pending":
+            from .vault_lib.candid_types import ICRCLedger, Account
+
+            vault_principal = ic.id()
+            subaccount_bytes = invoice.get_subaccount()
+            amount_required = int(invoice.amount * 100_000_000)
+            AGO_PER_BTC = 2.0
+
+            for token_name, token_config in CANISTER_PRINCIPALS.items():
+                try:
+                    ledger = ICRCLedger(Principal.from_str(token_config["ledger"]))
+                    balance = yield ledger.icrc1_balance_of(
+                        Account(owner=vault_principal, subaccount=list(subaccount_bytes))
+                    )
+                    if hasattr(balance, "Ok"):
+                        balance = balance.Ok
+
+                    # For AGO/REALMS token, adjust the required amount
+                    if token_name in ("REALMS", "AGO"):
+                        required = int(invoice.amount * AGO_PER_BTC * 100_000_000)
+                    else:
+                        required = amount_required
+
+                    logger.info(
+                        f"Invoice {invoice_id} balance check: {token_name} "
+                        f"balance={balance}, required={required}"
+                    )
+
+                    if balance >= required:
+                        invoice.status = "Paid"
+                        invoice.paid_at = str(ic.time())
+                        logger.info(
+                            f"Invoice {invoice_id} marked as Paid via {token_name} "
+                            f"balance ({balance} >= {required})"
+                        )
+                        break
+                except Exception as ledger_err:
+                    logger.warning(
+                        f"Failed to check {token_name} balance for invoice "
+                        f"{invoice_id}: {ledger_err}"
+                    )
 
         return json.dumps(
             {

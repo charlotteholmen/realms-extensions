@@ -162,14 +162,28 @@
 		}
 	}
 	
-	// Copy command to clipboard
-	async function copyCommand(text) {
+	// Copy to clipboard with fallback for IC Permissions-Policy
+	function clipboardCopy(text) {
 		try {
-			await navigator.clipboard.writeText(text);
-			copied = true;
-			setTimeout(() => { copied = false; }, 2000);
+			const ta = document.createElement('textarea');
+			ta.value = text;
+			ta.style.position = 'fixed';
+			ta.style.left = '-9999px';
+			document.body.appendChild(ta);
+			ta.select();
+			document.execCommand('copy');
+			document.body.removeChild(ta);
+			return true;
 		} catch (e) {
 			console.error('Failed to copy:', e);
+			return false;
+		}
+	}
+
+	function copyCommand(text) {
+		if (clipboardCopy(text)) {
+			copied = true;
+			setTimeout(() => { copied = false; }, 2000);
 		}
 	}
 	
@@ -440,7 +454,7 @@
 					<pre class="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">icw transfer \{`\n`}  {paymentInfo.owner} {paymentInfo.amount_due * AGO_PER_BTC} \{`\n`}  --subaccount {paymentInfo.subaccount} \{`\n`}  --ledger {CONFIG.token_backend_canister_id}</pre>
 					<button 
 						class="absolute top-2 right-2 p-2 rounded hover:bg-gray-700 transition-colors"
-						on:click={() => { navigator.clipboard.writeText(`icw transfer ${paymentInfo.owner} ${paymentInfo.amount_due * AGO_PER_BTC} --subaccount ${paymentInfo.subaccount} --ledger ${CONFIG.token_backend_canister_id}`); copiedAgo = true; setTimeout(() => { copiedAgo = false; }, 2000); }}
+						on:click={() => { if (clipboardCopy(`icw transfer ${paymentInfo.owner} ${paymentInfo.amount_due * AGO_PER_BTC} --subaccount ${paymentInfo.subaccount} --ledger ${CONFIG.token_backend_canister_id}`)) { copiedAgo = true; setTimeout(() => { copiedAgo = false; }, 2000); } }}
 					>
 						{#if copiedAgo}
 							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
