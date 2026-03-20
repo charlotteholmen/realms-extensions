@@ -405,10 +405,10 @@
 				</h4>
 				
 				<div class="bg-gray-900 rounded-lg p-4 relative">
-					<pre class="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">icw transfer {paymentInfo.amount_due} \{`\n`}  --to {paymentInfo.owner} \{`\n`}  --subaccount {paymentInfo.subaccount}</pre>
+					<pre class="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">icw --token ckbtc transfer \{`\n`}  {paymentInfo.owner} {paymentInfo.amount_due} \{`\n`}  --subaccount {paymentInfo.subaccount}</pre>
 					<button 
 						class="absolute top-2 right-2 p-2 rounded hover:bg-gray-700 transition-colors"
-						on:click={() => copyCommand(`icw transfer ${paymentInfo.amount_due} --to ${paymentInfo.owner} --subaccount ${paymentInfo.subaccount}`)}
+						on:click={() => copyCommand(`icw --token ckbtc transfer ${paymentInfo.owner} ${paymentInfo.amount_due} --subaccount ${paymentInfo.subaccount}`)}
 					>
 						{#if copied}
 							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -437,10 +437,10 @@
 				</h4>
 				
 				<div class="bg-gray-900 rounded-lg p-4 relative">
-					<pre class="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">icw transfer {paymentInfo.amount_due * AGO_PER_BTC} \{`\n`}  --to {paymentInfo.owner} \{`\n`}  --subaccount {paymentInfo.subaccount} \{`\n`}  --token {CONFIG.token_backend_canister_id}</pre>
+					<pre class="text-green-400 font-mono text-sm overflow-x-auto whitespace-pre-wrap">icw transfer \{`\n`}  {paymentInfo.owner} {paymentInfo.amount_due * AGO_PER_BTC} \{`\n`}  --subaccount {paymentInfo.subaccount} \{`\n`}  --ledger {CONFIG.token_backend_canister_id}</pre>
 					<button 
 						class="absolute top-2 right-2 p-2 rounded hover:bg-gray-700 transition-colors"
-						on:click={() => { navigator.clipboard.writeText(`icw transfer ${paymentInfo.amount_due * AGO_PER_BTC} --to ${paymentInfo.owner} --subaccount ${paymentInfo.subaccount} --token ${CONFIG.token_backend_canister_id}`); copiedAgo = true; setTimeout(() => { copiedAgo = false; }, 2000); }}
+						on:click={() => { navigator.clipboard.writeText(`icw transfer ${paymentInfo.owner} ${paymentInfo.amount_due * AGO_PER_BTC} --subaccount ${paymentInfo.subaccount} --ledger ${CONFIG.token_backend_canister_id}`); copiedAgo = true; setTimeout(() => { copiedAgo = false; }, 2000); }}
 					>
 						{#if copiedAgo}
 							<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
