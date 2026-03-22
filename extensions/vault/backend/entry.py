@@ -164,6 +164,124 @@ def get_transactions(args: str) -> str:
 
 
 # ------------------------------------------------------------------
+# Subaccount management (sync — local DB)
+# ------------------------------------------------------------------
+
+def register_subaccount(args: str) -> str:
+    """Register a subaccount for balance and transaction tracking."""
+    try:
+        params = json.loads(args) if args and args.strip() else {}
+        token = params.get("token")
+        subaccount_hex = params.get("subaccount_hex", "")
+        label = params.get("label", "")
+
+        if not token or not subaccount_hex:
+            return json.dumps({"success": False, "error": "token and subaccount_hex are required"})
+
+        wallet = _get_wallet()
+        sub = wallet.register_subaccount(token, subaccount_hex, label=label)
+        return _ok({"Subaccount": {
+            "token": token,
+            "subaccount_hex": sub.subaccount_hex,
+            "label": sub.label,
+            "balance": sub.balance,
+        }})
+    except Exception as e:
+        return _err(e)
+
+
+def unregister_subaccount(args: str) -> str:
+    """Remove a subaccount from tracking."""
+    try:
+        params = json.loads(args) if args and args.strip() else {}
+        token = params.get("token")
+        subaccount_hex = params.get("subaccount_hex", "")
+
+        if not token or not subaccount_hex:
+            return json.dumps({"success": False, "error": "token and subaccount_hex are required"})
+
+        wallet = _get_wallet()
+        removed = wallet.unregister_subaccount(token, subaccount_hex)
+        return _ok({"removed": removed})
+    except Exception as e:
+        return _err(e)
+
+
+def list_subaccounts(args: str) -> str:
+    """List all registered subaccounts for a token (or all tokens)."""
+    try:
+        params = json.loads(args) if args and args.strip() else {}
+        token = params.get("token")
+        wallet = _get_wallet()
+
+        if token:
+            subs = wallet.list_subaccounts(token)
+            return _ok({"Subaccounts": {token: subs}})
+
+        # All tokens
+        all_subs = {}
+        for t in wallet.list_tokens():
+            subs = wallet.list_subaccounts(t["name"])
+            if subs:
+                all_subs[t["name"]] = subs
+        return _ok({"Subaccounts": all_subs})
+    except Exception as e:
+        return _err(e)
+
+
+# ------------------------------------------------------------------
+# Subaccount lookup (async — queries ledger on the fly)
+# ------------------------------------------------------------------
+
+def lookup_balance(args: str):
+    """Look up balances for a user's or invoice's subaccount across all tokens.
+
+    Derives the subaccount deterministically from the given principal or
+    invoice ID using the ``usr_`` / ``inv_`` prefix convention, then queries
+    each token's ledger for the balance.
+
+    Args (JSON):
+        principal: Principal ID string → derives ``usr_<principal>`` subaccount
+        invoice_id: Invoice ID string → derives ``inv_<invoice_id>`` subaccount
+        subaccount_hex: Raw hex subaccount (overrides principal/invoice_id)
+    """
+    try:
+        from basilisk.os.wallet import Wallet as W
+        params = json.loads(args) if args and args.strip() else {}
+        principal = params.get("principal")
+        invoice_id = params.get("invoice_id")
+        subaccount_hex = params.get("subaccount_hex")
+
+        if subaccount_hex:
+            sub_bytes = bytes.fromhex(subaccount_hex)
+            label = subaccount_hex[:16] + "..."
+        elif principal:
+            sub_bytes = W.user_subaccount(principal)
+            subaccount_hex = sub_bytes.hex()
+            label = f"usr_{principal}"
+        elif invoice_id:
+            sub_bytes = W.invoice_subaccount(invoice_id)
+            subaccount_hex = sub_bytes.hex()
+            label = f"inv_{invoice_id}"
+        else:
+            return json.dumps({"success": False, "error": "principal, invoice_id, or subaccount_hex required"})
+
+        wallet = _get_wallet()
+        balances = {}
+        for t in wallet.list_tokens():
+            bal = yield wallet.balance_of(t["name"], subaccount=sub_bytes)
+            balances[t["name"]] = bal
+
+        return _ok({"LookupBalance": {
+            "subaccount_hex": subaccount_hex,
+            "label": label,
+            "balances": balances,
+        }})
+    except Exception as e:
+        return _err(e)
+
+
+# ------------------------------------------------------------------
 # Transfer (async — admin only)
 # ------------------------------------------------------------------
 
@@ -220,12 +338,17 @@ def get_status(args: str) -> str:
         for t in wallet.list_tokens():
             token_obj = Token[t["name"]]
             tx_count = sum(1 for _ in token_obj.transfers) if token_obj else 0
+            subs = wallet.list_subaccounts(t["name"])
+            sub_balance = sum(s.get("balance", 0) for s in subs)
+            default_balance = wallet.cached_balance(t["name"])
             tokens_info.append({
                 "name": t["name"],
                 "ledger": t["ledger"],
                 "indexer": t["indexer"],
-                "cached_balance": wallet.cached_balance(t["name"]),
+                "cached_balance": default_balance,
+                "aggregate_balance": default_balance + sub_balance,
                 "transfer_count": tx_count,
+                "subaccounts": subs,
             })
 
         return _ok({"Stats": {

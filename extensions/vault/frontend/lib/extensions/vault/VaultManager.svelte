@@ -14,7 +14,7 @@ let transferAmount = 0;
 let transferTo = '';
 let transferToSubaccount = '';
 let transferFromSubaccount = '';
-let activeTab: 'balance' | 'transactions' | 'transfer' | 'admin' = 'balance';
+let activeTab: 'balance' | 'transactions' | 'transfer' | 'lookup' | 'admin' = 'balance';
 let currentPrincipal: string = '';
 let canisterPrincipal: string = '';
 let balancePagination: any = null;
@@ -39,6 +39,14 @@ let tokenBalances: Record<string, number> = {};
 
 // Selected token for transfer
 let transferToken: string = '';
+
+// Subaccount lookup state
+let lookupPrincipal: string = '';
+let lookupInvoiceId: string = '';
+let lookupMode: 'user' | 'invoice' | 'raw' = 'user';
+let lookupRawHex: string = '';
+let lookupResult: { label: string, subaccount_hex: string, balances: Record<string, number> } | null = null;
+let lookupLoading: boolean = false;
 
 // Load tokens from Token entity
 async function loadTokens() {
@@ -203,6 +211,44 @@ for (const token of Object.keys(LEDGER_CANISTERS)) {
 if (selectedTokens[token]) {
 await loadVaultBalance(token);
 }
+}
+}
+
+async function lookupSubaccountBalance() {
+lookupLoading = true;
+lookupResult = null;
+error = '';
+try {
+const lookupArgs: any = {};
+if (lookupMode === 'user' && lookupPrincipal.trim()) {
+lookupArgs.principal = lookupPrincipal.trim();
+} else if (lookupMode === 'invoice' && lookupInvoiceId.trim()) {
+lookupArgs.invoice_id = lookupInvoiceId.trim();
+} else if (lookupMode === 'raw' && lookupRawHex.trim()) {
+lookupArgs.subaccount_hex = lookupRawHex.trim();
+} else {
+error = 'Please enter a value to look up';
+lookupLoading = false;
+return;
+}
+
+const result = await backend.extension_async_call({
+extension_name: 'vault',
+function_name: 'lookup_balance',
+args: JSON.stringify(lookupArgs)
+});
+
+let response;
+try { response = JSON.parse(result.response); } catch { error = 'Failed to parse response'; lookupLoading = false; return; }
+if (response.success && response.data?.LookupBalance) {
+lookupResult = response.data.LookupBalance;
+} else {
+error = response.error || 'Lookup failed';
+}
+} catch (e: any) {
+error = e.message || 'Failed to look up balance';
+} finally {
+lookupLoading = false;
 }
 }
 
@@ -587,6 +633,12 @@ class="px-4 py-2 {activeTab === 'transfer' ? 'border-b-2 border-blue-600 text-bl
 Transfer
 </button>
 <button
+on:click={() => activeTab = 'lookup'}
+class="px-4 py-2 {activeTab === 'lookup' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}"
+>
+Lookup
+</button>
+<button
 on:click={() => activeTab = 'admin'}
 class="px-4 py-2 {activeTab === 'admin' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}"
 >
@@ -825,6 +877,93 @@ class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disable
 {loading ? 'Processing...' : 'Transfer'}
 </button>
 </form>
+</div>
+{:else if activeTab === 'lookup'}
+<div class="bg-white rounded-lg shadow p-6">
+<h2 class="text-xl font-semibold mb-4">Subaccount Lookup</h2>
+<p class="text-sm text-gray-500 mb-4">Look up token balances for a user (by principal) or an invoice (by ID). The subaccount is derived deterministically using the <code class="bg-gray-100 px-1 rounded">usr_</code> / <code class="bg-gray-100 px-1 rounded">inv_</code> prefix convention.</p>
+
+<!-- Mode selector -->
+<div class="flex gap-2 mb-4">
+<button on:click={() => { lookupMode = 'user'; lookupResult = null; }} class="px-3 py-1 rounded text-sm {lookupMode === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">User (usr_)</button>
+<button on:click={() => { lookupMode = 'invoice'; lookupResult = null; }} class="px-3 py-1 rounded text-sm {lookupMode === 'invoice' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">Invoice (inv_)</button>
+<button on:click={() => { lookupMode = 'raw'; lookupResult = null; }} class="px-3 py-1 rounded text-sm {lookupMode === 'raw' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}">Raw Hex</button>
+</div>
+
+<!-- Input -->
+<form on:submit|preventDefault={lookupSubaccountBalance} class="flex gap-2 mb-4">
+{#if lookupMode === 'user'}
+<input
+type="text"
+bind:value={lookupPrincipal}
+placeholder="Enter principal ID (e.g. aaaaa-aa)"
+class="flex-1 px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+/>
+{:else if lookupMode === 'invoice'}
+<input
+type="text"
+bind:value={lookupInvoiceId}
+placeholder="Enter invoice ID"
+class="flex-1 px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+/>
+{:else}
+<input
+type="text"
+bind:value={lookupRawHex}
+placeholder="Enter 64-char hex subaccount"
+class="flex-1 px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+/>
+{/if}
+<button
+type="submit"
+disabled={lookupLoading}
+class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+>
+{#if lookupLoading}
+<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg>
+{/if}
+{lookupLoading ? 'Looking up...' : 'Lookup'}
+</button>
+</form>
+
+<!-- Results -->
+{#if lookupResult}
+<div class="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+<div class="flex items-center justify-between">
+<div>
+<span class="text-sm font-medium text-gray-600">Account:</span>
+<span class="ml-2 text-sm font-semibold text-gray-800">{lookupResult.label}</span>
+</div>
+<button
+on:click={() => copyToClipboard(lookupResult?.subaccount_hex || '')}
+class="text-xs text-blue-600 hover:text-blue-800 underline font-mono"
+title="Copy subaccount hex"
+>
+{lookupResult.subaccount_hex.substring(0, 16)}...
+</button>
+</div>
+<div class="space-y-2">
+{#each Object.entries(lookupResult.balances) as [token, bal]}
+{@const decimals = LEDGER_CANISTERS[token]?.decimals || 8}
+<div class="flex items-center justify-between bg-white rounded-lg p-3">
+<span class="text-sm font-semibold text-gray-700">{token}</span>
+<div class="text-right">
+<div class="text-lg font-bold {Number(bal) > 0 ? 'text-green-700' : 'text-gray-400'}">
+{(Number(bal) / Math.pow(10, decimals)).toFixed(decimals)}
+</div>
+<div class="text-xs text-gray-500">{Number(bal).toLocaleString()} units</div>
+</div>
+</div>
+{/each}
+</div>
+{#if Object.values(lookupResult.balances).every(b => Number(b) === 0)}
+<p class="text-sm text-gray-500 italic">No balances found for this subaccount.</p>
+{/if}
+</div>
+{/if}
 </div>
 {:else if activeTab === 'admin'}
 <div class="bg-white rounded-lg shadow p-6">
