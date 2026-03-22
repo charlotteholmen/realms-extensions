@@ -12,13 +12,14 @@
 	let description = '';
 	let codeUrl = '';
 	let codeChecksum = '';
+	let codexName = '';
 	let submitting = false;
 	let calculatingChecksum = false;
 	let error = '';
 	let success = '';
 	
 	async function handleSubmit() {
-		if (!title.trim() || !description.trim() || !codeUrl.trim() || !codeChecksum.trim()) {
+		if (!title.trim() || !description.trim() || !codeUrl.trim()) {
 			error = $_('extensions.voting.form.validation.required_fields');
 			return;
 		}
@@ -33,16 +34,20 @@
 			error = '';
 			success = '';
 			
+			const submitArgs: Record<string, string> = {
+				title: title.trim(),
+				description: description.trim(),
+				code_url: codeUrl.trim(),
+				code_checksum: codeChecksum.trim(),
+				proposer: $principal || 'anonymous'
+			};
+			if (codexName.trim()) {
+				submitArgs.codex_name = codexName.trim();
+			}
 			const response = await backend.extension_sync_call({
 				extension_name: "voting",
 				function_name: "submit_proposal",
-				args: JSON.stringify({
-					title: title.trim(),
-					description: description.trim(),
-					code_url: codeUrl.trim(),
-					code_checksum: codeChecksum.trim(),
-					proposer: $principal || 'anonymous'
-				})
+				args: JSON.stringify(submitArgs)
 			});
 			
 			console.log('Submit proposal response:', response);
@@ -56,6 +61,7 @@
 					description = '';
 					codeUrl = '';
 					codeChecksum = '';
+					codexName = '';
 					// Notify parent component
 					setTimeout(() => {
 						dispatch('submitted', data.data);
@@ -79,9 +85,27 @@
 		description = '';
 		codeUrl = '';
 		codeChecksum = '';
+		codexName = '';
 		error = '';
 		success = '';
 		dispatch('cancelled');
+	}
+	
+	function extractCodexName(url: string): string {
+		try {
+			const path = new URL(url).pathname;
+			const filename = path.split('/').pop() || '';
+			if (filename.endsWith('.py')) {
+				return filename.slice(0, -3);
+			}
+			return filename;
+		} catch (_) {
+			return '';
+		}
+	}
+	
+	$: if (codeUrl && isValidUrl(codeUrl) && !codexName) {
+		codexName = extractCodexName(codeUrl);
 	}
 	
 	function isValidUrl(string: string) {
@@ -235,7 +259,22 @@
 				</p>
 			</div>
 
-			<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+			<div>
+			<Label for="codex-name" class="mb-2">
+				{$_('extensions.voting.form.fields.codex_name')}
+			</Label>
+			<Input
+				id="codex-name"
+				bind:value={codexName}
+				placeholder={$_('extensions.voting.form.placeholders.codex_name')}
+				disabled={submitting}
+			/>
+			<p class="text-sm text-gray-500 mt-1">
+				{$_('extensions.voting.form.help.codex_name')}
+			</p>
+		</div>
+
+		<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
 				<h4 class="font-medium text-yellow-800 mb-2">
 					{$_('extensions.voting.form.security.title')}
 				</h4>
@@ -257,7 +296,7 @@
 				</Button>
 				<Button 
 					type="submit"
-					disabled={submitting || !title.trim() || !description.trim() || !codeUrl.trim() || !codeChecksum.trim()}
+					disabled={submitting || !title.trim() || !description.trim() || !codeUrl.trim()}
 				>
 					{#if submitting}
 						<div class="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

@@ -64,17 +64,20 @@
       "title": "Proposal Title",
       "description": "Description",
       "code_url": "Code URL",
-      "code_checksum": "Code Checksum"
+      "code_checksum": "Code Checksum",
+      "codex_name": "Target Codex Name"
     },
     "placeholders": {
       "title": "Enter a clear, descriptive title for your proposal",
       "description": "Describe what this proposal does and why it should be approved",
       "code_url": "https://github.com/your-repo/proposal.py",
-      "code_checksum": "sha256:abc123..."
+      "code_checksum": "sha256:abc123...",
+      "codex_name": "e.g. user_registration_hook_codex"
     },
     "help": {
       "code_url": "Link to the Python code that will be executed if this proposal passes",
-      "code_checksum": "SHA-256 checksum to verify the code has not been tampered with"
+      "code_checksum": "SHA-256 checksum to verify the code has not been tampered with",
+      "codex_name": "Name of the codex to create or update. Auto-detected from the code URL filename."
     },
     "security": {
       "title": "Security Notice",

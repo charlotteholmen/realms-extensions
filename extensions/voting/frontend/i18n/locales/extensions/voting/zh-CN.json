@@ -63,15 +63,18 @@
     "fields": {
       "title": "提案标题",
       "description": "描述",
-      "code_url": "代码URL"
+      "code_url": "代码URL",
+      "codex_name": "目标法典名称"
     },
     "placeholders": {
       "title": "为您的提案输入清晰、描述性的标题",
       "description": "描述此提案的作用以及为什么应该被批准",
-      "code_url": "https://github.com/your-repo/proposal.py"
+      "code_url": "https://github.com/your-repo/proposal.py",
+      "codex_name": "例如 user_registration_hook_codex"
     },
     "help": {
-      "code_url": "链接到如果此提案通过将执行的Python代码"
+      "code_url": "链接到如果此提案通过将执行的Python代码",
+      "codex_name": "要创建或更新的法典名称。从代码URL文件名自动检测。"
     },
     "security": {
       "title": "安全提醒",
