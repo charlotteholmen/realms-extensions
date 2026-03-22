@@ -205,6 +205,14 @@ def _do_execute_proposal(proposal_id: str):
 
     logger.info(f"Codex '{codex_name}' {action} for proposal {proposal_id}")
 
+    # Refresh entity method overrides that may reference this codex
+    try:
+        from main import reload_entity_method_overrides
+        reload_entity_method_overrides()
+        logger.info(f"Entity method overrides refreshed after codex '{codex_name}' update")
+    except Exception as e:
+        logger.warning(f"Could not refresh entity method overrides: {e}")
+
     # Execute the codex code
     # Build a rich exec environment with GGG entities available
     try:
