@@ -1,7 +1,7 @@
 {
   "name": "vault",
-  "version": "0.1.4",
-  "description": "Secure digital asset and token management extension for Realms. Provides treasury functionality with ckBTC support, transaction history tracking, and balance management.",
+  "version": "0.2.0",
+  "description": "Admin treasury dashboard for Realms. View token balances, transaction history, and perform ad-hoc transfers. Powered by basilisk OS Wallet.",
   "author": "Smart Social Contracts",
   "repository": "https://github.com/smart-social-contracts/realms-extension-vault",
   "license": "MIT",
@@ -16,10 +16,10 @@
     "get_balance",
     "get_status",
     "get_transactions",
-    "transfer",
-    "refresh",
     "get_vault_balance",
-    "refresh_vault_balance"
+    "refresh_vault_balance",
+    "refresh",
+    "transfer"
   ],
   "profiles": [
     "admin"
@@ -32,9 +32,9 @@
   "url_path": null,
   "show_in_sidebar": true,
   "python_dependencies": [
-    "ic-basilisk==0.8.37",
-    "ic-python-db==0.7.1",
-    "ic-python-logging==0.3.1"
+    "ic-basilisk>=0.10.6",
+    "ic-python-db>=0.7.1",
+    "ic-python-logging>=0.3.1"
   ],
   "entity_method_overrides": []
 }

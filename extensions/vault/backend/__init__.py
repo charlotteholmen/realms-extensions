@@ -1,11 +1,10 @@
 """
 Vault Extension for Realms
 
-Provides secure treasury functionality with:
-- ckBTC balance tracking
-- Transaction history management
-- Admin-controlled transfers
-- ICRC ledger integration
+Admin treasury dashboard powered by basilisk OS Wallet:
+- Per-token balance viewing and live refresh from ledger
+- Transaction history (synced from ICRC indexers)
+- Ad-hoc admin transfers
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

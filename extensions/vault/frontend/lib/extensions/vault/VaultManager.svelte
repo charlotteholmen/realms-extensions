@@ -53,16 +53,21 @@ async function loadTokens() {
 			tokenBalances = {};
 			
 			for (const token of tokens) {
-				if (token.enabled === 'true') {
-					LEDGER_CANISTERS[token.symbol] = {
-						ledger: token.ledger_canister_id,
-						indexer: token.indexer_canister_id,
+				// DB serializes _prop_enabled / _prop_symbol; default enabled=true
+				const enabled = token.enabled ?? token._prop_enabled ?? 'true';
+				const symbol = token.symbol ?? token._prop_symbol ?? token.name;
+				const ledger = token.ledger_canister_id ?? token.ledger ?? '';
+				const indexer = token.indexer_canister_id ?? token.indexer ?? '';
+				if (enabled === 'true' && symbol) {
+					LEDGER_CANISTERS[symbol] = {
+						ledger,
+						indexer,
 						decimals: token.decimals || 8,
-						symbol: token.symbol,
+						symbol,
 						name: token.name
 					};
-					selectedTokens[token.symbol] = true;
-					tokenBalances[token.symbol] = 0;
+					selectedTokens[symbol] = true;
+					tokenBalances[symbol] = 0;
 				}
 			}
 			
@@ -90,8 +95,8 @@ if (!currentPrincipal) {
 currentPrincipal = await backend.get_my_principal();
 }
 
-// Fetch all Balance objects using get_objects_paginated
-const response = await backend.get_objects_paginated('Balance', 0n, 100n, 'asc');
+// Fetch all WalletBalance objects using get_objects_paginated
+const response = await backend.get_objects_paginated('WalletBalance', 0n, 100n, 'asc');
 
 if (response.success && response.data?.objectsListPaginated) {
 const objectsData = response.data.objectsListPaginated;
@@ -100,8 +105,8 @@ balancePagination = objectsData.pagination;
 // Parse each JSON string in the objects array
 allBalances = objectsData.objects.map((objStr: string) => JSON.parse(objStr));
 
-// Find the balance for the current user
-balanceObject = allBalances.find(b => b.id === currentPrincipal || b._id === currentPrincipal);
+// Find the balance for the current user (WalletBalance uses 'principal' field)
+balanceObject = allBalances.find(b => b.principal === currentPrincipal || b.id === currentPrincipal || b._id === currentPrincipal);
 balance = balanceObject ? (balanceObject.amount || 0) : 0;
 } else {
 balance = 0;
@@ -135,33 +140,25 @@ vaultPrincipal = 'N/A (TODO)';
 }
 }
 
-// Fetch Transfer objects with pagination
+// Fetch WalletTransfer objects with pagination
 const response = await backend.get_objects_paginated(
-'Transfer',
+'WalletTransfer',
 BigInt(page),
 BigInt(pageSize),
 'desc' // Most recent first
 );
 
-console.log('Transfer response:', response);
-console.log('Response success:', response.success);
-console.log('Response data:', response.data);
-console.log('Response data keys:', response.data ? Object.keys(response.data) : 'no data');
+console.log('WalletTransfer response:', response);
 
 if (response.success && response.data?.objectsListPaginated) {
 const objectsData = response.data.objectsListPaginated;
 transferPagination = objectsData.pagination;
 
-console.log('Objects data:', objectsData);
-console.log('Objects array length:', objectsData.objects?.length);
-
 // Parse each JSON string in the objects array
-// Show ALL transfers since the vault tracks all transactions to/from the canister
 const parsed = objectsData.objects.map((objStr: string) => JSON.parse(objStr));
 transactions = [...parsed]; // Force new array reference for Svelte reactivity
-console.log('Parsed transactions for page', page, ':', transactions);
 } else {
-console.warn('No objectsListPaginated in response');
+console.warn('No objectsListPaginated in WalletTransfer response');
 transactions = [];
 }
 } catch (e: any) {
@@ -286,7 +283,7 @@ if (innerResponse.success) {
 lastRefreshTime = new Date();
 // Reload data after successful refresh
 await loadBalance();
-await loadVaultBalance();
+await loadAllVaultBalances();
 await loadTransactions(0); // Reset to first page
 } else {
 error = innerResponse.error || 'Refresh failed';
@@ -389,21 +386,22 @@ console.error('Failed to copy:', e);
 }
 
 // Convert nanosecond timestamp to Date
-function parseTimestamp(timestamp: string): Date {
+function parseTimestamp(timestamp: string | number): Date {
+const ts = String(timestamp);
 // Check if timestamp is in ISO format (contains 'T', '-', or ':')
-if (timestamp.includes('T') || timestamp.includes('-') || timestamp.includes(':')) {
+if (ts.includes('T') || ts.includes('-') || ts.includes(':')) {
 // Parse as ISO format timestamp
-return new Date(timestamp);
+return new Date(ts);
 }
 
 // Otherwise, parse as nanosecond timestamp
 try {
-const nanos = BigInt(timestamp);
+const nanos = BigInt(ts);
 const millis = Number(nanos / BigInt(1000000));
 return new Date(millis);
 } catch (e) {
 // If parsing fails, return current date as fallback
-console.error('Failed to parse timestamp:', timestamp, e);
+console.error('Failed to parse timestamp:', ts, e);
 return new Date();
 }
 }
@@ -647,12 +645,12 @@ Showing {allBalances.length} balance(s) (Page {Number(balancePagination.page_num
 </tr>
 </thead>
 <tbody class="divide-y divide-gray-200">
-{#each transactions as tx (tx._id || tx.id)}
+{#each transactions as tx (tx._id || tx.tx_id)}
 <tr>
-<td class="px-6 py-4 text-sm">{tx._id || tx.id}</td>
+<td class="px-6 py-4 text-sm">{tx.tx_id || tx._id}</td>
 <td class="px-6 py-4 text-sm">
 <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
-{tx.token || 'ckBTC'}
+{tx.token || '—'}
 </span>
 </td>
 <td class="px-6 py-4 text-sm font-mono text-xs">
@@ -705,7 +703,7 @@ title="Click to copy: {txDate.toLocaleString()}"
 <span class="text-gray-400">N/A</span>
 {/if}
 </td>
-<td class="px-6 py-4 text-sm"><span class="px-2 py-1 bg-blue-100 text-blue-800 rounded">transfer</span></td>
+<td class="px-6 py-4 text-sm"><span class="px-2 py-1 bg-blue-100 text-blue-800 rounded">{tx.kind || 'transfer'}</span></td>
 </tr>
 {:else}
 <tr>
@@ -785,7 +783,7 @@ class="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-b
 </div>
 <div>
 <label for="transfer-amount" class="block text-sm font-medium text-gray-700 mb-2">
-Amount ({LEDGER_CANISTERS[transferToken].symbol} units)
+Amount ({LEDGER_CANISTERS[transferToken]?.symbol || transferToken || ''} units)
 </label>
 <input
 id="transfer-amount"
@@ -838,10 +836,10 @@ class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disable
 <div class="mt-2 space-y-2">
 {#each allBalances as bal}
 <div class="p-3 bg-gray-50 rounded">
-<div class="font-mono text-xs mb-1">{bal._id || bal.id}</div>
-<div class="text-sm font-semibold">{(bal.amount || 0).toLocaleString()} satoshis</div>
-{#if bal.user}
-<div class="text-xs text-gray-500 mt-1">User: {bal.user}</div>
+<div class="font-mono text-xs mb-1">Principal: {bal.principal || bal._id || bal.id}</div>
+<div class="text-sm font-semibold">{(bal.amount || 0).toLocaleString()} units</div>
+{#if bal.token}
+<div class="text-xs text-gray-500 mt-1">Token: {bal.token}</div>
 {/if}
 </div>
 {/each}
