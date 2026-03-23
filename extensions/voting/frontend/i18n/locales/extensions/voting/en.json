@@ -60,12 +60,14 @@
     "title": "Submit New Proposal",
     "description": "Create a new governance proposal with Python code to be executed if approved by the community.",
     "success": "Proposal submitted successfully! It will be reviewed before voting begins.",
+    "codex_entry": "Codex",
     "fields": {
       "title": "Proposal Title",
       "description": "Description",
+      "codices": "Codex Files",
       "code_url": "Code URL",
-      "code_checksum": "Code Checksum",
-      "codex_name": "Target Codex Name"
+      "code_checksum": "Checksum",
+      "codex_name": "Codex Name"
     },
     "placeholders": {
       "title": "Enter a clear, descriptive title for your proposal",
@@ -75,6 +77,7 @@
       "codex_name": "e.g. user_registration_hook_codex"
     },
     "help": {
+      "codices": "Add one or more codex files to be downloaded and installed when this proposal is executed.",
       "code_url": "Link to the Python code that will be executed if this proposal passes",
       "code_checksum": "SHA-256 checksum to verify the code has not been tampered with",
       "codex_name": "Name of the codex to create or update. Auto-detected from the code URL filename."
@@ -90,7 +93,8 @@
       "submitting": "Submitting...",
       "cancel": "Cancel",
       "calculate_checksum": "Calculate",
-      "calculating": "Calculating..."
+      "calculating": "Calculating...",
+      "add_codex": "+ Add Codex"
     },
     "validation": {
       "required_fields": "All fields are required",
@@ -131,6 +135,7 @@
     "created": "Created",
     "deadline": "Voting Deadline",
     "description": "Description",
+    "codices_title": "Codex Files",
     "code_info": "Code Information",
     "code_url": "Code URL",
     "view_code": "View",

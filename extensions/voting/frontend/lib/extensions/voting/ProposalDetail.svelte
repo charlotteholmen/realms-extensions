@@ -9,6 +9,17 @@
 	export let proposal;
 	
 	const dispatch = createEventDispatcher();
+
+	// Parse codices from metadata
+	$: parsedMetadata = (() => {
+		try {
+			return typeof proposal.metadata === 'string'
+				? JSON.parse(proposal.metadata)
+				: (proposal.metadata || {});
+		} catch (_) { return {}; }
+	})();
+	$: codicesList = parsedMetadata.codices || [];
+	$: isMultiCodex = codicesList.length > 1;
 	
 	// Code fetching state
 	let codeContent = '';
@@ -249,6 +260,32 @@
 		<span class="font-medium">{$_('extensions.voting.detail.security_warning.title')}</span>
 		{$_('extensions.voting.detail.security_warning.message')}
 	</div>
+
+	<!-- Multi-codex info -->
+	{#if isMultiCodex}
+		<div class="w-full border rounded-lg shadow-sm p-5 bg-white">
+			<h3 class="text-lg font-semibold mb-3">
+				{$_('extensions.voting.detail.codices_title')} ({codicesList.length})
+			</h3>
+			<div class="space-y-2">
+				{#each codicesList as entry, i}
+					<div class="flex items-center gap-3 p-2 bg-gray-50 rounded text-sm">
+						<span class="font-mono font-medium text-gray-800 min-w-[160px]">{entry.name}</span>
+						<a href={entry.url} target="_blank" rel="noopener noreferrer"
+						   class="text-blue-600 hover:underline truncate flex-1 flex items-center gap-1">
+							<LinkOutline class="w-3 h-3 flex-shrink-0" />
+							{entry.url.split('/').pop()}
+						</a>
+						{#if entry.checksum}
+							<code class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+								{entry.checksum.slice(0, 20)}...
+							</code>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Proposal Code (full width) -->
 	<div class="w-full bg-gray-50 rounded-lg border overflow-hidden">
