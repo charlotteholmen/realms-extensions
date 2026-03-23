@@ -363,7 +363,7 @@ def test_auto_approve_and_execute():
     code_url = (
         "https://raw.githubusercontent.com/"
         "smart-social-contracts/realms/main/"
-        "codices/codices/agora/satoshi_transfer_codex.py"
+        "codices/codices/agora/satoshi_transfer.py"
     )
     title = f"Auto-Execute Test {uuid.uuid4().hex[:8]}"
     result = call_voting("submit_proposal", {
@@ -427,7 +427,7 @@ def test_manual_approve_and_execute():
     code_url = (
         "https://raw.githubusercontent.com/"
         "smart-social-contracts/realms/main/"
-        "codices/codices/agora/satoshi_transfer_codex.py"
+        "codices/codices/agora/satoshi_transfer.py"
     )
     title = f"Manual Execute Test {uuid.uuid4().hex[:8]}"
     result = call_voting("submit_proposal", {

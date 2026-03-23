@@ -153,6 +153,11 @@
 					console.error('Failed to fetch codex for explanation:', err);
 					isExplainMode = false;
 				});
+			} else if (objType === 'financial_statements') {
+				isExplainMode = true;
+				const context = params.get('context') || '';
+				newMessage = `Please explain the following financial statements of this realm in plain language. Highlight key insights, any concerns, and the overall financial health:\n\n${context}`;
+				setTimeout(() => sendMessage(), 300);
 			}
 		} catch (err) {
 			console.error('Error handling explain param:', err);

@@ -6,8 +6,8 @@ This directory contains initial data for the voting extension.
 
 Contains governance proposals with realistic data pointing to actual codex files on GitHub:
 
-1. **Implement Automated Tax Collection** (`tax_collection_codex.py`)
-2. **Enable Social Benefits Distribution** (`social_benefits_codex.py`)
+1. **Implement Automated Tax Collection** (`tax_collection.py`)
+2. **Enable Social Benefits Distribution** (`social_benefits.py`)
 
 ### Timestamp Placeholders
 

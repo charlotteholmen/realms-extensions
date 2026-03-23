@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { backend } from '$lib/canisters';
-  import { Spinner } from 'flowbite-svelte';
+  import { Spinner, Button } from 'flowbite-svelte';
   import { _ } from 'svelte-i18n';
 
   // State
@@ -177,6 +177,52 @@
     return cat.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
+  // Build a text summary of financial statements for AI explanation
+  function buildFinancialSummary(): string {
+    const lines: string[] = [];
+    lines.push('=== Balance Sheet ===');
+    lines.push(`Total Assets: ${formatCurrency(balanceSheet.totalAssets)}`);
+    for (const [cat, amt] of Object.entries(balanceSheet.assets)) {
+      lines.push(`  ${formatCategory(cat)}: ${formatCurrency(amt as number)}`);
+    }
+    lines.push(`Total Liabilities: ${formatCurrency(balanceSheet.totalLiabilities)}`);
+    for (const [cat, amt] of Object.entries(balanceSheet.liabilities)) {
+      lines.push(`  ${formatCategory(cat)}: ${formatCurrency(amt as number)}`);
+    }
+    lines.push(`Net Position: ${formatCurrency(balanceSheet.netPosition)}`);
+    lines.push('');
+    lines.push('=== Income Statement ===');
+    lines.push(`Total Revenues: ${formatCurrency(incomeStatement.totalRevenues)}`);
+    for (const [cat, amt] of Object.entries(incomeStatement.revenues)) {
+      lines.push(`  ${formatCategory(cat)}: ${formatCurrency(amt as number)}`);
+    }
+    lines.push(`Total Expenses: ${formatCurrency(incomeStatement.totalExpenses)}`);
+    for (const [cat, amt] of Object.entries(incomeStatement.expenses)) {
+      lines.push(`  ${formatCategory(cat)}: ${formatCurrency(amt as number)}`);
+    }
+    lines.push(`Net Income: ${formatCurrency(incomeStatement.netIncome)}`);
+    lines.push('');
+    lines.push('=== Cash Flow ===');
+    lines.push(`Operating: ${formatCurrency(cashFlowStatement.operating)}`);
+    lines.push(`Investing: ${formatCurrency(cashFlowStatement.investing)}`);
+    lines.push(`Financing: ${formatCurrency(cashFlowStatement.financing)}`);
+    lines.push(`Net Change: ${formatCurrency(cashFlowStatement.netChange)}`);
+    if (budgets.length > 0) {
+      lines.push('');
+      lines.push('=== Budgets ===');
+      for (const b of budgets) {
+        const variance = (b.actual_amount || 0) - (b.planned_amount || 0);
+        lines.push(`${b.name}: planned=${formatCurrency(b.planned_amount || 0)}, actual=${formatCurrency(b.actual_amount || 0)}, variance=${variance >= 0 ? '+' : ''}${formatCurrency(variance)}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function getExplainUrl(): string {
+    const summary = buildFinancialSummary();
+    return `/extensions/llm_chat?explain=financial_statements&context=${encodeURIComponent(summary)}`;
+  }
+
   onMount(() => {
     fetchAccountingData();
   });
@@ -198,6 +244,18 @@
       <p class="text-gray-500 text-sm mt-2">{$_('extensions.metrics.accounting_data_hint') || 'Financial data will appear here once transactions are recorded.'}</p>
     </div>
   {:else}
+    <!-- Explain Button -->
+    <div class="flex justify-end">
+      <a href={getExplainUrl()} target="_blank">
+        <Button color="light" size="sm">
+          <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+          </svg>
+          {$_('extensions.metrics.explain_ai') || 'Explain'}
+        </Button>
+      </a>
+    </div>
+
     <!-- Summary Cards -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
       <div class="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
