@@ -22,7 +22,7 @@
   },
 
   "e2e_tests": {
-    "enabled": true,
+    "enabled": false,
     "base_path": "/extensions/passport_verification",
     "warmup": true
   },

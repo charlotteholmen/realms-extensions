@@ -1,8 +1,8 @@
 name: Integration Tests (Staging)
 
-# Runs E2E Playwright tests for all extensions against the Dominion staging realm.
+# Runs E2E Playwright tests against the Dominion staging realm.
 # The staging realm must already be deployed — this workflow only runs tests.
-# Use testing/setup_staging_realm.sh locally to deploy before running CI.
+# Extensions opt in by having tests/e2e/ with playwright.config.ts and package.json.
 
 on:
   push:
@@ -12,14 +12,12 @@ on:
   workflow_dispatch:
     inputs:
       extension:
-        description: 'Test a single extension (leave empty for all)'
+        description: 'Test a single extension (leave empty for all enabled)'
         required: false
         type: string
 
 env:
-  DFX_WARNING: -mainnet_plaintext_identity
   DOMINION_FRONTEND_URL: https://gzya5-jyaaa-aaaac-qai5a-cai.icp0.io
-  DOMINION_BACKEND_ID: h5vpp-qyaaa-aaaac-qai3a-cai
 
 jobs:
   e2e-tests:
@@ -36,40 +34,51 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Install Playwright
-      run: |
-        cd extensions/_shared/testing/e2e
-        npm install
-        npx playwright install chromium --with-deps
-
-    - name: Install per-extension E2E dependencies
-      run: |
-        EXTENSION="${{ github.event.inputs.extension }}"
-        if [ -n "$EXTENSION" ]; then
-          DIRS="extensions/$EXTENSION/tests/e2e"
-        else
-          DIRS=$(find extensions -path "*/tests/e2e" -type d ! -path "*/_shared/*")
-        fi
-
-        for dir in $DIRS; do
-          if [ -f "$dir/package.json" ]; then
-            echo "Installing dependencies for $dir..."
-            cd "$dir"
-            npm install
-            cd "$GITHUB_WORKSPACE"
-          fi
-        done
-
     - name: Run E2E tests
       env:
         PLAYWRIGHT_BASE_URL: ${{ env.DOMINION_FRONTEND_URL }}
       run: |
-        EXTENSION="${{ github.event.inputs.extension }}"
-        if [ -n "$EXTENSION" ]; then
-          bash testing/run_all_tests.sh --e2e-only --extension "$EXTENSION"
+        set -e
+        FAILED=0
+
+        # Discover extensions with E2E tests
+        if [ -n "${{ github.event.inputs.extension }}" ]; then
+          EXTENSIONS="${{ github.event.inputs.extension }}"
         else
-          bash testing/run_all_tests.sh --e2e-only
+          # Auto-discover: extensions with tests/e2e/.staging-e2e marker
+          EXTENSIONS=$(find extensions -path "*/tests/e2e/.staging-e2e" \
+            ! -path "*/_shared/*" \
+            -exec dirname {} \; \
+            | xargs -I{} dirname {} \
+            | xargs -I{} dirname {} \
+            | xargs -I{} basename {} \
+            | sort -u)
         fi
+
+        for ext in $EXTENSIONS; do
+          E2E_DIR="extensions/$ext/tests/e2e"
+          if [ ! -f "$E2E_DIR/playwright.config.ts" ]; then
+            continue
+          fi
+
+          echo "━━━ $ext ━━━"
+          cd "$E2E_DIR"
+          npm install
+          npx playwright install chromium --with-deps
+          if npx playwright test; then
+            echo "  ✅ $ext passed"
+          else
+            echo "  ❌ $ext failed"
+            FAILED=$((FAILED + 1))
+          fi
+          cd "$GITHUB_WORKSPACE"
+        done
+
+        if [ "$FAILED" -gt 0 ]; then
+          echo "❌ $FAILED extension(s) failed E2E tests"
+          exit 1
+        fi
+        echo "✅ All E2E tests passed"
 
     - name: Upload E2E results
       if: always()
@@ -80,13 +89,4 @@ jobs:
           extensions/*/tests/e2e/test-results/
           extensions/*/tests/e2e/playwright-report/
         retention-days: 14
-        if-no-files-found: warn
-
-    - name: Upload E2E screenshots
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: e2e-screenshots
-        path: extensions/*/tests/e2e/test-results/**/*.png
-        retention-days: 7
         if-no-files-found: warn

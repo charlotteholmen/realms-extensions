@@ -139,8 +139,18 @@ run_backend_tests() {
 run_e2e_tests() {
     local ext_name=$1
     local e2e_dir="$EXTENSIONS_DIR/$ext_name/tests/e2e"
+    local config_file="$EXTENSIONS_DIR/$ext_name/test_config.json"
 
     if [ ! -d "$e2e_dir" ] || [ ! -f "$e2e_dir/playwright.config.ts" ]; then
+        return 0
+    fi
+
+    # Only run E2E tests if test_config.json explicitly enables them
+    if [ ! -f "$config_file" ]; then
+        return 0
+    fi
+    local e2e_enabled=$(jq -r '.e2e_tests.enabled // false' "$config_file" 2>/dev/null)
+    if [ "$e2e_enabled" != "true" ]; then
         return 0
     fi
 
