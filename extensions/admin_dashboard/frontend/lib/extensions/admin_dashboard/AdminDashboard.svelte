@@ -34,6 +34,7 @@
   let importResult = null;
   let fileInput;
   let dragOver = false;
+  const importPlaceholder = 'Paste JSON here, e.g.\n[\n  {"_type": "User", "_id": "1", "name": "Alice"},\n  {"_type": "User", "_id": "2", "name": "Bob"}\n]';
   
   // Delete state
   let deletingId = null;
@@ -799,7 +800,7 @@
           <textarea
             bind:value={importText}
             on:input={parseImportPreview}
-            placeholder='Paste JSON here, e.g.&#10;[&#10;  {"_type": "User", "_id": "1", "name": "Alice"},&#10;  {"_type": "User", "_id": "2", "name": "Bob"}&#10;]'
+            placeholder={importPlaceholder}
             class="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             spellcheck="false"
           ></textarea>
