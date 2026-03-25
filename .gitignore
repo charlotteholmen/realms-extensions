@@ -1,5 +1,7 @@
 # Generated realm test/development environments
 **/.realms/
+.realms-framework/
+.test-env
 
 # Python
 __pycache__/

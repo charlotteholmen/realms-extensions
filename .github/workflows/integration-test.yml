@@ -1,0 +1,226 @@
+name: Integration Tests (Staging)
+
+# Runs backend + E2E tests for all extensions against the Dominion staging realm.
+# The realms framework version is read from .realms-version (supports release tags,
+# commit SHAs, and "latest" for HEAD of main).
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      realms_version:
+        description: 'Realms version override (tag, SHA, or "latest")'
+        required: false
+        type: string
+      extension:
+        description: 'Test a single extension (leave empty for all)'
+        required: false
+        type: string
+
+env:
+  DFX_WARNING: -mainnet_plaintext_identity
+  DOMINION_FRONTEND_URL: https://gzya5-jyaaa-aaaac-qai5a-cai.icp0.io
+  DOMINION_BACKEND_ID: h5vpp-qyaaa-aaaac-qai3a-cai
+  REALM_NUMBER: 1
+
+jobs:
+  setup:
+    name: Setup Staging Realm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      realms_version: ${{ steps.resolve.outputs.version }}
+
+    steps:
+    - name: Checkout extensions repo
+      uses: actions/checkout@v4
+
+    - name: Resolve realms version
+      id: resolve
+      run: |
+        # Use workflow input override, or read from .realms-version
+        VERSION="${{ github.event.inputs.realms_version }}"
+        if [ -z "$VERSION" ]; then
+          VERSION=$(grep -v '^#' .realms-version | grep -v '^$' | head -1 | tr -d '[:space:]')
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Realms version: $VERSION"
+
+    - name: Clone realms framework
+      run: |
+        git clone https://github.com/smart-social-contracts/realms.git .realms-framework
+
+    - name: Checkout realms version
+      run: |
+        cd .realms-framework
+        VERSION="${{ steps.resolve.outputs.version }}"
+        if [ "$VERSION" = "latest" ]; then
+          echo "Using latest commit on main"
+          git checkout main
+          git pull origin main
+        else
+          # Try tag, then branch, then commit SHA
+          git fetch --all --tags
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            git checkout "tags/$VERSION"
+          elif git rev-parse "refs/remotes/origin/$VERSION" >/dev/null 2>&1; then
+            git checkout "$VERSION"
+          else
+            git checkout "$VERSION"
+          fi
+        fi
+        echo "Resolved to: $(git rev-parse --short HEAD)"
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dfx
+      run: |
+        sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+        echo "$HOME/bin" >> $GITHUB_PATH
+
+    - name: Setup dfx identity
+      run: |
+        mkdir -p ~/.config/dfx/identity/test_deploy
+        echo "${{ secrets.DFX_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
+        dfx identity use test_deploy
+
+    - name: Install realms CLI
+      run: |
+        pip install -e .realms-framework/cli/
+
+    - name: Copy extensions into realms tree
+      run: |
+        cp -r extensions/* .realms-framework/extensions/extensions/ 2>/dev/null || true
+
+    - name: Deploy to Dominion staging
+      run: |
+        cd .realms-framework
+        bash scripts/deploy_staging_dev.sh -R ${{ env.REALM_NUMBER }} -f -b -c
+
+  backend-tests:
+    name: Backend Tests
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout extensions repo
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dfx
+      run: |
+        sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+        echo "$HOME/bin" >> $GITHUB_PATH
+
+    - name: Setup dfx identity
+      run: |
+        mkdir -p ~/.config/dfx/identity/test_deploy
+        echo "${{ secrets.DFX_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
+        dfx identity use test_deploy
+
+    - name: Install test dependencies
+      run: |
+        pip install --upgrade pip
+        pip install black isort flake8
+
+    - name: Run backend tests
+      env:
+        DFX_NETWORK: staging
+      run: |
+        EXTENSION="${{ github.event.inputs.extension }}"
+        if [ -n "$EXTENSION" ]; then
+          bash testing/run_all_tests.sh --backend-only --extension "$EXTENSION"
+        else
+          bash testing/run_all_tests.sh --backend-only
+        fi
+
+    - name: Upload backend test logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-test-logs
+        path: extensions/*/test-logs/
+        retention-days: 14
+        if-no-files-found: warn
+
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout extensions repo
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Playwright
+      run: |
+        # Install shared E2E dependencies
+        cd extensions/_shared/testing/e2e
+        npm install
+        npx playwright install chromium --with-deps
+
+    - name: Install per-extension E2E dependencies
+      run: |
+        EXTENSION="${{ github.event.inputs.extension }}"
+        if [ -n "$EXTENSION" ]; then
+          DIRS="extensions/$EXTENSION/tests/e2e"
+        else
+          DIRS=$(find extensions -path "*/tests/e2e" -type d ! -path "*/_shared/*")
+        fi
+
+        for dir in $DIRS; do
+          if [ -f "$dir/package.json" ]; then
+            echo "Installing dependencies for $dir..."
+            cd "$dir"
+            npm install
+            cd "$GITHUB_WORKSPACE"
+          fi
+        done
+
+    - name: Run E2E tests
+      env:
+        PLAYWRIGHT_BASE_URL: ${{ env.DOMINION_FRONTEND_URL }}
+      run: |
+        EXTENSION="${{ github.event.inputs.extension }}"
+        if [ -n "$EXTENSION" ]; then
+          bash testing/run_all_tests.sh --e2e-only --extension "$EXTENSION"
+        else
+          bash testing/run_all_tests.sh --e2e-only
+        fi
+
+    - name: Upload E2E results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-results
+        path: |
+          extensions/*/tests/e2e/test-results/
+          extensions/*/tests/e2e/playwright-report/
+        retention-days: 14
+        if-no-files-found: warn
+
+    - name: Upload E2E screenshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-screenshots
+        path: extensions/*/tests/e2e/test-results/**/*.png
+        retention-days: 7
+        if-no-files-found: warn

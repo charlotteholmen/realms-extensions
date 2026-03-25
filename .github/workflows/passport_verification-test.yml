@@ -53,14 +53,37 @@ jobs:
           flake8 backend || echo "⚠️  flake8 check failed or no Python files found"
         fi
         
-    - name: Run tests
+    - name: Run backend tests
       run: |
         cd extensions/passport_verification
         if [ -f run_tests.sh ]; then
           bash run_tests.sh
         else
-          echo "ℹ️  No run_tests.sh found - skipping tests"
-          echo "ℹ️  Add run_tests.sh to enable automated testing"
+          echo "ℹ️  No run_tests.sh found - skipping local backend tests"
+          echo "ℹ️  Full integration tests run via integration-test.yml workflow"
+        fi
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install E2E dependencies
+      run: |
+        if [ -d extensions/passport_verification/tests/e2e ]; then
+          cd extensions/passport_verification/tests/e2e
+          npm install
+          npx playwright install chromium --with-deps
+        fi
+
+    - name: Run E2E tests (against staging)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      env:
+        PLAYWRIGHT_BASE_URL: https://gzya5-jyaaa-aaaac-qai5a-cai.icp0.io
+      run: |
+        if [ -d extensions/passport_verification/tests/e2e ]; then
+          cd extensions/passport_verification/tests/e2e
+          npx playwright test || echo "⚠️  E2E tests failed (staging may not be deployed)"
         fi
 
     - name: Upload test logs

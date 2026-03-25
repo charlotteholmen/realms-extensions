@@ -1,0 +1,6 @@
+# Realms framework version to use for testing.
+# Supported formats:
+#   v0.9.2       - specific release tag
+#   latest       - HEAD of main branch (latest unpublished commit)
+#   abc1234      - specific commit SHA
+latest

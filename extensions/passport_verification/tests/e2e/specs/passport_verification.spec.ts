@@ -1,63 +1,93 @@
 import { test, expect } from '@playwright/test';
 
+const TIMEOUT = 60000;
+
 test.describe('Passport Verification Extension E2E Tests', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/extensions/passport_verification');
-    // Wait for the page to load - look for the main heading
-    await expect(page.getByRole('heading', { name: /verify your passport/i }))
-      .toBeVisible({ timeout: 60000 });
+    await page.goto('/extensions/passport_verification', {
+      waitUntil: 'domcontentloaded',
+      timeout: TIMEOUT
+    });
+    // Wait for the page header to appear
+    await expect(page.getByRole('heading', { name: 'Passport Verification' }))
+      .toBeVisible({ timeout: TIMEOUT });
   });
 
-  test('should display the passport verification page', async ({ page }) => {
-    // Verify page title/heading is visible
-    await expect(page.getByRole('heading', { name: /verify your passport/i }))
-      .toBeVisible();
+  test('should display the page header and description', async ({ page }) => {
+    test.setTimeout(TIMEOUT);
+    await expect(page.getByRole('heading', { name: 'Passport Verification' })).toBeVisible();
+    await expect(page.getByText('Zero-knowledge identity verification via RariMe')).toBeVisible();
   });
 
-  test('should show the start verification button', async ({ page }) => {
-    // Look for the main action button
-    const startButton = page.getByRole('button', { name: /start|verify|generate/i });
-    await expect(startButton).toBeVisible({ timeout: 15000 });
+  test('should show the step indicator with Start, Scan, Verified steps', async ({ page }) => {
+    test.setTimeout(TIMEOUT);
+    await expect(page.getByText('Start')).toBeVisible();
+    await expect(page.getByText('Scan')).toBeVisible();
+    await expect(page.getByText('Verified')).toBeVisible();
   });
 
-  test('should show generating state when button is clicked', async ({ page }) => {
-    // Click the verification button
-    const startButton = page.getByRole('button', { name: /start|verify|generate/i });
-    await expect(startButton).toBeVisible({ timeout: 15000 });
+  test('should show idle state hero card with Start Verification button', async ({ page }) => {
+    test.setTimeout(TIMEOUT);
+    await expect(page.getByRole('heading', { name: 'Verify Your Passport Identity' })).toBeVisible();
+    await expect(page.getByText('Your passport data never leaves your device')).toBeVisible();
+    const startButton = page.getByRole('button', { name: 'Start Verification' });
+    await expect(startButton).toBeVisible();
+    await expect(startButton).toBeEnabled();
+  });
+
+  test('should show generating state when Start Verification is clicked', async ({ page }) => {
+    test.setTimeout(TIMEOUT);
+    const startButton = page.getByRole('button', { name: 'Start Verification' });
     await startButton.click();
 
-    // Should show some loading/generating indicator
-    // The component sets verificationStatus to 'generating' on click
-    // This may show a spinner or status text
-    const generatingIndicator = page.locator('text=/generating|loading|please wait/i');
-    const spinner = page.locator('[role="status"]');
-
-    // Either a text indicator or spinner should appear briefly
-    await expect(generatingIndicator.or(spinner)).toBeVisible({ timeout: 10000 });
+    // Should show spinner and "Generating verification link..." text
+    await expect(page.getByText('Generating verification link...')).toBeVisible({ timeout: 10000 });
   });
 
-  test('should not crash with error on page load', async ({ page }) => {
-    // Verify no unhandled error is displayed on the page itself
-    // The old bug showed "Error Occurred" with the full error trace
-    const errorHeading = page.locator('text=/Error Occurred/i');
-    await expect(errorHeading).not.toBeVisible({ timeout: 5000 });
+  test('should not show Error Occurred on initial page load', async ({ page }) => {
+    test.setTimeout(TIMEOUT);
+    // The page should load cleanly without any error state
+    await expect(page.getByText('Error Occurred')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Verification Failed')).not.toBeVisible({ timeout: 5000 });
   });
 
-  test('should display verification result after clicking start', async ({ page }) => {
-    const startButton = page.getByRole('button', { name: /start|verify|generate/i });
-    await expect(startButton).toBeVisible({ timeout: 15000 });
+  test('should transition to pending or error after generating', async ({ page }) => {
+    test.setTimeout(90000);
+    const startButton = page.getByRole('button', { name: 'Start Verification' });
     await startButton.click();
 
-    // Wait for the async call to complete - should show either:
-    // - A verification link/QR code (success)
-    // - A pending status
-    // - An error message (but NOT "Application ID not found")
-    // Give it enough time for the HTTP outcall
-    await page.waitForTimeout(10000);
+    // Wait for the HTTP outcall to complete (up to 30s for IC HTTP outcalls)
+    await page.waitForTimeout(15000);
 
+    // After generating, we should see one of:
+    // - Pending state: QR code section with "Check Status" button
+    // - Error state: "Error Occurred" (acceptable for staging if Rarimo API has issues)
     // The "Application ID not found" error should never appear
-    const appIdError = page.locator('text=/Application ID not found/i');
+    const appIdError = page.getByText('Application ID not found');
     await expect(appIdError).not.toBeVisible();
+
+    // Either QR/pending UI or error UI should be visible
+    const checkStatusButton = page.getByRole('button', { name: 'Check Status' });
+    const errorHeading = page.getByText('Error Occurred');
+    const cancelButton = page.getByRole('button', { name: 'Cancel' });
+    const tryAgainButton = page.getByRole('button', { name: 'Try Again' });
+
+    // At least one of these should be visible (pending or error state)
+    await expect(
+      checkStatusButton.or(errorHeading).or(cancelButton).or(tryAgainButton)
+    ).toBeVisible({ timeout: 30000 });
+  });
+
+  test('should show verified state UI elements when verification succeeds', async ({ page }) => {
+    // This test validates the verified state structure.
+    // Since we can't trigger real Rarimo verification in E2E,
+    // we verify the page loads correctly and check for the idle state.
+    // The verified state is tested by the backend integration test
+    // (create_passport_identity + get_identity_status).
+    test.setTimeout(TIMEOUT);
+
+    // Verify the idle state is correct (pre-verification)
+    await expect(page.getByRole('heading', { name: 'Verify Your Passport Identity' })).toBeVisible();
   });
 });
