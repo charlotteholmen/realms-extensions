@@ -17,6 +17,11 @@ env/
 node_modules/
 .npm
 *.log
+package-lock.json
+
+# Playwright test artifacts
+playwright-report/
+test-results/
 
 # Build artifacts
 *.wasm
