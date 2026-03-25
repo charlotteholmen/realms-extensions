@@ -51,6 +51,7 @@ def extension_sync_call(method_name: str, args: dict):
     methods = {
         "import_data": (import_data, True),
         "export_data": (export_data, True),
+        "delete_entity": (delete_entity, True),
         "generate_registration_url": (generate_registration_url, True),
         "validate_registration_code": (validate_registration_code, True),
         "get_registration_codes": (get_registration_codes, True),
@@ -232,6 +233,42 @@ def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
         "failed": failed,
         "errors": errors[:10],
     }
+
+
+def delete_entity(args):
+    """Delete a single entity by type and id.
+
+    Equivalent CLI: ``%db delete <Type> <id>``
+    """
+    try:
+        if isinstance(args, str):
+            args = json.loads(args)
+
+        entity_type = args.get("entity_type")
+        entity_id = args.get("entity_id")
+
+        if not entity_type or entity_id is None:
+            return {"success": False, "error": "entity_type and entity_id are required"}
+
+        db = Database.get_instance()
+        cls = db._entity_types.get(entity_type)
+        if not cls:
+            return {"success": False, "error": f"Unknown entity type: {entity_type}"}
+
+        instance = cls.load(entity_id)
+        if instance is None:
+            return {"success": False, "error": f"{entity_type}#{entity_id} not found"}
+
+        instance.delete()
+        Entity._context.clear()
+
+        return {
+            "success": True,
+            "message": f"Deleted {entity_type}#{entity_id}",
+        }
+    except Exception as e:
+        logger.error(f"Error deleting entity: {e}\n{traceback.format_exc()}")
+        return {"success": False, "error": str(e)}
 
 
 def generate_registration_url(args: dict):
