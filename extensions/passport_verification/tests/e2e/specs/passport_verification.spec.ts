@@ -18,6 +18,7 @@ test.describe('Passport Verification Extension E2E Tests', () => {
     test.setTimeout(TIMEOUT);
     await expect(page.getByRole('heading', { name: 'Passport Verification' })).toBeVisible();
     await expect(page.getByText('Zero-knowledge identity verification via RariMe')).toBeVisible();
+    await page.screenshot({ path: 'test-results/01-page-header.png', fullPage: true });
   });
 
   test('should show the step indicator with Start, Scan, Verified steps', async ({ page }) => {
@@ -25,6 +26,7 @@ test.describe('Passport Verification Extension E2E Tests', () => {
     await expect(page.getByText('Start', { exact: true })).toBeVisible();
     await expect(page.getByText('Scan', { exact: true })).toBeVisible();
     await expect(page.getByText('Verified', { exact: true })).toBeVisible();
+    await page.screenshot({ path: 'test-results/02-step-indicator.png', fullPage: true });
   });
 
   test('should show idle state hero card with Start Verification button', async ({ page }) => {
@@ -34,6 +36,7 @@ test.describe('Passport Verification Extension E2E Tests', () => {
     const startButton = page.getByRole('button', { name: 'Start Verification' });
     await expect(startButton).toBeVisible();
     await expect(startButton).toBeEnabled();
+    await page.screenshot({ path: 'test-results/03-idle-state.png', fullPage: true });
   });
 
   test('should show generating state when Start Verification is clicked', async ({ page }) => {
@@ -43,6 +46,7 @@ test.describe('Passport Verification Extension E2E Tests', () => {
 
     // Should show spinner and "Generating verification link..." text
     await expect(page.getByText('Generating verification link...')).toBeVisible({ timeout: 10000 });
+    await page.screenshot({ path: 'test-results/04-generating-state.png', fullPage: true });
   });
 
   test('should not show Error Occurred on initial page load', async ({ page }) => {
@@ -50,6 +54,7 @@ test.describe('Passport Verification Extension E2E Tests', () => {
     // The page should load cleanly without any error state
     await expect(page.getByText('Error Occurred')).not.toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Verification Failed')).not.toBeVisible({ timeout: 5000 });
+    await page.screenshot({ path: 'test-results/05-clean-load.png', fullPage: true });
   });
 
   test('should transition to pending or error after generating', async ({ page }) => {
@@ -76,6 +81,7 @@ test.describe('Passport Verification Extension E2E Tests', () => {
     await expect(
       checkStatusButton.or(tryAgainButton).first()
     ).toBeVisible({ timeout: 30000 });
+    await page.screenshot({ path: 'test-results/06-post-generating-state.png', fullPage: true });
   });
 
   test('should show verified state UI elements when verification succeeds', async ({ page }) => {
@@ -88,5 +94,6 @@ test.describe('Passport Verification Extension E2E Tests', () => {
 
     // Verify the idle state is correct (pre-verification)
     await expect(page.getByRole('heading', { name: 'Verify Your Passport Identity' })).toBeVisible();
+    await page.screenshot({ path: 'test-results/07-verified-state-check.png', fullPage: true });
   });
 });
