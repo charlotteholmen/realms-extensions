@@ -352,11 +352,14 @@ def async_task():
         test_set_application_id_restore,
         test_get_event_id_returns_value,
         test_initialize_idempotent,
-        test_create_passport_identity,
     ]
 
-    # HTTP outcall tests (optional - may fail on local replica)
+    # Tests that require a real user context (optional in Docker/CI environments)
+    # create_passport_identity does User[session_id] lookup which requires
+    # the calling principal to be a registered citizen in the realm.
+    # HTTP outcall tests may fail on local replicas without HTTP outcall support.
     optional_tests = [
+        test_create_passport_identity,
         test_get_verification_link_http_outcall,
         test_check_verification_status_http_outcall,
     ]
@@ -380,7 +383,7 @@ def async_task():
             failed += 1
 
     print_info("-" * 60)
-    print_info("Optional Tests (HTTP outcalls)")
+    print_info("Optional Tests (user context / HTTP outcalls)")
     print_info("-" * 60)
 
     optional_passed = 0

@@ -81,11 +81,12 @@ jobs:
 
     - name: Install dfx
       run: |
-        sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
-        echo "$HOME/bin" >> $GITHUB_PATH
+        DFXVM_INIT_YES=1 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+        echo "$HOME/.local/share/dfx/bin" >> $GITHUB_PATH
 
     - name: Setup dfx identity
       run: |
+        export PATH="$HOME/.local/share/dfx/bin:$PATH"
         mkdir -p ~/.config/dfx/identity/test_deploy
         echo "${{ secrets.IC_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
         dfx identity use test_deploy
@@ -120,11 +121,12 @@ jobs:
 
     - name: Install dfx
       run: |
-        sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
-        echo "$HOME/bin" >> $GITHUB_PATH
+        DFXVM_INIT_YES=1 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+        echo "$HOME/.local/share/dfx/bin" >> $GITHUB_PATH
 
     - name: Setup dfx identity
       run: |
+        export PATH="$HOME/.local/share/dfx/bin:$PATH"
         mkdir -p ~/.config/dfx/identity/test_deploy
         echo "${{ secrets.IC_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
         dfx identity use test_deploy

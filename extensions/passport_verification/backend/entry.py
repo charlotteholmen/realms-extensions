@@ -299,27 +299,32 @@ def create_passport_identity(args: str) -> str:
         for identity in human.identities:
             if identity.type == "passport":
                 logger.info(f"Passport identity already exists for {session_id}")
-                return json.dumps({
-                    "success": True,
-                    "session_id": session_id,
-                    "identity_created": False,
-                    "already_exists": True,
-                })
+                return json.dumps(
+                    {
+                        "success": True,
+                        "session_id": session_id,
+                        "identity_created": False,
+                        "already_exists": True,
+                    }
+                )
 
         # Create the passport Identity
         Identity(type="passport", metadata=json.dumps(verification_data), human=human)
         logger.info(f"✅ Passport identity created for session: {session_id}")
 
-        return json.dumps({
-            "success": True,
-            "session_id": session_id,
-            "identity_created": True,
-            "timestamp": str(ic.time()),
-            "verification_data": verification_data,
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "session_id": session_id,
+                "identity_created": True,
+                "timestamp": str(ic.time()),
+                "verification_data": verification_data,
+            }
+        )
 
     except Exception as e:
         logger.error(f"❌ Error creating passport identity: {str(e)}")
         import traceback
+
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})
