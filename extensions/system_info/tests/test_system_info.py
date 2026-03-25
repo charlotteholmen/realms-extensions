@@ -54,18 +54,27 @@ def call_sync(function_name: str, args: str = "{}") -> dict:
         f"{_NETWORK_FLAG} --output json"
     )
     result = run_command(command)
-    if not result or result.returncode != 0:
-        return {"success": False, "error": f"Command failed: {result}"}
+    if not result:
+        return {"success": False, "error": "Command returned no output"}
+
     try:
-        outer = json.loads(result.stdout)
-        if isinstance(outer, list) and len(outer) > 0:
-            outer = outer[0]
-        response_str = outer.get("response", outer.get("Ok", {}).get("response", ""))
-        if isinstance(response_str, str):
-            return json.loads(response_str)
-        return response_str
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+        parsed = json.loads(result)
+    except json.JSONDecodeError:
+        return {"success": False, "error": f"Invalid JSON: {result}"}
+
+    # Extract the nested response field
+    if isinstance(parsed, dict):
+        response_str = parsed.get("response", "")
+        success = parsed.get("success", False)
+        if response_str:
+            try:
+                inner = json.loads(response_str)
+                return inner  # inner already has {"success": ..., "data": ...}
+            except json.JSONDecodeError:
+                return {"success": success, "data": response_str}
+        return {"success": success}
+
+    return {"success": False, "error": f"Unexpected response format: {parsed}"}
 
 
 # ---------------------------------------------------------------------------

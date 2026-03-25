@@ -238,7 +238,7 @@
     <div class="bg-gray-50 border border-gray-300 rounded-lg p-4 text-gray-700">
       {error}
     </div>
-  {:else if ledgerEntries.length === 0}
+  {:else if ledgerEntries.length === 0 && funds.length === 0 && budgets.length === 0}
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
       <p class="text-gray-700 font-medium">{$_('extensions.metrics.no_accounting_data') || 'No accounting data available yet.'}</p>
       <p class="text-gray-500 text-sm mt-2">{$_('extensions.metrics.accounting_data_hint') || 'Financial data will appear here once transactions are recorded.'}</p>
