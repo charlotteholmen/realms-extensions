@@ -80,7 +80,9 @@ npx playwright test --headed  # Watch in browser
 
 ## CI/CD
 
-The `integration-test.yml` workflow runs automatically on push/PR to main:
+The `integration-test.yml` workflow needs an `IC_IDENTITY_PEM` secret in the GitHub repo settings containing the PEM key for the dfx identity that has controller access to the Dominion canisters.
+
+The workflow runs automatically on push/PR to main:
 
 1. **Setup job**: Clones realms at pinned version, deploys to Dominion
 2. **Backend tests**: Runs `test_*.py` for each extension via `dfx canister call`

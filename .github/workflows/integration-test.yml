@@ -87,7 +87,7 @@ jobs:
     - name: Setup dfx identity
       run: |
         mkdir -p ~/.config/dfx/identity/test_deploy
-        echo "${{ secrets.DFX_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
+        echo "${{ secrets.IC_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
         dfx identity use test_deploy
 
     - name: Install realms CLI
@@ -126,7 +126,7 @@ jobs:
     - name: Setup dfx identity
       run: |
         mkdir -p ~/.config/dfx/identity/test_deploy
-        echo "${{ secrets.DFX_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
+        echo "${{ secrets.IC_IDENTITY_PEM }}" > ~/.config/dfx/identity/test_deploy/identity.pem
         dfx identity use test_deploy
 
     - name: Install test dependencies
