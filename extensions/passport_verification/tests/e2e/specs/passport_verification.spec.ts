@@ -22,9 +22,9 @@ test.describe('Passport Verification Extension E2E Tests', () => {
 
   test('should show the step indicator with Start, Scan, Verified steps', async ({ page }) => {
     test.setTimeout(TIMEOUT);
-    await expect(page.getByText('Start')).toBeVisible();
-    await expect(page.getByText('Scan')).toBeVisible();
-    await expect(page.getByText('Verified')).toBeVisible();
+    await expect(page.getByText('Start', { exact: true })).toBeVisible();
+    await expect(page.getByText('Scan', { exact: true })).toBeVisible();
+    await expect(page.getByText('Verified', { exact: true })).toBeVisible();
   });
 
   test('should show idle state hero card with Start Verification button', async ({ page }) => {
@@ -68,14 +68,13 @@ test.describe('Passport Verification Extension E2E Tests', () => {
     await expect(appIdError).not.toBeVisible();
 
     // Either QR/pending UI or error UI should be visible
+    // We check for a button that only appears in post-generating states
     const checkStatusButton = page.getByRole('button', { name: 'Check Status' });
-    const errorHeading = page.getByText('Error Occurred');
-    const cancelButton = page.getByRole('button', { name: 'Cancel' });
     const tryAgainButton = page.getByRole('button', { name: 'Try Again' });
 
-    // At least one of these should be visible (pending or error state)
+    // At least one of these buttons should be visible (pending or error state)
     await expect(
-      checkStatusButton.or(errorHeading).or(cancelButton).or(tryAgainButton)
+      checkStatusButton.or(tryAgainButton).first()
     ).toBeVisible({ timeout: 30000 });
   });
 
