@@ -1,0 +1,23 @@
+{
+  "name": "system_info",
+  "version": "1.0.0",
+  "description": "System information dashboard for realm administrators",
+  "author": "Realms Team",
+  "permissions": [],
+  "functions": [
+    "get_system_info",
+    "get_db_stats",
+    "get_canister_stats",
+    "get_token_balances"
+  ],
+  "profiles": [
+    "admin"
+  ],
+  "categories": [
+    "admin_tools"
+  ],
+  "icon": "chart_bar_square",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/system_info",
+  "url_path": null,
+  "show_in_sidebar": true
+}

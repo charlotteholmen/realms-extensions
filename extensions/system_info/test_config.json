@@ -1,0 +1,51 @@
+{
+  "$schema": "../_shared/testing/config/test_config.schema.json",
+  "extension_id": "system_info",
+  "test_type": "full",
+
+  "realm_config": {
+    "citizens": 1,
+    "random": false
+  },
+
+  "test_canisters": {
+    "enabled": false
+  },
+
+  "backend_tests": {
+    "enabled": true,
+    "execution": "host",
+    "test_files": [
+      "tests/test_system_info.py"
+    ],
+    "test_directory": "tests"
+  },
+
+  "e2e_tests": {
+    "enabled": false,
+    "base_path": "/extensions/system_info",
+    "warmup": true
+  },
+
+  "linting": {
+    "enabled": true,
+    "black": true,
+    "isort": true,
+    "flake8": true,
+    "mypy": false
+  },
+
+  "docker": {
+    "image": "ghcr.io/smart-social-contracts/realms:ui-test-latest",
+    "container_name_prefix": "system-info-test",
+    "port_mapping": {
+      "host_port": 8005,
+      "container_port": 8000
+    }
+  },
+
+  "environment": {
+    "PLAYWRIGHT_BASE_URL": "http://localhost:8000",
+    "E2E_WARMUP_PATH": "/extensions/system_info"
+  }
+}
