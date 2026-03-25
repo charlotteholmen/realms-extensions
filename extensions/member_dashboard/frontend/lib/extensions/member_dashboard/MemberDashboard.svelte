@@ -224,13 +224,13 @@
 					No notifications
 				</div>
 			{:else}
-				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
 					<table class="w-full">
 						<thead>
 							<tr class="bg-gray-50 dark:bg-gray-750 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 uppercase tracking-wider">
 								<th class="w-8 px-3 py-2"></th>
 								<th class="text-left px-3 py-2">Subject</th>
-								<th class="text-left px-3 py-2 whitespace-nowrap">Date</th>
+								<th class="text-left px-3 py-2 whitespace-nowrap hidden sm:table-cell">Date</th>
 								<th class="w-20 px-3 py-2 text-right">Actions</th>
 							</tr>
 						</thead>
@@ -251,7 +251,7 @@
 											<div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 leading-relaxed prose prose-sm dark:prose-invert max-w-none">{@html mdToHtml(notif.message)}</div>
 										{/if}
 									</td>
-									<td class="px-3 py-3 align-top text-xs text-gray-400 whitespace-nowrap">{notif.timestamp || ''}</td>
+									<td class="px-3 py-3 align-top text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">{notif.timestamp || ''}</td>
 									<td class="px-3 py-3 align-top">
 										<!-- svelte-ignore a11y-click-events-have-key-events -->
 										<div class="flex justify-end gap-1" on:click|stopPropagation>
