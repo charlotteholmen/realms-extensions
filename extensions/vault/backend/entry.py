@@ -290,7 +290,7 @@ def transfer(args: str):
     try:
         params = json.loads(args) if isinstance(args, str) else args
         to_principal = params.get("to_principal")
-        amount = params.get("amount")
+        amount = int(params.get("amount"))
         token = params.get("token")
         to_sub = params.get("to_subaccount")
         from_sub = params.get("from_subaccount")

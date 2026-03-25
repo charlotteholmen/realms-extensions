@@ -242,6 +242,26 @@ def set_application_id(new_app_id: str) -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 
+def get_identity_status(args: str) -> str:
+    """Check if the current user has a verified passport identity."""
+    try:
+        from ggg import User
+
+        session_id = get_session_id(args)
+        user = User[session_id]
+        if not user or not user.human:
+            return json.dumps({"verified": False})
+
+        for identity in user.human.identities:
+            if identity.type == "passport":
+                return json.dumps({"verified": True, "type": "passport"})
+
+        return json.dumps({"verified": False})
+    except Exception as e:
+        logger.error(f"Error checking identity status: {e}")
+        return json.dumps({"verified": False, "error": str(e)})
+
+
 def create_passport_identity(args: str) -> str:
     """Create passport identity after successful verification"""
     try:
