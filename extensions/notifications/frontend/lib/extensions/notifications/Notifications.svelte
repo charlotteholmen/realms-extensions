@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { Card, Button, Badge, Spinner, Toggle } from 'flowbite-svelte';
-    import { CheckOutline, EyeSolid, LinkOutline, ClockOutline, CalendarMonthOutline } from 'flowbite-svelte-icons';
+    import { CheckOutline, EyeSolid, LinkOutline, ClockOutline } from 'flowbite-svelte-icons';
     import { notifications, unreadCount, loadNotifications, markAsRead, type NotificationItem } from '$lib/stores/notifications';
     import { getIcon } from '$lib/utils/iconMap';
     import { goto } from '$app/navigation';
@@ -51,13 +51,30 @@
         }
     }
 
-    function formatDateTime(timestamp: string): { date: string; time: string } {
-        if (!timestamp) return { date: '', time: '' };
-        const parts = timestamp.split(' ');
-        return {
-            date: parts[0] || '',
-            time: parts[1]?.substring(0, 8) || ''
-        };
+    function formatRelativeTime(timestampMs: number): string {
+        if (!timestampMs) return '';
+        const now = Date.now();
+        const diffMs = now - timestampMs;
+        if (diffMs < 0) return 'just now';
+        const seconds = Math.floor(diffMs / 1000);
+        if (seconds < 60) return 'just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        if (days < 30) return `${days}d ago`;
+        const months = Math.floor(days / 30);
+        if (months < 12) return `${months}mo ago`;
+        const years = Math.floor(months / 12);
+        return `${years}y ago`;
+    }
+
+    function formatFullDate(timestampMs: number): string {
+        if (!timestampMs) return '';
+        const d = new Date(timestampMs);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     }
 </script>
 
@@ -111,7 +128,6 @@
     {:else}
         <div class="space-y-4">
             {#each filteredNotifications as notification (notification.id)}
-                {@const dt = formatDateTime(notification.timestamp)}
                 <Card 
                     class="w-full transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 {!notification.read ? 'border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'}"
                 >
@@ -142,16 +158,10 @@
                             
                             <!-- Date and Time -->
                             <div class="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400 mb-3">
-                                {#if dt.date}
-                                    <span class="flex items-center">
-                                        <CalendarMonthOutline class="w-4 h-4 mr-1" />
-                                        {dt.date}
-                                    </span>
-                                {/if}
-                                {#if dt.time}
-                                    <span class="flex items-center">
+                                {#if notification.timestamp_ms}
+                                    <span class="flex items-center" title={formatFullDate(notification.timestamp_ms)}>
                                         <ClockOutline class="w-4 h-4 mr-1" />
-                                        {dt.time}
+                                        {formatRelativeTime(notification.timestamp_ms)}
                                     </span>
                                 {/if}
                             </div>

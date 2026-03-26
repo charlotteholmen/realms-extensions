@@ -4,7 +4,8 @@
 	import { Spinner, Alert, Button } from 'flowbite-svelte';
 	import { BellOutline, TrashBinOutline, EnvelopeOpenOutline, EnvelopeOutline, EyeOutline, EyeSlashOutline, CheckCircleSolid, CloseCircleSolid } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
-	import { principal } from '$lib/stores/auth';
+	import { principal, isAuthenticated } from '$lib/stores/auth';
+	import { goto } from '$app/navigation';
 	import { _ } from 'svelte-i18n';
 	import TaxInformation from './TaxInformation.svelte';
 	import PaymentAccounts from './PaymentAccounts.svelte';
@@ -128,6 +129,32 @@
 			.replace(/^/, '<p>').replace(/$/, '</p>');
 	}
 	
+	function formatRelativeTime(timestampMs) {
+		if (!timestampMs) return '';
+		const now = Date.now();
+		const diffMs = now - timestampMs;
+		if (diffMs < 0) return 'just now';
+		const seconds = Math.floor(diffMs / 1000);
+		if (seconds < 60) return 'just now';
+		const minutes = Math.floor(seconds / 60);
+		if (minutes < 60) return `${minutes}m ago`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}h ago`;
+		const days = Math.floor(hours / 24);
+		if (days < 30) return `${days}d ago`;
+		const months = Math.floor(days / 30);
+		if (months < 12) return `${months}mo ago`;
+		const years = Math.floor(months / 12);
+		return `${years}y ago`;
+	}
+
+	function formatFullDate(timestampMs) {
+		if (!timestampMs) return '';
+		const d = new Date(timestampMs);
+		const pad = (n) => String(n).padStart(2, '0');
+		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+	}
+
 	function toggleExpand(notif) {
 		if (expandedId === notif.id) {
 			expandedId = null;
@@ -160,11 +187,27 @@
 	
 	// Initialize component
 	onMount(async () => {
+		if (!$isAuthenticated) {
+			loading = false;
+			return;
+		}
 		await Promise.all([getDashboardSummary(), getNotifications(), getCitizenshipStatus()]);
 	});
 </script>
 
 <div class="w-full max-w-none px-4 py-6 pt-20 space-y-8">
+	{#if !$isAuthenticated}
+		<div class="flex flex-col items-center justify-center py-20 px-6">
+			<div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-10 max-w-md w-full text-center space-y-5">
+				<div class="mx-auto w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+					<BellOutline class="w-8 h-8 text-blue-500" />
+				</div>
+				<h2 class="text-2xl font-bold text-gray-900 dark:text-white">Welcome to your Dashboard</h2>
+				<p class="text-gray-500 dark:text-gray-400">Please log in to access your member dashboard, notifications, invoices, and more.</p>
+				<Button color="primary" size="lg" class="w-full" on:click={() => goto('/join')}>Log In</Button>
+			</div>
+		</div>
+	{:else}
 	<!-- Header -->
 	<div>
 		<h1 class="text-3xl font-bold text-gray-900 dark:text-white">
@@ -251,7 +294,7 @@
 											<div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 leading-relaxed prose prose-sm dark:prose-invert max-w-none">{@html mdToHtml(notif.message)}</div>
 										{/if}
 									</td>
-									<td class="px-3 py-3 align-top text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">{notif.timestamp || ''}</td>
+									<td class="px-3 py-3 align-top text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell" title={formatFullDate(notif.timestamp_ms)}>{formatRelativeTime(notif.timestamp_ms)}</td>
 									<td class="px-3 py-3 align-top">
 										<!-- svelte-ignore a11y-click-events-have-key-events -->
 										<div class="flex justify-end gap-1" on:click|stopPropagation>
@@ -307,5 +350,6 @@
 		<Alert color="blue" class="mb-4 rounded-xl">
 			{$_('extensions.member_dashboard.no_data')}
 		</Alert>
+	{/if}
 	{/if}
 </div>
