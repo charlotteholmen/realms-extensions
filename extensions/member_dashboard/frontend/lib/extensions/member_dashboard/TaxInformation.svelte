@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Spinner, Alert, Badge, Button, Modal, Tooltip } from 'flowbite-svelte';
+	import { Spinner, Alert, Badge, Button, Modal } from 'flowbite-svelte';
 	import { CreditCardOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { realmName } from '$lib/stores/realmInfo';
@@ -227,7 +227,7 @@
 				const data = JSON.parse(response.response);
 				if (data.success) {
 					// Refresh the entire tax data to get updated summary
-					await getTaxInformation();
+					await getInvoiceInformation();
 				}
 			}
 		} catch (err) {
@@ -315,10 +315,10 @@
 													{#if refreshingInvoiceId === record.id}
 														<Spinner size="3" />
 													{:else}
-														<RefreshOutline class="w-3 h-3" />
+														<RefreshOutline class="w-3 h-3 mr-1" />
+														Refresh Status
 													{/if}
 												</Button>
-												<Tooltip>Check payment status</Tooltip>
 												<Button 
 													size="xs" 
 													outline
