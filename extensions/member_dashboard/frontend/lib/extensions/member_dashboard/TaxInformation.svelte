@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Spinner, Alert, Badge, Button, Modal } from 'flowbite-svelte';
+	import { Spinner, Alert, Badge, Button, Modal, Tooltip } from 'flowbite-svelte';
 	import { CreditCardOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { backend } from '$lib/canisters';
 	import { realmName } from '$lib/stores/realmInfo';
-	import { CONFIG } from '$lib/config.js';
+	import { CONFIG, DEMO_MODE } from '$lib/config.js';
 	
 	// Props
 	export let userId: string;
@@ -302,7 +302,8 @@
 													class="px-3 py-1"
 													on:click={() => openPaymentModal(record)}
 												>
-													Pay
+													<CreditCardOutline class="w-3 h-3 mr-1" />
+													Payment Instructions
 												</Button>
 												<Button 
 													size="xs" 
@@ -317,19 +318,23 @@
 														<RefreshOutline class="w-3 h-3" />
 													{/if}
 												</Button>
-												<Button 
-													size="xs" 
-													color="light"
-													class="px-2 py-1 text-xs"
-													disabled={demoPayingInvoiceId === record.id}
-													on:click={() => demoMarkAsPaid(record)}
-												>
-													{#if demoPayingInvoiceId === record.id}
-														<Spinner size="3" />
-													{:else}
-														Demo Pay
-													{/if}
-												</Button>
+												<Tooltip>Check payment status</Tooltip>
+												{#if DEMO_MODE}
+													<Button 
+														size="xs" 
+														outline
+														color="light"
+														class="px-2 py-1 text-xs"
+														disabled={demoPayingInvoiceId === record.id}
+														on:click={() => demoMarkAsPaid(record)}
+													>
+														{#if demoPayingInvoiceId === record.id}
+															<Spinner size="3" />
+														{:else}
+															Demo Pay
+														{/if}
+													</Button>
+												{/if}
 											</div>
 										{:else}
 											<span class="text-xs text-gray-400">{formatDate(record.paid_on)}</span>
