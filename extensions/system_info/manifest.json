@@ -14,7 +14,7 @@
     "admin"
   ],
   "categories": [
-    "admin_tools"
+    "oversight"
   ],
   "icon": "chart_bar_square",
   "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/system_info",
