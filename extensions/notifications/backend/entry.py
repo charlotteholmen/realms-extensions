@@ -104,6 +104,8 @@ def _notification_to_dict(notification: Notification) -> Dict[str, Any]:
         "topic": getattr(notification, "topic", "") or "",
         "title": getattr(notification, "title", "") or "",
         "message": getattr(notification, "message", "") or "",
+        "sender": getattr(notification, "sender", "") or "",
+        "recipient": getattr(notification, "recipient", "") or "",
         "timestamp_ms": timestamp_ms,
         "read": getattr(notification, "read", False) or False,
         "icon": getattr(notification, "icon", "bell") or "bell",

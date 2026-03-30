@@ -28,7 +28,7 @@ export default defineConfig({
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8000',
     trace: 'on-first-retry',
     screenshot: 'on',
-    video: 'retain-on-failure',
+    video: 'on',
     navigationTimeout: 120000,
     actionTimeout: 15000,
   },

@@ -43,7 +43,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     
     /* Video on failure */
-    video: 'retain-on-failure',
+    video: 'on',
     
     /* Increase navigation timeout for slow page loads (especially first load) */
     navigationTimeout: 60000,
