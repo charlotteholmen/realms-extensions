@@ -35,7 +35,6 @@
   let importResult = null;
   let fileInput;
   let dragOver = false;
-  const importPlaceholder = 'Paste JSON here, e.g.\n[\n  {"_type": "User", "_id": "1", "name": "Alice"},\n  {"_type": "User", "_id": "2", "name": "Bob"}\n]';
   
   // Delete state
   let deletingId = null;
