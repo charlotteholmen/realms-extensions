@@ -28,6 +28,7 @@
   // Import state
   let importMode = 'file'; // 'file' or 'editor'
   let importText = '';
+  const importPlaceholder = 'Paste JSON here, e.g.\n[\n  {"_type": "User", "_id": "1", "name": "Alice"},\n  {"_type": "User", "_id": "2", "name": "Bob"}\n]';
   let importFileName = '';
   let importPreview = null;
   let importing = false;
