@@ -244,15 +244,15 @@ def _build_finalize_step_code(proposal_id: str) -> str:
 def _schedule_multi_codex_execution(proposal_id: str, codices_list: List[dict]):
     """Create a basilisk Task with one step per codex + a finalize step,
     then kick off the first step immediately via ic.set_timer."""
-    from basilisk.os.entities import (
+    from ic_basilisk_toolkit.entities import (
         Call as OSCall,
         Codex as OSCodex,
         Task as OSTask,
         TaskStep as OSTaskStep,
         TaskSchedule as OSTaskSchedule,
     )
-    from basilisk.os.task_manager import _create_timer_callback
-    from basilisk.os.status import TaskStatus
+    from ic_basilisk_toolkit.task_manager import _create_timer_callback
+    from ic_basilisk_toolkit.status import TaskStatus
 
     task_name = f"proposal_{proposal_id}_exec"
     logger.info(f"Creating multi-codex task '{task_name}' with {len(codices_list)} codex(es)")

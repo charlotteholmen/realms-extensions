@@ -210,8 +210,8 @@ def get_token_balances(args: str) -> str:
 def _get_token_balances_inner():
     tokens = []
     try:
-        from basilisk.os.wallet import Wallet
-        from basilisk.os.entities import Token
+        from ic_basilisk_toolkit.wallet import Wallet
+        from ic_basilisk_toolkit.entities import Token
 
         wallet = Wallet()
         for token in Token.instances():
