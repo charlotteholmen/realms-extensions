@@ -1,0 +1,11 @@
+# Extension Python Dependencies
+# These will be checked during extension installation
+
+ic-basilisk
+ic-python-logging==0.3.1
+ic-python-db==0.7.5
+
+
+# Development dependencies (optional)
+pytest>=7.0.0
+pytest-cov>=4.0.0
