@@ -8,7 +8,7 @@ import traceback
 from typing import Any, Dict
 
 try:
-    import h3
+    from core.h3 import latlng_to_cell, cell_to_latlng
     H3_AVAILABLE = True
 except ImportError:
     H3_AVAILABLE = False
@@ -82,14 +82,14 @@ def add_zone(args: str) -> str:
         # Calculate H3 index from coordinates if not provided
         if not h3_index and latitude is not None and longitude is not None:
             if H3_AVAILABLE:
-                h3_index = h3.latlng_to_cell(latitude, longitude, resolution)
+                h3_index = latlng_to_cell(latitude, longitude, resolution)
             else:
                 # Fallback: create a pseudo h3 index from coords
                 h3_index = f"manual_{latitude:.4f}_{longitude:.4f}"
         elif h3_index and (latitude is None or longitude is None):
             # Get center of H3 cell if only h3_index provided
             if H3_AVAILABLE:
-                lat, lng = h3.cell_to_latlng(h3_index)
+                lat, lng = cell_to_latlng(h3_index)
                 latitude = lat
                 longitude = lng
 
