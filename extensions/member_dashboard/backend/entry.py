@@ -406,72 +406,22 @@ def check_invoice_payment(args: str) -> Async[str]:
                 }
             )
 
-        # Import vault utilities for ledger queries
-        from extension_packages.vault.vault_lib.entities import Canisters
-        from extension_packages.vault.vault_lib.candid_types import ICRCLedger, Account
-        from basilisk import Principal
+        # Use Invoice.refresh() which delegates to ic_basilisk_toolkit Wallet
+        result = yield invoice.refresh()
 
-        # Get ledger canister
-        ledger_canister = Canisters["ckBTC ledger"]
-        if not ledger_canister:
-            return json.dumps(
-                {"success": False, "error": "ckBTC ledger not configured"}
-            )
+        paid = invoice.status == "Paid"
 
-        # Query the invoice's subaccount balance
-        vault_principal = ic.id()
-        subaccount_bytes = invoice.get_subaccount()
-
-        ledger = ICRCLedger(Principal.from_str(ledger_canister.principal))
-        result = yield ledger.icrc1_balance_of(
-            Account(owner=vault_principal, subaccount=list(subaccount_bytes))
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "paid": paid,
+                    "invoice_id": invoice_id,
+                    "status": invoice.status,
+                    "refresh_result": result,
+                },
+            }
         )
-
-        # Unwrap the CallResult
-        if hasattr(result, "Ok"):
-            balance = result.Ok
-        else:
-            balance = result
-
-        # Convert invoice amount to satoshis (1 ckBTC = 100,000,000 satoshis)
-        amount_satoshis = int(invoice.amount * 100_000_000)
-
-        logger.info(
-            f"Invoice {invoice_id}: balance={balance}, required={amount_satoshis}"
-        )
-
-        if balance >= amount_satoshis:
-            # Payment received! Mark invoice as paid
-            invoice.status = "Paid"
-            invoice.paid_at = datetime.utcnow().isoformat()
-
-            logger.info(f"Invoice {invoice_id} marked as Paid")
-
-            return json.dumps(
-                {
-                    "success": True,
-                    "data": {
-                        "paid": True,
-                        "invoice_id": invoice_id,
-                        "balance_satoshis": balance,
-                        "amount_required_satoshis": amount_satoshis,
-                        "paid_at": invoice.paid_at,
-                    },
-                }
-            )
-        else:
-            return json.dumps(
-                {
-                    "success": True,
-                    "data": {
-                        "paid": False,
-                        "invoice_id": invoice_id,
-                        "balance_satoshis": balance,
-                        "amount_required_satoshis": amount_satoshis,
-                        "shortfall_satoshis": amount_satoshis - balance,
-                    },
-                }
-            )
 
     except Exception as e:
         logger.error(

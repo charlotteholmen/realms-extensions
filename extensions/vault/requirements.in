@@ -1,9 +1,7 @@
 # Extension Python Dependencies
 # These will be checked during extension installation
 
-ic-basilisk
-ic-python-logging==0.3.4
-ic-python-db==0.7.9
+ic-basilisk-toolkit
 
 
 # Development dependencies (optional)
