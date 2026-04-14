@@ -4,8 +4,6 @@
 #
 #    pip-compile --allow-unsafe --output-file=extensions/marketplace/requirements.txt --strip-extras extensions/marketplace/requirements.in
 #
-h3==4.4.2
-    # via -r extensions/marketplace/requirements.in
 ic-basilisk==0.11.25
     # via -r extensions/marketplace/requirements.in
 ic-python-db==0.7.9
