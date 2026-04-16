@@ -1,6 +1,6 @@
-# Publish Extensions to Mundus File Registry
+# Publish Extensions to File Registry
 #
-# Uploads extension backend + frontend files to the on-chain mundus file registry
+# Uploads extension backend + frontend files to the on-chain file registry
 # canister under versioned namespaces: ext/{ext_id}/{version}/
 #
 # Triggered manually or after a release. Requires:
