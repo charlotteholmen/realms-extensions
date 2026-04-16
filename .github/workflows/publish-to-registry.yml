@@ -1,0 +1,204 @@
+# Publish Extensions to Mundus File Registry
+#
+# Uploads extension backend + frontend files to the on-chain mundus file registry
+# canister under versioned namespaces: ext/{ext_id}/{version}/
+#
+# Triggered manually or after a release. Requires:
+#   - FILE_REGISTRY_CANISTER_ID (repository variable)
+#   - DFX_IDENTITY_PEM (repository secret — controller/publisher PEM key)
+#
+# Refs: https://github.com/smart-social-contracts/realms/issues/168
+
+name: Publish to Registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      extension:
+        description: "Extension to publish (or 'all' for all changed)"
+        required: true
+        type: string
+        default: "all"
+      network:
+        description: "IC network"
+        required: true
+        type: choice
+        options:
+          - ic
+          - staging
+        default: ic
+
+env:
+  PYTHON_VERSION: "3.11"
+  DFX_VERSION: "0.31.0"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dfx
+        uses: dfinity/setup-dfx@main
+        with:
+          dfx-version: ${{ env.DFX_VERSION }}
+
+      - name: Configure dfx identity
+        run: |
+          mkdir -p ~/.config/dfx/identity/ci
+          echo "${{ secrets.DFX_IDENTITY_PEM }}" > ~/.config/dfx/identity/ci/identity.pem
+          chmod 600 ~/.config/dfx/identity/ci/identity.pem
+          dfx identity use ci
+
+      - name: Discover extensions
+        id: discover
+        run: |
+          if [ "${{ inputs.extension }}" = "all" ]; then
+            EXTENSIONS=$(find ./extensions -maxdepth 2 -name "manifest.json" -type f \
+              | sed 's|./extensions/||' | sed 's|/manifest.json||' | sort)
+          else
+            EXTENSIONS="${{ inputs.extension }}"
+          fi
+
+          echo "Extensions to publish:"
+          echo "$EXTENSIONS"
+          echo "extensions<<EOF" >> $GITHUB_OUTPUT
+          echo "$EXTENSIONS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Publish extensions to registry
+        env:
+          REGISTRY_CANISTER: ${{ vars.FILE_REGISTRY_CANISTER_ID }}
+          NETWORK: ${{ inputs.network }}
+        run: |
+          if [ -z "$REGISTRY_CANISTER" ]; then
+            echo "::error::FILE_REGISTRY_CANISTER_ID variable not set"
+            exit 1
+          fi
+
+          PUBLISHED=0
+          FAILED=0
+
+          while IFS= read -r ext_id; do
+            [ -z "$ext_id" ] && continue
+            EXT_DIR="extensions/${ext_id}"
+
+            if [ ! -f "${EXT_DIR}/manifest.json" ]; then
+              echo "::warning::Skipping ${ext_id}: no manifest.json"
+              continue
+            fi
+
+            VERSION=$(python -c "import json; print(json.load(open('${EXT_DIR}/manifest.json'))['version'])")
+            NAMESPACE="ext/${ext_id}/${VERSION}"
+
+            echo "========================================="
+            echo "Publishing ${ext_id} v${VERSION}"
+            echo "  Namespace: ${NAMESPACE}"
+            echo "========================================="
+
+            # Upload manifest.json
+            CONTENT_B64=$(base64 -w0 "${EXT_DIR}/manifest.json")
+            PAYLOAD=$(python -c "
+          import json
+          print(json.dumps({
+              'namespace': '${NAMESPACE}',
+              'path': 'manifest.json',
+              'content_b64': '${CONTENT_B64}',
+              'content_type': 'application/json'
+          }))
+          ")
+            CANDID_ARG="(\"$(echo "$PAYLOAD" | sed 's/\\/\\\\/g; s/"/\\"/g')\")"
+            echo "  Uploading manifest.json..."
+            dfx canister call --network "$NETWORK" "$REGISTRY_CANISTER" store_file "$CANDID_ARG" || { echo "::error::Failed to upload manifest.json for ${ext_id}"; FAILED=$((FAILED+1)); continue; }
+
+            # Upload backend files
+            if [ -d "${EXT_DIR}/backend" ]; then
+              find "${EXT_DIR}/backend" -type f -name "*.py" | while read -r py_file; do
+                REL_PATH="backend/$(echo "$py_file" | sed "s|${EXT_DIR}/backend/||")"
+                CONTENT_B64=$(base64 -w0 "$py_file")
+                PAYLOAD=$(python -c "
+          import json
+          print(json.dumps({
+              'namespace': '${NAMESPACE}',
+              'path': '${REL_PATH}',
+              'content_b64': '${CONTENT_B64}',
+              'content_type': 'text/plain'
+          }))
+          ")
+                CANDID_ARG="(\"$(echo "$PAYLOAD" | sed 's/\\/\\\\/g; s/"/\\"/g')\")"
+                echo "  Uploading ${REL_PATH}..."
+                dfx canister call --network "$NETWORK" "$REGISTRY_CANISTER" store_file "$CANDID_ARG" || echo "::warning::Failed to upload ${REL_PATH}"
+              done
+            fi
+
+            # Upload frontend files (served directly from registry via HTTP)
+            if [ -d "${EXT_DIR}/frontend" ]; then
+              find "${EXT_DIR}/frontend" -type f \( -name "*.js" -o -name "*.svelte" -o -name "*.css" -o -name "*.html" -o -name "*.json" -o -name "*.ts" -o -name "*.svg" -o -name "*.png" \) | while read -r fe_file; do
+                REL_PATH="frontend/$(echo "$fe_file" | sed "s|${EXT_DIR}/frontend/||")"
+                CONTENT_B64=$(base64 -w0 "$fe_file")
+
+                # Guess content type
+                CT="application/octet-stream"
+                case "$fe_file" in
+                  *.js)      CT="application/javascript" ;;
+                  *.svelte)  CT="text/plain" ;;
+                  *.css)     CT="text/css" ;;
+                  *.html)    CT="text/html" ;;
+                  *.json)    CT="application/json" ;;
+                  *.ts)      CT="text/plain" ;;
+                  *.svg)     CT="image/svg+xml" ;;
+                  *.png)     CT="image/png" ;;
+                esac
+
+                PAYLOAD=$(python -c "
+          import json
+          print(json.dumps({
+              'namespace': '${NAMESPACE}',
+              'path': '${REL_PATH}',
+              'content_b64': '${CONTENT_B64}',
+              'content_type': '${CT}'
+          }))
+          ")
+                CANDID_ARG="(\"$(echo "$PAYLOAD" | sed 's/\\/\\\\/g; s/"/\\"/g')\")"
+                echo "  Uploading ${REL_PATH}..."
+                dfx canister call --network "$NETWORK" "$REGISTRY_CANISTER" store_file "$CANDID_ARG" || echo "::warning::Failed to upload ${REL_PATH}"
+              done
+            fi
+
+            echo "  ✅ Published ${ext_id} v${VERSION}"
+            PUBLISHED=$((PUBLISHED+1))
+
+          done <<< "${{ steps.discover.outputs.extensions }}"
+
+          echo ""
+          echo "========================================="
+          echo "Results: ${PUBLISHED} published, ${FAILED} failed"
+          echo "========================================="
+
+          if [ "$FAILED" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "## 📦 Extensions Published to Registry" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** \`${{ vars.FILE_REGISTRY_CANISTER_ID }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Network:** \`${{ inputs.network }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          while IFS= read -r ext_id; do
+            [ -z "$ext_id" ] && continue
+            EXT_DIR="extensions/${ext_id}"
+            if [ -f "${EXT_DIR}/manifest.json" ]; then
+              VERSION=$(python -c "import json; print(json.load(open('${EXT_DIR}/manifest.json'))['version'])")
+              echo "- **${ext_id}** v${VERSION}" >> $GITHUB_STEP_SUMMARY
+            fi
+          done <<< "${{ steps.discover.outputs.extensions }}"
