@@ -601,6 +601,28 @@
     </div>
   </div>
 
+  <!-- Invitations widget — links to the invitation manager -->
+  <a
+    href="/extensions/admin_dashboard/invitations"
+    data-sveltekit-reload
+    class="block mb-4 bg-white shadow-sm rounded-lg p-4 border border-gray-200 hover:border-blue-400 hover:shadow transition-all"
+  >
+    <div class="flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-yellow-50 text-yellow-700 flex items-center justify-center text-xl">
+          ✉️
+        </div>
+        <div>
+          <div class="text-sm font-medium text-gray-700">Invitations</div>
+          <div class="text-xs text-gray-500">
+            Mint member or admin invitation links
+          </div>
+        </div>
+      </div>
+      <span class="text-blue-600 text-sm font-medium">Manage →</span>
+    </div>
+  </a>
+
   <!-- Packages widget — links to the package_manager extension -->
   <a
     href="/extensions/package_manager"
