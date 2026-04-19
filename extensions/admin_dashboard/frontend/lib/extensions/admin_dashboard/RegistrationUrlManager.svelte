@@ -77,15 +77,19 @@
         }
     }
 
-    async function revokeCode(code) {
-        if (!code) return;
+    async function revokeCode(codeHash) {
+        if (!codeHash) return;
         loading = true;
         error = '';
         try {
             const response = await backend.extension_sync_call({
                 extension_name: 'admin_dashboard',
                 function_name: 'revoke_registration_code',
-                args: JSON.stringify({ code })
+                // The plaintext invitation code is not stored on-chain
+                // and is therefore not available in the listing — we
+                // revoke by code_hash, which is the public identifier
+                // returned by get_registration_codes.
+                args: JSON.stringify({ code_hash: codeHash })
             });
             const result = parseExtensionResponse(response);
             if (result.success) {
@@ -246,9 +250,11 @@
         {#if generatedUrl}
             <div class="generated-url">
                 <h4>Generated URL</h4>
-                <p class="hint">
-                    Send this link to the invitee. They will be taken to the
-                    realm's join wizard with the role pre-selected.
+                <p class="hint warning">
+                    <strong>Copy this link now — it is shown only once.</strong>
+                    The realm canister stores only a hash of the invitation
+                    code, so this URL cannot be recovered. If the invitee
+                    loses it, revoke this entry and mint a new one.
                 </p>
                 <div class="url-container">
                     <input
@@ -271,6 +277,11 @@
     <!-- Existing codes -->
     <div class="codes-section">
         <h3>Existing invitations</h3>
+        <p class="hint">
+            The plaintext invitation code is never stored on-chain — only its
+            SHA-256 hash. Existing entries can be revoked but the original URL
+            cannot be re-displayed.
+        </p>
 
         <div class="table-container">
             <table>
@@ -279,14 +290,14 @@
                         <th>Invitee</th>
                         <th>Email</th>
                         <th>Role</th>
-                        <th>Code</th>
+                        <th>Code hash</th>
                         <th>Expires</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {#each registrationCodes as code (code.code)}
+                    {#each registrationCodes as code (code.code_hash)}
                         <tr class:expired={!code.is_valid} class:used={code.uses_count > 0 && code.uses_count >= code.max_uses}>
                             <td>{code.user_id || '-'}</td>
                             <td>{code.email || '-'}</td>
@@ -295,7 +306,9 @@
                                     {(code.profile || 'member')}
                                 </span>
                             </td>
-                            <td class="code-cell">{code.code}</td>
+                            <td class="code-cell" title={code.code_hash}>
+                                {code.code_hash ? code.code_hash.slice(0, 12) + '…' : '-'}
+                            </td>
                             <td>{formatDate(code.expires_at)}</td>
                             <td>
                                 <span class="status-badge {statusClass(code)}">
@@ -303,20 +316,16 @@
                                 </span>
                             </td>
                             <td class="actions-cell">
-                                <button
-                                    class="btn-small"
-                                    on:click={() => copyToClipboard(code.registration_url)}
-                                >
-                                    Copy URL
-                                </button>
                                 {#if code.is_valid}
                                     <button
                                         class="btn-small btn-danger"
-                                        on:click={() => revokeCode(code.code)}
+                                        on:click={() => revokeCode(code.code_hash)}
                                         disabled={loading}
                                     >
                                         Revoke
                                     </button>
+                                {:else}
+                                    <span class="muted">—</span>
                                 {/if}
                             </td>
                         </tr>
@@ -453,6 +462,18 @@
         color: #666;
         margin-top: 4px;
         margin-bottom: 8px;
+    }
+
+    .hint.warning {
+        color: #7a4a00;
+        background: #fff7e0;
+        border: 1px solid #ffe2a8;
+        border-radius: 4px;
+        padding: 8px 10px;
+    }
+
+    .muted {
+        color: #aaa;
     }
 
     .url-container {

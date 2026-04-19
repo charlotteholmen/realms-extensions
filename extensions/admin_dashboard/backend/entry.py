@@ -21,7 +21,12 @@ from typing import Any, Dict, List
 from ic_python_db import Database, Entity
 from ic_python_logging import get_logger
 
-from .models import VALID_PROFILES, DEFAULT_PROFILE, RegistrationCode
+from .models import (
+    DEFAULT_PROFILE,
+    VALID_PROFILES,
+    RegistrationCode,
+    hash_code,
+)
 
 logger = get_logger("extensions.admin_dashboard")
 
@@ -357,12 +362,17 @@ def _coerce_args(args):
 
 
 def _serialize_code(code: "RegistrationCode") -> dict:
+    """Serialize an entity for listing / revoke responses.
+
+    Note: the plaintext invitation code is **never** included — only the
+    SHA-256 ``code_hash`` is. The plaintext is only ever returned by
+    :func:`generate_registration_url`, exactly once at mint time.
+    """
     return {
-        "code": code.code,
+        "code_hash": code.code_hash,
         "user_id": code.user_id,
         "email": code.email,
         "profile": code.profile or DEFAULT_PROFILE,
-        "registration_url": code.registration_url,
         "expires_at": datetime.fromtimestamp(int(code.expires_at or 0)).isoformat(),
         "max_uses": int(code.max_uses or 1),
         "uses_count": int(code.uses_count or 0),
@@ -380,6 +390,13 @@ def _serialize_code(code: "RegistrationCode") -> dict:
 
 def generate_registration_url(args: dict):
     """Mint a new invitation code.
+
+    The plaintext code is generated in the canister's transient
+    call-execution memory, returned **exactly once** in this response,
+    and immediately discarded by the canister. Only its SHA-256 hash is
+    persisted to stable storage. There is no API for retrieving a code's
+    plaintext after this call — if the caller loses the URL they must
+    revoke and mint a fresh one.
 
     Required:
       ``user_id`` — friendly invitee identifier (free-form).
@@ -422,7 +439,7 @@ def generate_registration_url(args: dict):
         if max_uses < 1:
             return {"success": False, "error": "max_uses must be >= 1"}
 
-        reg_code = RegistrationCode.create(
+        reg_code, plaintext = RegistrationCode.create(
             user_id=user_id,
             created_by=created_by,
             frontend_url=frontend_url,
@@ -435,8 +452,14 @@ def generate_registration_url(args: dict):
         return {
             "success": True,
             "data": {
-                "code": reg_code.code,
-                "registration_url": reg_code.registration_url,
+                # The plaintext is included here, exactly once, so the
+                # caller (admin UI / canister-management) can build the
+                # join URL it needs to hand to the invitee. The realm
+                # canister itself never persists `code` — only
+                # `code_hash`. Do NOT log this value.
+                "code": plaintext,
+                "code_hash": reg_code.code_hash,
+                "registration_url": reg_code.build_registration_url(plaintext),
                 "expires_at": datetime.fromtimestamp(int(reg_code.expires_at)).isoformat(),
                 "user_id": reg_code.user_id,
                 "profile": reg_code.profile,
@@ -461,9 +484,11 @@ def _invalidity_reason(reg_code: "RegistrationCode") -> str:
 def validate_registration_code(args: dict):
     """Inspect a code without consuming it.
 
-    Returns the profile + invitee metadata so the join wizard can render
-    the correct profile card before the user completes Internet Identity
-    sign-in. Does **not** modify state.
+    Accepts the plaintext invitation code in ``args["code"]``, hashes it
+    on the fly, and looks the entity up by ``code_hash``. Returns the
+    profile + invitee metadata so the join wizard can render the correct
+    profile card before the user completes Internet Identity sign-in.
+    Does **not** modify state.
     """
     try:
         args = _coerce_args(args)
@@ -471,7 +496,7 @@ def validate_registration_code(args: dict):
         if not code:
             return {"success": False, "error": "code is required"}
 
-        reg_code = RegistrationCode.find_by_code(code)
+        reg_code = RegistrationCode.find_by_plaintext(code)
         if not reg_code:
             return {"success": False, "error": "Invalid registration code"}
 
@@ -500,10 +525,14 @@ def validate_registration_code(args: dict):
 def consume_registration_code(args: dict):
     """Atomically validate **and** redeem a code for the calling principal.
 
-    Used by the realm backend's ``join_realm`` endpoint to authorize an
-    admin (or member) join. Required arg: ``code``. Optional arg:
-    ``principal`` (defaults to ``ic.caller()``). The same principal can
-    only redeem a given code once, even if ``max_uses > 1``.
+    Used by the realm backend's ``join_realm_with_invite`` endpoint to
+    authorize an admin (or member) join. Required arg: ``code``
+    (plaintext). Optional arg: ``principal`` (defaults to ``ic.caller()``).
+    The plaintext is hashed on the fly and looked up by ``code_hash``;
+    nothing is logged.
+
+    The same principal can only redeem a given code once, even if
+    ``max_uses > 1``.
 
     Returns the granted ``profile`` on success.
     """
@@ -516,7 +545,7 @@ def consume_registration_code(args: dict):
         if not principal:
             return {"success": False, "error": "principal is required"}
 
-        reg_code = RegistrationCode.find_by_code(code)
+        reg_code = RegistrationCode.find_by_plaintext(code)
         if not reg_code:
             return {"success": False, "error": "Invalid registration code"}
 
@@ -549,19 +578,34 @@ def consume_registration_code(args: dict):
 
 
 def revoke_registration_code(args: dict):
-    """Revoke an outstanding code. Admin-only."""
+    """Revoke an outstanding code. Admin-only.
+
+    Accepts EITHER ``code`` (plaintext, hashed on the fly) OR
+    ``code_hash`` (the public identifier returned by
+    ``get_registration_codes``). Admin UIs revoke from the listing,
+    where the plaintext is no longer available, so they pass
+    ``code_hash``. Backwards-compatible API for callers that still
+    have the plaintext.
+    """
     try:
         args = _coerce_args(args)
-        code = args.get("code")
-        if not code:
-            return {"success": False, "error": "code is required"}
+        plaintext = args.get("code")
+        code_hash = args.get("code_hash")
+        if not plaintext and not code_hash:
+            return {
+                "success": False,
+                "error": "Either 'code' (plaintext) or 'code_hash' is required",
+            }
         if not _is_caller_admin():
             return {
                 "success": False,
                 "error": "Only realm administrators can revoke registration codes",
             }
 
-        reg_code = RegistrationCode.find_by_code(code)
+        if code_hash:
+            reg_code = RegistrationCode.find_by_hash(code_hash)
+        else:
+            reg_code = RegistrationCode.find_by_plaintext(plaintext)
         if not reg_code:
             return {"success": False, "error": "Invalid registration code"}
 
@@ -573,6 +617,10 @@ def revoke_registration_code(args: dict):
 
 def get_registration_codes(args: dict):
     """List registration codes with optional filtering.
+
+    The returned entries do **not** include the plaintext invitation
+    code (it isn't stored on-chain). They include the ``code_hash``
+    public identifier so admin UIs can revoke individual entries.
 
     Args:
         user_id: filter to codes minted for this invitee.

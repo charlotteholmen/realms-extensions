@@ -1,9 +1,29 @@
 """
 Admin Dashboard Models
 
-This module contains database models specific to the admin dashboard extension.
+This module contains database models specific to the admin dashboard
+extension.
+
+Note on the invitation-code secret model
+----------------------------------------
+Canister state is replicated to every node in the subnet, so anything
+written to stable storage is in principle visible to a node operator
+with disk access. To make sure a leaked state dump cannot be turned
+into an admin takeover, this module **never persists the invitation
+code in plaintext**: only its SHA-256 hash is stored. The plaintext
+secret is generated in the canister's call-execution memory, returned
+**once** in the response of ``RegistrationCode.create``, and then
+forgotten.
+
+This is the standard "store the hash, not the password" pattern. The
+remaining residual risk is that the plaintext code is briefly visible
+in transit during the redemption update call (``join_realm_with_invite``);
+that exposure is the same as for every other authenticated update call
+on the IC and is mitigated by the single-use guard, the per-principal
+binding (``principals_redeemed``) and the short ``expires_at`` TTL.
 """
 
+import hashlib
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -16,6 +36,23 @@ VALID_PROFILES = ("member", "admin")
 DEFAULT_PROFILE = "member"
 
 
+def hash_code(code: str) -> str:
+    """Hex-encoded SHA-256 of the plaintext code.
+
+    Codes are mid-entropy (16 chars from [A-Za-z0-9]) so a plain salt-less
+    SHA-256 is sufficient: the search space is ~95 bits, well beyond the
+    reach of any offline brute-force even if a node operator captured the
+    full state dump.
+    """
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def generate_secret_code() -> str:
+    """Generate a fresh 16-char alphanumeric invitation secret."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(16))
+
+
 class RegistrationCode(Entity, TimestampedMixin):
     """
     Invitation/registration code used to onboard a new user into the realm.
@@ -26,8 +63,16 @@ class RegistrationCode(Entity, TimestampedMixin):
     ``uses_count`` reaches ``max_uses`` the code is no longer valid.
     A code can also be revoked explicitly.
 
+    The plaintext secret is **not** persisted: only ``code_hash`` is.
+    Callers see the plaintext exactly once, in the response of
+    :meth:`create` (used by ``generate_registration_url`` to build the
+    join URL handed to the invitee). After that, the only way to refer
+    to a particular invitation in the API is via its ``code_hash``.
+
     Attributes:
-        code (str):                Random URL-safe code (indexed alias).
+        code_hash (str):           Hex SHA-256 of the plaintext invitation
+                                   code (indexed alias). The plaintext
+                                   itself is **never** persisted.
         user_id (str):             Optional friendly id of the invitee.
         email (str):               Optional email of the invitee.
         profile (str):             Profile granted on redemption
@@ -47,9 +92,9 @@ class RegistrationCode(Entity, TimestampedMixin):
         frontend_url (str):        Base URL for building the redemption link.
     """
 
-    __alias__ = "code"
+    __alias__ = "code_hash"
 
-    code = String(max_length=64)
+    code_hash = String(max_length=64)
     user_id = String(max_length=64)
     email = String(max_length=255)
     profile = String(max_length=32, default=DEFAULT_PROFILE)
@@ -73,8 +118,13 @@ class RegistrationCode(Entity, TimestampedMixin):
         expires_in_hours: int = 24,
         profile: str = DEFAULT_PROFILE,
         max_uses: int = 1,
-    ) -> "RegistrationCode":
+    ) -> tuple["RegistrationCode", str]:
         """Mint a new invitation code.
+
+        Generates a fresh random secret, persists **only its hash**, and
+        returns ``(entity, plaintext_secret)``. The caller is expected
+        to use ``plaintext_secret`` exactly once — to build the join
+        URL returned in the API response — and then discard it.
 
         Args:
             user_id: Friendly identifier for the invitee (free-form).
@@ -95,15 +145,15 @@ class RegistrationCode(Entity, TimestampedMixin):
         if max_uses is None or int(max_uses) < 1:
             raise ValueError("max_uses must be >= 1")
 
-        alphabet = string.ascii_letters + string.digits
-        code = "".join(secrets.choice(alphabet) for _ in range(16))
+        plaintext = generate_secret_code()
+        digest = hash_code(plaintext)
 
         expires_timestamp = int(
             (datetime.utcnow() + timedelta(hours=int(expires_in_hours))).timestamp()
         )
 
-        return cls(
-            code=code,
+        entity = cls(
+            code_hash=digest,
             user_id=user_id or "",
             email=email or "",
             profile=profile,
@@ -117,12 +167,16 @@ class RegistrationCode(Entity, TimestampedMixin):
             created_by=created_by,
             frontend_url=(frontend_url or "").rstrip("/"),
         )
+        return entity, plaintext
 
-    @property
-    def registration_url(self) -> str:
-        """Full URL to redeem this code via the realm's join wizard."""
+    def build_registration_url(self, plaintext_code: str) -> str:
+        """Build the join URL for ``plaintext_code``.
+
+        Must be called with the plaintext secret returned by :meth:`create`
+        because the entity itself does not retain the plaintext.
+        """
         base = (self.frontend_url or "").rstrip("/")
-        return f"{base}/join?invite={self.code}"
+        return f"{base}/join?invite={plaintext_code}"
 
     def is_valid(self) -> bool:
         """True iff the code is active, unredeemed-enough, and not expired."""
@@ -163,18 +217,23 @@ class RegistrationCode(Entity, TimestampedMixin):
     def revoke(self) -> None:
         self.revoked = 1
 
-    def mark_used(self):
-        """Legacy helper kept for backwards compatibility.
+    @classmethod
+    def find_by_plaintext(cls, plaintext_code: str) -> "RegistrationCode":
+        """Look up the entity by **plaintext** code.
 
-        Prefer :meth:`redeem` which also tracks the redeeming principal.
+        Hashes the plaintext on the fly and indexes via ``code_hash``.
+        Returns ``None`` if no matching entity exists.
         """
-        self.used = 1
-        self.used_at = int(datetime.utcnow().timestamp())
-        self.uses_count = max(int(self.uses_count or 0), 1)
+        if not plaintext_code:
+            return None
+        return cls[hash_code(plaintext_code)]
 
     @classmethod
-    def find_by_code(cls, code: str) -> "RegistrationCode":
-        return cls[code]
+    def find_by_hash(cls, code_hash: str) -> "RegistrationCode":
+        """Look up the entity by its stored hash (e.g. for revocation)."""
+        if not code_hash:
+            return None
+        return cls[code_hash]
 
     @classmethod
     def find_by_user_id(cls, user_id: str) -> list["RegistrationCode"]:

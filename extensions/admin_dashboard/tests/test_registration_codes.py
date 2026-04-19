@@ -3,6 +3,7 @@ Registration Code Management Tests
 Tests user registration code generation and validation
 """
 
+import json
 import sys
 
 sys.path.append("/app/extension-root/_shared/testing/utils")
@@ -12,6 +13,7 @@ from test_utils import (
     print_error,
     print_info,
     print_ok,
+    print_warning,
     query_ggg_entities,
 )
 
@@ -92,10 +94,22 @@ def async_task():
             # Show details of first few codes
             for i, code_data in enumerate(codes[:3]):
                 print_ok(f"  Code {i+1}:")
-                print_ok(f"    Code: {code_data.get('code')}")
+                print_ok(f"    Code hash: {code_data.get('code_hash')}")
                 print_ok(f"    Email: {code_data.get('email')}")
                 print_ok(f"    Valid: {code_data.get('is_valid')}")
                 print_ok(f"    Used: {code_data.get('used')}")
+
+            # Listings must NEVER include the plaintext invitation code —
+            # only the hash. The plaintext is only returned once, at
+            # mint time. See models.py docstring for the rationale.
+            leaked = [c for c in codes if c.get("code") or c.get("registration_url")]
+            if leaked:
+                print_error(
+                    f"✗ get_registration_codes leaked plaintext for "
+                    f"{len(leaked)} code(s) — must only expose code_hash"
+                )
+            else:
+                print_ok("✓ Listing exposes only code_hash, no plaintext")
         else:
             print_error(f"✗ Failed to list registration codes: {result.get('error')}")
     except Exception as e:
@@ -137,7 +151,8 @@ def async_task():
         )
         if result.get("success") and result.get("data", {}).get("profile") == "admin":
             admin_code = result["data"]["code"]
-            print_ok(f"✓ Admin invite minted (code={admin_code})")
+            admin_code_hash = result["data"].get("code_hash")
+            print_ok(f"✓ Admin invite minted (hash={admin_code_hash})")
             print_ok(
                 f"  registration_url = {result['data'].get('registration_url')}"
             )
@@ -145,6 +160,17 @@ def async_task():
                 print_error(
                     "✗ Expected registration_url to point at /join?invite=…"
                 )
+            if not admin_code_hash:
+                print_error(
+                    "✗ Mint response should expose code_hash so admins can "
+                    "later revoke without the plaintext"
+                )
+            # Sanity: response carries the plaintext exactly once, but it
+            # must be a fresh secret (16 chars) and clearly not the hash.
+            if not admin_code or len(admin_code) < 8:
+                print_error(f"✗ Plaintext code looks malformed: {admin_code!r}")
+            if admin_code == admin_code_hash:
+                print_error("✗ Plaintext code must differ from its hash")
         else:
             print_error(f"✗ Admin invite generation failed: {result}")
     except Exception as e:
@@ -268,17 +294,21 @@ def async_task():
             print_error(f"✗ Could not mint code to revoke: {gen}")
         else:
             target = gen["data"]["code"]
+            target_hash = gen["data"].get("code_hash")
+
+            # The admin UI revokes via code_hash (the plaintext is gone
+            # from the listing). Exercise that path explicitly here.
             rev = call_realm_extension(
                 "admin_dashboard",
                 "revoke_registration_code",
-                {"code": target},
+                {"code_hash": target_hash},
             )
             if rev.get("success"):
-                print_ok("✓ Revoke succeeded")
+                print_ok("✓ Revoke by code_hash succeeded")
             else:
-                print_error(f"✗ Revoke failed: {rev}")
+                print_error(f"✗ Revoke by code_hash failed: {rev}")
 
-            # Now validate should reject it
+            # Validate (which takes the plaintext) should now reject it.
             validated = call_realm_extension(
                 "admin_dashboard",
                 "validate_registration_code",
@@ -288,6 +318,30 @@ def async_task():
                 print_ok("✓ Validate correctly rejects revoked code")
             else:
                 print_error("✗ Revoked code was still accepted by validate")
+
+            # Back-compat: revoking via plaintext still works.
+            gen2 = call_realm_extension(
+                "admin_dashboard",
+                "generate_registration_url",
+                {
+                    "user_id": "to_be_revoked_plaintext",
+                    "created_by": "admin",
+                    "frontend_url": "http://localhost:8000",
+                    "expires_in_hours": 24,
+                    "profile": "member",
+                    "max_uses": 1,
+                },
+            )
+            if gen2.get("success"):
+                rev2 = call_realm_extension(
+                    "admin_dashboard",
+                    "revoke_registration_code",
+                    {"code": gen2["data"]["code"]},
+                )
+                if rev2.get("success"):
+                    print_ok("✓ Revoke by plaintext (back-compat) succeeded")
+                else:
+                    print_error(f"✗ Revoke by plaintext failed: {rev2}")
     except Exception as e:
         print_error(f"✗ Exception in revoke test: {e}")
 
@@ -311,6 +365,47 @@ def async_task():
             print_error("✗ Unknown profile was accepted")
     except Exception as e:
         print_error(f"✗ Exception in invalid-profile test: {e}")
+
+    # Test 11: Persisted entities expose only the hash (defence-in-depth
+    # check against schema regressions that would re-introduce plaintext
+    # storage). We query the GGG entity table directly via the realm's
+    # list_objects_paginated endpoint.
+    print_info("Test 11: Persisted RegistrationCode entities expose only the hash...")
+    try:
+        page = query_ggg_entities("RegistrationCode", page_num=0, page_size=20)
+        items = []
+        if isinstance(page, dict):
+            data = page.get("data") or {}
+            paginated = data.get("objectsListPaginated") or {}
+            raw_objects = paginated.get("objects") or []
+            for raw in raw_objects:
+                try:
+                    parsed = json.loads(raw) if isinstance(raw, str) else raw
+                except json.JSONDecodeError:
+                    parsed = {"_raw": raw}
+                items.append(parsed)
+        if not items:
+            print_ok("  (no RegistrationCode rows returned by list_objects)")
+        else:
+            persisted_with_plaintext = [
+                i for i in items if "code" in i and i.get("code")
+            ]
+            persisted_with_hash = [i for i in items if i.get("code_hash")]
+            if persisted_with_plaintext:
+                print_error(
+                    f"✗ {len(persisted_with_plaintext)} RegistrationCode "
+                    f"row(s) carry a 'code' field — must only persist 'code_hash'"
+                )
+            else:
+                print_ok(
+                    f"✓ All {len(items)} persisted entities use code_hash only "
+                    f"({len(persisted_with_hash)} with non-empty hash)"
+                )
+    except Exception as e:
+        # query_ggg_entities is a best-effort defence-in-depth check; the
+        # real assertions live above. Don't fail the suite if the GGG
+        # API surface differs in this version.
+        print_warning(f"  Skipped (couldn't query RegistrationCode directly): {e}")
 
     print_info("Registration code tests completed!")
 
