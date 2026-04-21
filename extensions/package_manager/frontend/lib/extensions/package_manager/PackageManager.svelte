@@ -29,6 +29,7 @@
     listRegistryExtensions,
     listRegistryCodices,
     compareVersions,
+    getFileRegistryCanisterIds,
     type RegistryExtension,
     type RegistryCodex,
   } from '$lib/file-registry-client';
@@ -202,12 +203,15 @@
     registryErrors = [];
     const out: CatalogEntry[] = [];
 
-    const registries = $realmInfo.registries ?? [];
-    for (const reg of registries) {
+    // Use the build-time file_registry canister IDs — NOT $realmInfo.registries
+    // which contains realm_registry_backend IDs (a realm directory service that
+    // does not serve /api/extensions).
+    const fileRegistryIds = getFileRegistryCanisterIds();
+    for (const canisterId of fileRegistryIds) {
       try {
         const [exts, codices] = await Promise.all([
-          listRegistryExtensions(reg.canister_id),
-          listRegistryCodices(reg.canister_id),
+          listRegistryExtensions(canisterId),
+          listRegistryCodices(canisterId),
         ]);
         for (const e of exts as RegistryExtension[]) {
           out.push({
@@ -216,7 +220,7 @@
             versions: e.versions,
             latest: e.latest,
             manifest: e.manifest,
-            registryCanisterId: reg.canister_id,
+            registryCanisterId: canisterId,
           });
         }
         for (const c of codices as RegistryCodex[]) {
@@ -226,14 +230,14 @@
             versions: c.versions,
             latest: c.latest,
             manifest: null,
-            registryCanisterId: reg.canister_id,
+            registryCanisterId: canisterId,
           });
         }
       } catch (e: any) {
         registryErrors = [
           ...registryErrors,
           tt('extensions.package_manager.messages.registry_load_failed', {
-            id: reg.canister_id,
+            id: canisterId,
             error: e?.message ?? String(e),
           }),
         ];
@@ -629,7 +633,7 @@
 
       {#if registryLoading}
         <div class="flex justify-center items-center py-16"><Spinner size="10" /></div>
-      {:else if ($realmInfo.registries ?? []).length === 0}
+      {:else if getFileRegistryCanisterIds().length === 0}
         <Card class="text-center py-12">
           <p class="text-gray-500 dark:text-gray-400">
             {$_('extensions.package_manager.messages.no_browse')}
