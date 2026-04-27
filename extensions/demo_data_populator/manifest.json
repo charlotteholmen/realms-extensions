@@ -1,0 +1,35 @@
+{
+  "name": "demo_data_populator",
+  "version": "0.1.0",
+  "description": "Continuously generates realistic demo data for stress testing and production-like environments",
+  "sidebar_label": {
+    "en": "Demo Data",
+    "es": "Datos Demo",
+    "de": "Demo-Daten",
+    "fr": "Données Démo",
+    "it": "Dati Demo",
+    "zh-CN": "演示数据"
+  },
+  "author": "Smart Social Contracts Team",
+  "permissions": [],
+  "entry_points": [
+    "start_populator",
+    "stop_populator",
+    "resume_populator",
+    "get_status",
+    "get_stats",
+    "update_config",
+    "reset_populator"
+  ],
+  "profiles": [
+    "admin"
+  ],
+  "enabled": false,
+  "categories": [
+    "other"
+  ],
+  "icon": "database",
+  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/demo_data_populator",
+  "url_path": null,
+  "show_in_sidebar": true
+}

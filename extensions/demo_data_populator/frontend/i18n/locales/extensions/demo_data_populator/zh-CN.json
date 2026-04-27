@@ -1,0 +1,25 @@
+{
+  "demo_data_populator": {
+    "title": "演示数据生成器",
+    "description": "持续生成逼真的演示数据用于压力测试",
+    "start": "启动生成器",
+    "stop": "停止",
+    "resume": "恢复",
+    "reset": "重置",
+    "save_config": "保存配置",
+    "seed": "种子",
+    "seed_hint": "相同种子 = 相同数据",
+    "interval": "间隔（秒）",
+    "interval_hint": "生成周期之间的时间",
+    "advanced": "高级批处理配置",
+    "running": "运行中",
+    "stopped": "已停止",
+    "idle": "空闲",
+    "cycles": "周期",
+    "total_entities": "实体总数",
+    "entity_counts": "实体计数",
+    "generated_by_populator": "由生成器创建",
+    "controls": "控制",
+    "reset_confirm": "重置生成器？已生成的实体将保留在领域中。"
+  }
+}
