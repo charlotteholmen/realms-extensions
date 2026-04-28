@@ -4,10 +4,7 @@
   "description": "AI-powered assistant for governance and legal questions",
   "author": "Smart Social Contracts Team",
   "permissions": [],
-  "profiles": [
-    "member",
-    "admin"
-  ],
+  "profiles": [],
   "categories": [
     "oversight"
   ],

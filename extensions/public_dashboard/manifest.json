@@ -4,10 +4,7 @@
   "description": "Public dashboard with analytics and statistics for the realm",
   "author": "Smart Social Contracts",
   "permissions": [],
-  "profiles": [
-    "member",
-    "admin"
-  ],
+  "profiles": [],
   "categories": [
     "oversight"
   ],
