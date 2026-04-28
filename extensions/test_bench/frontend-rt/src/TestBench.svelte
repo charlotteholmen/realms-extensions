@@ -1,27 +1,26 @@
 <script lang="ts">
-	let { backend, extensionId = 'test_bench', version = '', principal = '', isAuthenticated = true }: any = $props();
+	let { ctx }: { ctx: any } = $props();
 
 	let greetName = $state('Tester');
 	let greetResult = $state('');
 	let asyncResult = $state('');
 	let universeData = $state('');
-	let snapshots = $state('');
+	let snapshotsData = $state('');
 	let loading = $state<Record<string, boolean>>({});
 	let error = $state('');
 
-	async function callExt(fn: string, args: string = '') {
-		const raw = await backend.extension_sync_call(JSON.stringify({
-			extension_name: extensionId, function_name: fn, args,
-		}));
-		return JSON.parse(raw);
-	}
+	let principal = $state('');
+	let isAuthenticated = $state(false);
 
-	async function callExtAsync(fn: string, args: string = '') {
-		const raw = await backend.extension_async_call(JSON.stringify({
-			extension_name: extensionId, function_name: fn, args,
-		}));
-		return JSON.parse(raw);
-	}
+	$effect(() => {
+		const unsubs: (() => void)[] = [];
+		if (ctx.principal) unsubs.push(ctx.principal.subscribe((v: string) => (principal = v)));
+		if (ctx.isAuthenticated) unsubs.push(ctx.isAuthenticated.subscribe((v: boolean) => (isAuthenticated = v)));
+		return () => unsubs.forEach((u) => u());
+	});
+
+	const extensionId = ctx.config?.extensionId ?? 'test_bench';
+	const version = ctx.config?.version ?? '';
 
 	async function runTest(key: string, fn: () => Promise<void>) {
 		loading = { ...loading, [key]: true };
@@ -37,21 +36,24 @@
 
 	async function doGreet() {
 		await runTest('greet', async () => {
-			const raw = await backend.greet(greetName);
+			const raw = await ctx.backend.greet(greetName);
 			greetResult = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
 		});
 	}
 
 	async function doAsync() {
 		await runTest('async', async () => {
-			const res = await callExtAsync('get_data', 'from frontend-rt');
-			asyncResult = JSON.stringify(res, null, 2);
+			const raw = await ctx.backend.extension_async_call(
+				JSON.stringify({ extension_name: extensionId, function_name: 'get_data', args: 'from frontend-rt' }),
+			);
+			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+			asyncResult = JSON.stringify(parsed, null, 2);
 		});
 	}
 
 	async function doUniverse() {
 		await runTest('universe', async () => {
-			const raw = await backend.get_universe();
+			const raw = await ctx.backend.get_universe();
 			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
 			universeData = JSON.stringify(parsed, null, 2);
 		});
@@ -59,82 +61,109 @@
 
 	async function doSnapshots() {
 		await runTest('snapshots', async () => {
-			const raw = await backend.get_snapshots();
+			const raw = await ctx.backend.get_snapshots();
 			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-			snapshots = JSON.stringify(parsed, null, 2);
+			snapshotsData = JSON.stringify(parsed, null, 2);
 		});
 	}
 </script>
 
-<div class="rt-tb">
-	<div class="header">
-		<h2>Test Bench</h2>
-		<span class="badge">v{version}</span>
+<div class="max-w-2xl mx-auto p-6 space-y-4">
+	<div class="flex items-center gap-3 mb-2">
+		<h2 class="text-2xl font-bold text-gray-900">Test Bench</h2>
+		{#if version}
+			<span class="inline-block rounded-full bg-indigo-100 text-indigo-800 px-2.5 py-0.5 text-xs font-medium">v{version}</span>
+		{/if}
 	</div>
 
 	{#if error}
-		<div class="error">{error}</div>
+		<div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
 	{/if}
 
-	<div class="card">
-		<h3>Greet</h3>
-		<div class="row">
-			<input type="text" bind:value={greetName} placeholder="Name" />
-			<button onclick={doGreet} disabled={loading.greet}>
-				{loading.greet ? '…' : 'Greet'}
+	<!-- Greet Card -->
+	<div class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+		<h3 class="text-base font-semibold text-gray-900 mb-3">Greet</h3>
+		<div class="flex gap-2">
+			<input
+				type="text"
+				bind:value={greetName}
+				placeholder="Name"
+				class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+			/>
+			<button
+				onclick={doGreet}
+				disabled={loading.greet}
+				class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+			>
+				{loading.greet ? '...' : 'Greet'}
 			</button>
 		</div>
-		{#if greetResult}<pre class="output">{greetResult}</pre>{/if}
+		{#if greetResult}
+			<pre class="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs font-mono whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{greetResult}</pre>
+		{/if}
 	</div>
 
-	<div class="card">
-		<h3>Extension Async Call</h3>
-		<button onclick={doAsync} disabled={loading.async}>
-			{loading.async ? 'Running…' : 'Call get_data (async)'}
+	<!-- Async Extension Call Card -->
+	<div class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+		<h3 class="text-base font-semibold text-gray-900 mb-3">Extension Async Call</h3>
+		<button
+			onclick={doAsync}
+			disabled={loading.async}
+			class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+		>
+			{loading.async ? 'Running...' : 'Call get_data (async)'}
 		</button>
-		{#if asyncResult}<pre class="output">{asyncResult}</pre>{/if}
+		{#if asyncResult}
+			<pre class="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs font-mono whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{asyncResult}</pre>
+		{/if}
 	</div>
 
-	<div class="card">
-		<h3>Universe</h3>
-		<button onclick={doUniverse} disabled={loading.universe}>
-			{loading.universe ? 'Loading…' : 'Get Universe'}
+	<!-- Universe Card -->
+	<div class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+		<h3 class="text-base font-semibold text-gray-900 mb-3">Universe</h3>
+		<button
+			onclick={doUniverse}
+			disabled={loading.universe}
+			class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+		>
+			{loading.universe ? 'Loading...' : 'Get Universe'}
 		</button>
-		{#if universeData}<pre class="output">{universeData}</pre>{/if}
+		{#if universeData}
+			<pre class="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs font-mono whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{universeData}</pre>
+		{/if}
 	</div>
 
-	<div class="card">
-		<h3>Snapshots</h3>
-		<button onclick={doSnapshots} disabled={loading.snapshots}>
-			{loading.snapshots ? 'Loading…' : 'Get Snapshots'}
+	<!-- Snapshots Card -->
+	<div class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+		<h3 class="text-base font-semibold text-gray-900 mb-3">Snapshots</h3>
+		<button
+			onclick={doSnapshots}
+			disabled={loading.snapshots}
+			class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+		>
+			{loading.snapshots ? 'Loading...' : 'Get Snapshots'}
 		</button>
-		{#if snapshots}<pre class="output">{snapshots}</pre>{/if}
+		{#if snapshotsData}
+			<pre class="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs font-mono whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{snapshotsData}</pre>
+		{/if}
 	</div>
 
-	<div class="card">
-		<h3>Context</h3>
-		<div class="kv"><span class="k">Extension ID</span><span class="v">{extensionId}</span></div>
-		<div class="kv"><span class="k">Principal</span><span class="v mono">{principal || '(anonymous)'}</span></div>
-		<div class="kv"><span class="k">Authenticated</span><span class="v">{isAuthenticated ? 'Yes' : 'No'}</span></div>
+	<!-- Context Info Card -->
+	<div class="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+		<h3 class="text-base font-semibold text-gray-900 mb-3">Context</h3>
+		<dl class="divide-y divide-gray-100 text-sm">
+			<div class="flex justify-between py-2">
+				<dt class="text-gray-500">Extension ID</dt>
+				<dd class="font-medium text-gray-900">{extensionId}</dd>
+			</div>
+			<div class="flex justify-between py-2">
+				<dt class="text-gray-500">Principal</dt>
+				<dd class="font-mono text-xs text-gray-900">{principal || '(anonymous)'}</dd>
+			</div>
+			<div class="flex justify-between py-2">
+				<dt class="text-gray-500">Authenticated</dt>
+				<dd class="font-medium text-gray-900">{isAuthenticated ? 'Yes' : 'No'}</dd>
+			</div>
+		</dl>
 	</div>
 </div>
-
-<style>
-	.rt-tb { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 1.5rem; }
-	.header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
-	.header h2 { margin: 0; font-size: 1.5rem; }
-	.badge { background: #e0e7ff; color: #3730a3; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; }
-	.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 1rem; }
-	.card h3 { margin: 0 0 0.75rem; font-size: 1rem; }
-	.row { display: flex; gap: 0.5rem; }
-	input { flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 0.875rem; }
-	button { padding: 0.5rem 1rem; background: #4f46e5; color: #fff; border: none; border-radius: 0.5rem; cursor: pointer; font-size: 0.8rem; white-space: nowrap; }
-	button:hover:not(:disabled) { background: #4338ca; }
-	button:disabled { opacity: 0.5; cursor: not-allowed; }
-	.output { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.75rem; margin-top: 0.75rem; font-size: 0.75rem; font-family: ui-monospace, monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
-	.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.875rem; }
-	.kv { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem; }
-	.k { color: #6b7280; }
-	.v { font-weight: 500; }
-	.mono { font-family: ui-monospace, monospace; font-size: 0.75rem; }
-</style>

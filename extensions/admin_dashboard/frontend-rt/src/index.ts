@@ -1,16 +1,8 @@
 import { mount, unmount } from 'svelte';
 import AdminDashboard from './AdminDashboard.svelte';
 
-export interface RuntimeMountProps {
-	backend: any;
-	extensionId: string;
-	version: string;
-	principal?: string;
-	isAuthenticated?: boolean;
-}
-
-export default function mountExt(target: HTMLElement, props: RuntimeMountProps) {
-	const component = mount(AdminDashboard, { target, props });
+export default function mountExt(target: HTMLElement, ctx: Record<string, any>) {
+	const component = mount(AdminDashboard, { target, props: { ctx } });
 	return {
 		unmount() {
 			try {

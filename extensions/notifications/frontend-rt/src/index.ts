@@ -1,16 +1,8 @@
 import { mount, unmount } from 'svelte';
 import Notifications from './Notifications.svelte';
 
-export interface RuntimeMountProps {
-	backend: any;
-	extensionId: string;
-	version: string;
-	principal?: string;
-	isAuthenticated?: boolean;
-}
-
-export default function mountExt(target: HTMLElement, props: RuntimeMountProps) {
-	const component = mount(Notifications, { target, props });
+export default function mountExt(target: HTMLElement, ctx: Record<string, any>) {
+	const component = mount(Notifications, { target, props: { ctx } });
 	return {
 		unmount() {
 			try {

@@ -1,143 +1,386 @@
 <script lang="ts">
-	let { backend, extensionId = 'passport_verification', version = '', principal = '', isAuthenticated = true }: any = $props();
+	let { ctx }: { ctx: any } = $props();
 
-	type Step = 'idle' | 'generating' | 'pending' | 'verified' | 'error';
-	let step = $state<Step>('idle');
+	type VerificationStep = 'idle' | 'generating' | 'pending' | 'verified' | 'failed' | 'error';
+
+	let step = $state<VerificationStep>('idle');
 	let verificationLink = $state('');
-	let applicationId = $state('');
-	let statusResult: any = $state(null);
-	let error = $state('');
-	let loading = $state(false);
+	let qrCodeUrl = $state('');
+	let errorMessage = $state('');
+	let verificationResult: any = $state(null);
+	let sessionId = $state('');
+	let eventId = $state('');
+	let copied = $state(false);
+	let checkingStatus = $state(false);
+	let showDetails = $state(false);
 
-	async function callExtSync(fn: string, args: string = '') {
-		const raw = await backend.extension_sync_call(JSON.stringify({
-			extension_name: extensionId, function_name: fn, args,
-		}));
-		return JSON.parse(raw);
+	let currentStepIndex = $derived(
+		step === 'idle' ? 0
+		: step === 'generating' ? 1
+		: step === 'pending' ? 2
+		: 3,
+	);
+
+	const steps = [
+		{ label: 'Start', index: 0 },
+		{ label: 'Scan', index: 2 },
+		{ label: 'Verified', index: 3 },
+	];
+
+	async function callSync(fn: string, args: string = '') {
+		const raw = await ctx.backend.extension_sync_call(
+			JSON.stringify({
+				extension_name: 'passport_verification',
+				function_name: fn,
+				args,
+			}),
+		);
+		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+		if (parsed?.response) {
+			return typeof parsed.response === 'string' ? JSON.parse(parsed.response) : parsed.response;
+		}
+		return parsed;
 	}
 
-	async function callExtAsync(fn: string, args: string = '') {
-		const raw = await backend.extension_async_call(JSON.stringify({
-			extension_name: extensionId, function_name: fn, args,
-		}));
-		return JSON.parse(raw);
+	async function callAsync(fn: string, args: string = '') {
+		const raw = await ctx.backend.extension_async_call(
+			JSON.stringify({
+				extension_name: 'passport_verification',
+				function_name: fn,
+				args,
+			}),
+		);
+		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+		if (parsed?.response) {
+			return typeof parsed.response === 'string' ? JSON.parse(parsed.response) : parsed.response;
+		}
+		return parsed;
 	}
 
-	async function startVerification() {
-		loading = true;
-		error = '';
+	async function generateVerificationLink() {
 		try {
-			const idRes = await callExtSync('get_current_application_id', '');
-			applicationId = idRes?.data?.application_id ?? idRes?.application_id ?? '';
+			step = 'generating';
+			errorMessage = '';
 
-			if (!applicationId) {
-				const createRes = await callExtSync('create_passport_identity', '');
-				applicationId = createRes?.data?.application_id ?? createRes?.application_id ?? '';
+			const eventIdData = await callSync('get_current_application_id', '');
+			eventId = eventIdData?.application_id ?? eventIdData?.data?.application_id ?? '';
+
+			const userId = ctx.principal || '';
+			const result = await callAsync('get_verification_link', userId);
+
+			if (result?.data?.attributes) {
+				const verificationUrl =
+					result.data.attributes.rarime_app_url || result.data.attributes.get_proof_params;
+				verificationLink = verificationUrl;
+				qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verificationUrl)}`;
+				sessionId = result.data.id || userId;
+				step = 'pending';
+			} else if (result?.link || result?.data?.link) {
+				verificationLink = result.link ?? result.data.link;
+				qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verificationLink)}`;
+				sessionId = userId;
+				step = 'pending';
+			} else {
+				step = 'error';
+				errorMessage = 'Invalid response format from verification service';
 			}
-
-			const linkRes = await callExtAsync('get_verification_link', JSON.stringify({ application_id: applicationId }));
-			verificationLink = linkRes?.data?.link ?? linkRes?.link ?? '';
-			step = verificationLink ? 'pending' : 'error';
-			if (!verificationLink) error = 'No verification link returned';
 		} catch (e: any) {
-			error = e?.message || String(e);
 			step = 'error';
-		} finally {
-			loading = false;
+			errorMessage = e?.message || 'Network error occurred';
 		}
 	}
 
-	async function checkStatus() {
-		loading = true;
-		error = '';
+	async function checkVerificationStatus() {
 		try {
-			const res = await callExtAsync('check_verification_status', JSON.stringify({ application_id: applicationId }));
-			statusResult = res?.data ?? res;
-			const st = statusResult?.status ?? statusResult?.verification_status ?? '';
-			if (st === 'verified' || st === 'approved') {
-				step = 'verified';
+			checkingStatus = true;
+			const userId = ctx.principal || '';
+			const result = await callAsync('check_verification_status', userId);
+
+			if (result?.data?.attributes) {
+				const status = result.data.attributes.status;
+				if (status === 'verified') {
+					step = 'verified';
+					verificationResult = result.data.attributes;
+					await createPassportIdentity(result);
+				} else if (status === 'failed') {
+					step = 'failed';
+					errorMessage = 'Passport verification failed';
+				}
+			} else {
+				const st = result?.status ?? result?.verification_status ?? '';
+				if (st === 'verified' || st === 'approved') {
+					step = 'verified';
+					verificationResult = result;
+				}
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			console.error('Error checking verification status:', e);
 		} finally {
-			loading = false;
+			checkingStatus = false;
 		}
 	}
 
-	function copyLink() {
-		if (verificationLink) navigator.clipboard.writeText(verificationLink);
+	async function createPassportIdentity(verificationData: any) {
+		try {
+			await callSync('create_passport_identity', JSON.stringify(verificationData));
+		} catch (e: any) {
+			console.error('Error creating passport identity:', e);
+		}
+	}
+
+	async function copyToClipboard() {
+		try {
+			await navigator.clipboard.writeText(verificationLink);
+			copied = true;
+			setTimeout(() => {
+				copied = false;
+			}, 2000);
+		} catch {
+			/* clipboard not available */
+		}
+	}
+
+	function resetVerification() {
+		step = 'idle';
+		verificationLink = '';
+		qrCodeUrl = '';
+		errorMessage = '';
+		verificationResult = null;
+		sessionId = '';
+		eventId = '';
+		copied = false;
+		showDetails = false;
 	}
 </script>
 
-<div class="rt-pv">
-	<div class="header">
-		<h2>Passport Verification</h2>
-		<span class="badge">v{version}</span>
+<div class="p-6 max-w-2xl mx-auto space-y-6">
+	<!-- Header -->
+	<div class="flex items-center gap-3">
+		<div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+			<svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+			</svg>
+		</div>
+		<div>
+			<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Passport Verification</h1>
+			<p class="text-sm text-gray-500 dark:text-gray-400">Zero-knowledge identity verification via RariMe</p>
+		</div>
 	</div>
 
-	{#if error}
-		<div class="error">{error}</div>
+	<!-- Step Indicator -->
+	{#if step !== 'error' && step !== 'failed'}
+		<div class="flex items-center justify-between">
+			{#each steps as { label, index: stepIdx }, i}
+				<div class="flex items-center {i < steps.length - 1 ? 'flex-1' : ''}">
+					<div class="flex flex-col items-center">
+						<div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
+							{currentStepIndex >= stepIdx ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}">
+							{#if currentStepIndex > stepIdx}
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+							{:else}
+								{i + 1}
+							{/if}
+						</div>
+						<span class="text-xs mt-1 {currentStepIndex >= stepIdx ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-400 dark:text-gray-500'}">{label}</span>
+					</div>
+					{#if i < steps.length - 1}
+						<div class="flex-1 h-0.5 mx-3 mb-5 {currentStepIndex > stepIdx ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}"></div>
+					{/if}
+				</div>
+			{/each}
+		</div>
 	{/if}
 
+	<!-- IDLE STATE -->
 	{#if step === 'idle'}
-		<div class="card center">
-			<p>Verify your identity using a passport or government-issued ID.</p>
-			<button class="primary" onclick={startVerification} disabled={loading}>
-				{loading ? 'Generating…' : 'Start Verification'}
-			</button>
-		</div>
-
-	{:else if step === 'pending'}
-		<div class="card">
-			<h3>Verification Link</h3>
-			<p>Open this link to complete verification:</p>
-			<div class="link-row">
-				<a href={verificationLink} target="_blank" rel="noopener">{verificationLink}</a>
-				<button class="small" onclick={copyLink}>Copy</button>
+		<div class="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-950 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-8 text-center">
+			<div class="w-16 h-16 mx-auto mb-4 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-md">
+				<svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+				</svg>
 			</div>
-			<button class="primary" onclick={checkStatus} disabled={loading}>
-				{loading ? 'Checking…' : 'Check Status'}
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Verify Your Passport Identity</h2>
+			<p class="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+				Use zero-knowledge proofs to verify your passport securely and privately. Your passport data never leaves your device.
+			</p>
+			<button
+				onclick={generateVerificationLink}
+				class="px-8 py-3 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+			>
+				Start Verification
 			</button>
-			{#if statusResult}
-				<pre class="output">{JSON.stringify(statusResult, null, 2)}</pre>
-			{/if}
 		</div>
 
+	<!-- GENERATING STATE -->
+	{:else if step === 'generating'}
+		<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-12 text-center">
+			<svg class="animate-spin h-8 w-8 text-blue-600 mx-auto mb-4" viewBox="0 0 24 24">
+				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+			</svg>
+			<p class="text-gray-600 dark:text-gray-400 font-medium">Generating verification link...</p>
+			<p class="text-sm text-gray-400 dark:text-gray-500 mt-1">This may take a few seconds</p>
+		</div>
+
+	<!-- PENDING STATE -->
+	{:else if step === 'pending'}
+		<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+			<div class="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
+				<p class="text-sm font-medium text-gray-600 dark:text-gray-400">Scan the QR code with your RariMe app to verify your passport</p>
+			</div>
+
+			<div class="p-6 text-center">
+				{#if qrCodeUrl}
+					<div class="inline-block bg-white p-4 rounded-xl shadow-lg border border-gray-100 mb-4">
+						<img src={qrCodeUrl} alt="Passport Verification QR Code" class="block" width="200" height="200" />
+					</div>
+				{/if}
+
+				{#if verificationLink}
+					<div class="flex items-center justify-center gap-2 flex-wrap mb-6">
+						<a
+							href={verificationLink}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+							Open verification link
+						</a>
+						<button
+							onclick={copyToClipboard}
+							class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+						>
+							{#if copied}
+								<svg class="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+								Copied!
+							{:else}
+								<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+								Copy link
+							{/if}
+						</button>
+					</div>
+				{/if}
+
+				<div class="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4 text-left">
+					<p class="text-sm text-blue-800 dark:text-blue-300">
+						Open your RariMe app and scan the QR code above. Once you have submitted the proof from your phone, press <strong>Check Status</strong> below.
+					</p>
+				</div>
+			</div>
+
+			<!-- Collapsible Technical Details -->
+			{#if sessionId || eventId}
+				<div class="border-t border-gray-200 dark:border-gray-700">
+					<button
+						onclick={() => showDetails = !showDetails}
+						class="w-full px-6 py-3 flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+					>
+						<span>Technical Details</span>
+						<svg class="w-4 h-4 transition-transform {showDetails ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+						</svg>
+					</button>
+					{#if showDetails}
+						<div class="px-6 pb-4 space-y-1">
+							{#if sessionId}
+								<p class="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
+									<strong>Session ID:</strong> {sessionId}
+								</p>
+							{/if}
+							{#if eventId}
+								<p class="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
+									<strong>Event ID:</strong> {eventId}
+								</p>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Action Buttons Footer -->
+			<div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-6 py-4 flex gap-3 justify-center">
+				<button
+					onclick={checkVerificationStatus}
+					disabled={checkingStatus}
+					class="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg flex items-center gap-2 transition-colors"
+				>
+					{#if checkingStatus}
+						<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+						Checking...
+					{:else}
+						Check Status
+					{/if}
+				</button>
+				<button
+					onclick={resetVerification}
+					class="px-6 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
+
+	<!-- VERIFIED STATE -->
 	{:else if step === 'verified'}
-		<div class="card center success-bg">
-			<div class="icon">✓</div>
-			<h3>Verified</h3>
-			<p>Your identity has been successfully verified.</p>
-			{#if statusResult}
-				<pre class="output">{JSON.stringify(statusResult, null, 2)}</pre>
+		<div class="bg-gradient-to-br from-green-50 to-emerald-100 dark:from-green-950 dark:to-emerald-950 border-2 border-green-200 dark:border-green-800 rounded-xl p-8 text-center">
+			<div class="w-16 h-16 mx-auto mb-4 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-md">
+				<svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+			</div>
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Passport Verified Successfully!</h2>
+
+			{#if verificationResult}
+				<div class="bg-white/60 dark:bg-gray-800/60 rounded-lg p-4 mb-4 max-w-sm mx-auto text-left space-y-2">
+					{#if verificationResult.citizenship}
+						<div>
+							<p class="text-xs text-gray-500 dark:text-gray-400">Citizenship</p>
+							<p class="text-sm font-semibold text-gray-800 dark:text-gray-200">{verificationResult.citizenship}</p>
+						</div>
+					{/if}
+					{#if verificationResult.verified_at}
+						<div>
+							<p class="text-xs text-gray-500 dark:text-gray-400">Verified</p>
+							<p class="text-sm font-semibold text-gray-800 dark:text-gray-200">{new Date(verificationResult.verified_at).toLocaleString()}</p>
+						</div>
+					{/if}
+				</div>
 			{/if}
+
+			<p class="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+				Your passport identity has been securely linked to your account using zero-knowledge proofs.
+			</p>
 		</div>
 
+	<!-- FAILED STATE -->
+	{:else if step === 'failed'}
+		<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center">
+			<div class="w-16 h-16 mx-auto mb-4 bg-red-50 dark:bg-red-950 rounded-full flex items-center justify-center">
+				<svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+			</div>
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Verification Failed</h2>
+			<p class="text-gray-600 dark:text-gray-400 mb-6">Passport verification was not successful. Please try again.</p>
+			<button
+				onclick={resetVerification}
+				class="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+			>
+				Try Again
+			</button>
+		</div>
+
+	<!-- ERROR STATE -->
 	{:else if step === 'error'}
-		<div class="card center">
-			<p>Something went wrong. Please try again.</p>
-			<button class="primary" onclick={() => { step = 'idle'; error = ''; }}>Retry</button>
+		<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center">
+			<div class="w-16 h-16 mx-auto mb-4 bg-red-50 dark:bg-red-950 rounded-full flex items-center justify-center">
+				<svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+			</div>
+			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Error Occurred</h2>
+			<p class="text-gray-600 dark:text-gray-400 mb-6">{errorMessage}</p>
+			<button
+				onclick={resetVerification}
+				class="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+			>
+				Try Again
+			</button>
 		</div>
 	{/if}
 </div>
-
-<style>
-	.rt-pv { font-family: system-ui, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 1.5rem; }
-	.header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
-	.header h2 { margin: 0; font-size: 1.5rem; }
-	.badge { background: #e0e7ff; color: #3730a3; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; }
-	.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1.5rem; }
-	.center { text-align: center; }
-	.success-bg { background: #f0fdf4; border-color: #bbf7d0; }
-	.icon { font-size: 2.5rem; color: #16a34a; margin-bottom: 0.5rem; }
-	.card h3 { margin: 0 0 0.5rem; }
-	.card p { color: #4b5563; font-size: 0.875rem; margin: 0 0 1rem; line-height: 1.5; }
-	.primary { padding: 0.5rem 1.25rem; background: #4f46e5; color: #fff; border: none; border-radius: 0.5rem; cursor: pointer; font-size: 0.875rem; }
-	.primary:hover:not(:disabled) { background: #4338ca; }
-	.primary:disabled { opacity: 0.5; cursor: not-allowed; }
-	.small { padding: 0.25rem 0.6rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.375rem; cursor: pointer; font-size: 0.75rem; }
-	.link-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding: 0.5rem; background: #f9fafb; border-radius: 0.375rem; overflow: hidden; }
-	.link-row a { font-size: 0.8rem; color: #4f46e5; word-break: break-all; }
-	.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.875rem; }
-	.output { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.75rem; margin-top: 1rem; font-size: 0.75rem; font-family: ui-monospace, monospace; overflow-x: auto; white-space: pre-wrap; text-align: left; }
-</style>

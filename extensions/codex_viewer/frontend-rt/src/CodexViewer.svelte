@@ -1,28 +1,45 @@
 <script lang="ts">
-	let { backend, extensionId = 'codex_viewer', version = '', principal = '', isAuthenticated = true }: any = $props();
+	let { ctx }: { ctx: any } = $props();
 
-	let codexes: any[] = $state([]);
-	let selectedCodex: any = $state(null);
+	interface Codex {
+		_id: string;
+		id?: string;
+		name: string;
+		description?: string;
+		code_preview?: string;
+		code?: string;
+		source?: string;
+		version?: string;
+		created_at?: number | null;
+		updated_at?: number | null;
+	}
+
+	let codexes: Codex[] = $state([]);
 	let loading = $state(true);
-	let detailLoading = $state(false);
 	let error = $state('');
-	let search = $state('');
+	let searchTerm = $state('');
+	let selectedCodex: Codex | null = $state(null);
+	let detailLoading = $state(false);
 
-	let filtered = $derived(
-		search.trim()
+	let filteredCodexes = $derived(
+		searchTerm.trim()
 			? codexes.filter((c) => {
-					const s = search.toLowerCase();
-					return (c.name ?? c.id ?? '').toLowerCase().includes(s) ||
-						(c.description ?? '').toLowerCase().includes(s);
+					const term = searchTerm.toLowerCase();
+					return (
+						(c.name ?? '').toLowerCase().includes(term) ||
+						(c.description ?? '').toLowerCase().includes(term)
+					);
 				})
-			: codexes
+			: codexes,
 	);
 
 	async function callExt(fn: string, args: string = '{}') {
-		const raw = await backend.extension_sync_call(JSON.stringify({
-			extension_name: extensionId, function_name: fn, args,
-		}));
-		return JSON.parse(raw);
+		const raw = await ctx.backend.extension_sync_call(
+			JSON.stringify({ extension_name: 'codex_viewer', function_name: fn, args }),
+		);
+		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+		if (parsed?.success === false) throw new Error(parsed.error || 'Request failed');
+		return parsed;
 	}
 
 	async function loadCodexes() {
@@ -30,7 +47,7 @@
 		error = '';
 		try {
 			const res = await callExt('get_all_codexes', '{}');
-			codexes = res?.data ?? (Array.isArray(res) ? res : []);
+			codexes = res?.codexes ?? res?.data ?? (Array.isArray(res) ? res : []);
 		} catch (e: any) {
 			error = e?.message || String(e);
 		} finally {
@@ -38,14 +55,15 @@
 		}
 	}
 
-	async function viewCodex(codexId: string) {
+	async function viewCodex(codex: Codex) {
 		detailLoading = true;
 		error = '';
 		try {
+			const codexId = codex._id || codex.id || codex.name;
 			const res = await callExt('get_codex_details', JSON.stringify({ codex_id: codexId }));
 			selectedCodex = res?.data ?? res;
-		} catch (e: any) {
-			error = e?.message || String(e);
+		} catch {
+			selectedCodex = codex;
 		} finally {
 			detailLoading = false;
 		}
@@ -55,91 +73,275 @@
 		selectedCodex = null;
 	}
 
-	$effect(() => { void loadCodexes(); });
+	function formatTimestamp(timestamp: number | null | undefined): string {
+		if (!timestamp) return '';
+		return new Date(timestamp / 1_000_000).toLocaleString();
+	}
+
+	$effect(() => {
+		void loadCodexes();
+	});
 </script>
 
-<div class="rt-cv">
-	<div class="header">
-		<h2>Codex Viewer</h2>
-		<span class="badge">v{version}</span>
-		<button class="refresh" onclick={loadCodexes} disabled={loading}>↻ Refresh</button>
+<div class="p-6 max-w-6xl mx-auto relative">
+	<!-- Header -->
+	<div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+		<div>
+			<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Codex Viewer</h1>
+			<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+				Browse installed codex packages
+			</p>
+		</div>
+		<button
+			class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+			onclick={loadCodexes}
+			disabled={loading}
+		>
+			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+				/>
+			</svg>
+			Refresh
+		</button>
 	</div>
 
 	{#if error}
-		<div class="error">{error}</div>
+		<div
+			class="mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg text-sm"
+		>
+			{error}
+		</div>
 	{/if}
 
+	<!-- Detail View -->
 	{#if selectedCodex}
-		<div class="detail">
-			<button class="back" onclick={goBack}>← Back to list</button>
-			<div class="card">
-				<h3>{selectedCodex.name || selectedCodex.id || 'Codex'}</h3>
+		<div>
+			<button
+				class="text-indigo-600 dark:text-indigo-400 text-sm hover:underline mb-4 inline-block"
+				onclick={goBack}
+			>
+				← Back to list
+			</button>
+			<div
+				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6"
+			>
+				<div class="flex items-center gap-3 mb-4">
+					<svg
+						class="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+						/>
+					</svg>
+					<h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+						{selectedCodex.name || selectedCodex._id || 'Codex'}
+					</h2>
+					{#if selectedCodex.version}
+						<span
+							class="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-full"
+						>
+							v{selectedCodex.version}
+						</span>
+					{/if}
+					<span
+						class="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full"
+					>
+						Python
+					</span>
+				</div>
 				{#if selectedCodex.description}
-					<p class="desc">{selectedCodex.description}</p>
+					<p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+						{selectedCodex.description}
+					</p>
 				{/if}
-				{#if selectedCodex.version}
-					<div class="meta">Version: {selectedCodex.version}</div>
+				{#if formatTimestamp(selectedCodex.created_at)}
+					<p class="text-xs text-gray-500 dark:text-gray-500 mb-4">
+						Created: {formatTimestamp(selectedCodex.created_at)}
+					</p>
 				{/if}
-				{#if selectedCodex.code || selectedCodex.source}
-					<pre class="code">{selectedCodex.code || selectedCodex.source}</pre>
-				{:else}
-					<pre class="code">{JSON.stringify(selectedCodex, null, 2)}</pre>
-				{/if}
+				<div class="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[500px]">
+					<pre class="text-sm text-gray-300 font-mono whitespace-pre-wrap break-words">{selectedCodex.code || selectedCodex.source || selectedCodex.code_preview || JSON.stringify(selectedCodex, null, 2)}</pre>
+				</div>
 			</div>
 		</div>
-	{:else}
-		{#if loading}
-			<div class="empty">Loading codexes…</div>
-		{:else}
-			<div class="search-row">
-				<input type="text" bind:value={search} placeholder="Search codexes…" />
-			</div>
 
-			{#if filtered.length === 0}
-				<div class="empty">{search ? 'No matches' : 'No codexes found'}</div>
-			{:else}
-				<div class="grid">
-					{#each filtered as c (c.id || c.name)}
-						<button class="card clickable" onclick={() => viewCodex(c.id || c.name)}>
-							<h3>{c.name || c.id}</h3>
-							{#if c.description}
-								<p class="desc">{c.description}</p>
-							{/if}
-							{#if c.version}
-								<span class="tag">{c.version}</span>
-							{/if}
-						</button>
-					{/each}
-				</div>
+	<!-- Loading State -->
+	{:else if loading}
+		<div class="flex items-center justify-center py-16">
+			<svg
+				class="animate-spin h-8 w-8 text-gray-400"
+				fill="none"
+				viewBox="0 0 24 24"
+			>
+				<circle
+					class="opacity-25"
+					cx="12"
+					cy="12"
+					r="10"
+					stroke="currentColor"
+					stroke-width="4"
+				></circle>
+				<path
+					class="opacity-75"
+					fill="currentColor"
+					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+				></path>
+			</svg>
+			<span class="ml-3 text-gray-500 dark:text-gray-400">Loading codexes…</span>
+		</div>
+
+	<!-- List View -->
+	{:else}
+		<!-- Search -->
+		<div class="mb-4">
+			<div class="relative max-w-md">
+				<svg
+					class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+					/>
+				</svg>
+				<input
+					type="text"
+					bind:value={searchTerm}
+					placeholder="Search codexes…"
+					class="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+				/>
+			</div>
+		</div>
+
+		<!-- Stats -->
+		<div class="mb-4 flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+			<span>{codexes.length} total codexes</span>
+			{#if searchTerm && filteredCodexes.length !== codexes.length}
+				<span class="text-gray-400 dark:text-gray-500">
+					({filteredCodexes.length} matching)
+				</span>
 			{/if}
+		</div>
+
+		{#if filteredCodexes.length === 0}
+			<div
+				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-12 text-center"
+			>
+				<svg
+					class="w-12 h-12 mx-auto text-gray-400 mb-4"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="1.5"
+						d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+					/>
+				</svg>
+				<p class="text-gray-500 dark:text-gray-400">
+					{searchTerm ? 'No codexes match your search' : 'No codexes found'}
+				</p>
+			</div>
+		{:else}
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				{#each filteredCodexes as codex (codex._id || codex.name)}
+					<button
+						class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-left hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-200 cursor-pointer w-full"
+						onclick={() => viewCodex(codex)}
+					>
+						<div class="flex items-start justify-between mb-3">
+							<div class="flex items-center gap-2 min-w-0">
+								<svg
+									class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+									/>
+								</svg>
+								<h3 class="font-semibold text-gray-900 dark:text-white truncate">
+									{codex.name}
+								</h3>
+							</div>
+							<span
+								class="ml-2 flex-shrink-0 px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full"
+							>
+								Python
+							</span>
+						</div>
+
+						{#if codex.description}
+							<p
+								class="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2 overflow-hidden"
+							>
+								{codex.description}
+							</p>
+						{/if}
+
+						{#if codex.code_preview}
+							<div class="bg-gray-900 rounded-lg p-2 mb-3 overflow-hidden">
+								<pre class="text-xs text-gray-300 font-mono truncate">{codex.code_preview.split('\n').slice(0, 3).join('\n')}</pre>
+							</div>
+						{/if}
+
+						<div
+							class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-500"
+						>
+							<span>ID: {(codex._id || '').substring(0, 8)}</span>
+							<span class="text-blue-600 dark:text-blue-400">View Code →</span>
+						</div>
+					</button>
+				{/each}
+			</div>
 		{/if}
 	{/if}
 
+	<!-- Detail loading overlay -->
 	{#if detailLoading}
-		<div class="overlay">Loading codex details…</div>
+		<div
+			class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center rounded-lg z-10"
+		>
+			<svg
+				class="animate-spin h-8 w-8 text-gray-400"
+				fill="none"
+				viewBox="0 0 24 24"
+			>
+				<circle
+					class="opacity-25"
+					cx="12"
+					cy="12"
+					r="10"
+					stroke="currentColor"
+					stroke-width="4"
+				></circle>
+				<path
+					class="opacity-75"
+					fill="currentColor"
+					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+				></path>
+			</svg>
+			<span class="ml-3 text-gray-500 dark:text-gray-400">Loading details…</span>
+		</div>
 	{/if}
 </div>
-
-<style>
-	.rt-cv { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 1.5rem; position: relative; }
-	.header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-	.header h2 { margin: 0; font-size: 1.5rem; }
-	.badge { background: #e0e7ff; color: #3730a3; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; }
-	.refresh { margin-left: auto; padding: 0.35rem 0.75rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.5rem; cursor: pointer; font-size: 0.8rem; }
-	.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; }
-	.empty { color: #6b7280; text-align: center; padding: 2rem; }
-	.search-row { margin-bottom: 1rem; }
-	.search-row input { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 0.875rem; box-sizing: border-box; }
-	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; }
-	.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1rem 1.25rem; text-align: left; }
-	.clickable { cursor: pointer; width: 100%; font-family: inherit; }
-	.clickable:hover { border-color: #a5b4fc; background: #f5f3ff; }
-	.card h3 { margin: 0 0 0.25rem; font-size: 0.95rem; }
-	.desc { margin: 0.25rem 0; color: #6b7280; font-size: 0.8rem; line-height: 1.4; }
-	.meta { font-size: 0.8rem; color: #6b7280; margin: 0.5rem 0; }
-	.tag { background: #f0fdf4; color: #166534; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem; }
-	.code { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.75rem; font-size: 0.75rem; font-family: ui-monospace, monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 500px; overflow-y: auto; margin-top: 1rem; }
-	.back { background: none; border: none; color: #4f46e5; cursor: pointer; font-size: 0.85rem; padding: 0; margin-bottom: 1rem; }
-	.back:hover { text-decoration: underline; }
-	.overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; color: #6b7280; border-radius: 0.75rem; }
-</style>

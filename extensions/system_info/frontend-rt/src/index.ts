@@ -1,16 +1,8 @@
 import { mount, unmount } from 'svelte';
 import SystemInfo from './SystemInfo.svelte';
 
-export interface RuntimeMountProps {
-	backend: any;
-	extensionId: string;
-	version: string;
-	principal?: string;
-	isAuthenticated?: boolean;
-}
-
-export default function mountExt(target: HTMLElement, props: RuntimeMountProps) {
-	const component = mount(SystemInfo, { target, props });
+export default function mountExt(target: HTMLElement, ctx: Record<string, any>) {
+	const component = mount(SystemInfo, { target, props: { ctx } });
 	return {
 		unmount() {
 			try {

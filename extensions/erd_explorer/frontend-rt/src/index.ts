@@ -1,16 +1,8 @@
 import { mount, unmount } from 'svelte';
-import ErdExplorer from './ErdExplorer.svelte';
+import ERDExplorer from './ERDExplorer.svelte';
 
-export interface RuntimeMountProps {
-	backend: any;
-	extensionId: string;
-	version: string;
-	principal?: string;
-	isAuthenticated?: boolean;
-}
-
-export default function mountExt(target: HTMLElement, props: RuntimeMountProps) {
-	const component = mount(ErdExplorer, { target, props });
+export default function mountExt(target: HTMLElement, ctx: Record<string, any>) {
+	const component = mount(ERDExplorer, { target, props: { ctx } });
 	return {
 		unmount() {
 			try {

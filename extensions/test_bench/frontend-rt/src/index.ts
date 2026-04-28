@@ -1,16 +1,8 @@
 import { mount, unmount } from 'svelte';
 import TestBench from './TestBench.svelte';
 
-export interface RuntimeMountProps {
-	backend: any;
-	extensionId: string;
-	version: string;
-	principal?: string;
-	isAuthenticated?: boolean;
-}
-
-export default function mountExt(target: HTMLElement, props: RuntimeMountProps) {
-	const component = mount(TestBench, { target, props });
+export default function mountExt(target: HTMLElement, ctx: Record<string, any>) {
+	const component = mount(TestBench, { target, props: { ctx } });
 	return {
 		unmount() {
 			try {
