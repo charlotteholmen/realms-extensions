@@ -1,146 +1,374 @@
 <script lang="ts">
-	let { backend, extensionId = 'public_dashboard', version = '', principal = '', isAuthenticated = true }: any = $props();
+	import { onMount, tick } from 'svelte';
 
-	let status: any = $state(null);
-	let realm: any = $state(null);
+	let { ctx }: { ctx: any } = $props();
+
+	let statusData: any = $state(null);
+	let realmData: any = $state(null);
 	let zones: any[] = $state([]);
-	let recentUsers: any[] = $state([]);
+	let latestUsers: any[] = $state([]);
 	let loading = $state(true);
-	let error = $state('');
+	let askText = $state('');
+	let mapContainer: HTMLDivElement | undefined = $state();
 
-	async function loadPaginated(entityType: string, offset = 0, limit = 10, order = 'desc') {
-		const raw = await backend.get_objects_paginated(entityType, offset, limit, order);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		return parsed?.data ?? (Array.isArray(parsed) ? parsed : []);
+	function parseEntities(response: any): any[] {
+		if (response?.success && response?.data?.objectsListPaginated) {
+			return (response.data.objectsListPaginated.objects || []).map((s: string) => JSON.parse(s));
+		}
+		return [];
 	}
 
 	async function loadData() {
 		loading = true;
-		error = '';
 		try {
-			const statusRaw = await backend.status();
-			const statusParsed = typeof statusRaw === 'string' ? JSON.parse(statusRaw) : statusRaw;
-			status = statusParsed?.data?.status ?? statusParsed;
-
-			const [r, z, u] = await Promise.all([
-				loadPaginated('Realm', 0, 1, 'asc').catch(() => []),
-				loadPaginated('Zone', 0, 100, 'asc').catch(() => []),
-				loadPaginated('User', 0, 8, 'desc').catch(() => []),
+			const backend = ctx.backend;
+			const [statusResp, realmResp, zonesResp, latestResp] = await Promise.all([
+				backend.status(),
+				backend.get_objects_paginated('Realm', 0, 1, 'asc'),
+				backend.get_objects_paginated('Zone', 0, 200, 'asc'),
+				backend.get_objects_paginated('User', 0, 8, 'desc'),
 			]);
-			realm = r[0] ?? null;
-			zones = z;
-			recentUsers = u;
-		} catch (e: any) {
-			error = e?.message || String(e);
-		} finally {
-			loading = false;
+
+			if (statusResp?.success && statusResp?.data?.status) {
+				statusData = statusResp.data.status;
+			}
+
+			const realms = parseEntities(realmResp);
+			if (realms.length > 0) {
+				realmData = realms[0];
+			}
+
+			const allZones = parseEntities(zonesResp);
+			zones = allZones.filter((z: any) => z.h3_index || (z.latitude && z.longitude));
+			latestUsers = parseEntities(latestResp);
+		} catch (e) {
+			console.error('Error loading dashboard data:', e);
+		}
+		loading = false;
+	}
+
+	const INFLUENCE_RINGS = 3;
+
+	async function initMap() {
+		if (!mapContainer || zones.length === 0) return;
+
+		const L = await import('leaflet');
+		const { cellToBoundary, gridDisk } = await import('h3-js');
+
+		const map = L.map(mapContainer).setView([20, 0], 2);
+
+		const cartoLayer = L.tileLayer(
+			'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+			{
+				attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+				subdomains: 'abcd',
+				maxZoom: 19,
+			},
+		);
+		cartoLayer.on('tileerror', function () {
+			if (!(map as any)._fallbackTiles) {
+				(map as any)._fallbackTiles = true;
+				map.removeLayer(cartoLayer);
+				L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+					attribution:
+						'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+					maxZoom: 19,
+				}).addTo(map);
+			}
+		});
+		cartoLayer.addTo(map);
+
+		const allLatLngs: [number, number][] = [];
+		const renderedHexes = new Set<string>();
+
+		for (const zone of zones) {
+			if (zone.h3_index) {
+				try {
+					const disk = gridDisk(zone.h3_index, INFLUENCE_RINGS);
+					for (const hexIndex of disk) {
+						if (renderedHexes.has(hexIndex)) continue;
+						renderedHexes.add(hexIndex);
+
+						const boundary = cellToBoundary(hexIndex);
+						const latLngs: [number, number][] = boundary.map(
+							(c: number[]) => [c[0], c[1]] as [number, number],
+						);
+
+						const isCenter = hexIndex === zone.h3_index;
+						const opacity = isCenter ? 0.45 : 0.15;
+						const weight = isCenter ? 2 : 0.8;
+
+						L.polygon(latLngs, {
+							color: '#4338ca',
+							weight,
+							fillColor: '#6366f1',
+							fillOpacity: opacity,
+						}).addTo(map);
+
+						if (isCenter) {
+							latLngs.forEach((c) => allLatLngs.push(c));
+						}
+					}
+				} catch {
+					if (zone.latitude && zone.longitude) {
+						allLatLngs.push([Number(zone.latitude), Number(zone.longitude)]);
+					}
+				}
+			}
+
+			if (zone.latitude && zone.longitude) {
+				const lat = Number(zone.latitude);
+				const lng = Number(zone.longitude);
+				L.circleMarker([lat, lng], {
+					radius: 14,
+					fillColor: '#6366f1',
+					color: '#6366f1',
+					weight: 0,
+					fillOpacity: 0.25,
+				}).addTo(map);
+				const marker = L.circleMarker([lat, lng], {
+					radius: 8,
+					fillColor: '#6366f1',
+					color: '#fff',
+					weight: 2,
+					fillOpacity: 0.9,
+				}).addTo(map);
+
+				const name = zone.name || zone.h3_index || '';
+				const desc = zone.description || '';
+				marker.bindPopup(`<strong>${name}</strong>${desc ? '<br/>' + desc : ''}`);
+
+				if (!allLatLngs.some((c) => c[0] === lat && c[1] === lng)) {
+					allLatLngs.push([lat, lng]);
+				}
+			}
+		}
+
+		if (allLatLngs.length > 0) {
+			map.fitBounds(L.latLngBounds(allLatLngs), { padding: [40, 40], maxZoom: 5 });
 		}
 	}
 
-	$effect(() => { void loadData(); });
-
-	function kpi(key: string): string {
-		const v = status?.[key];
-		if (v === undefined || v === null) return '—';
-		return String(v).replace(/"/g, '');
+	function askAI() {
+		if (askText.trim()) {
+			ctx.navigate(`/extensions/llm_chat?q=${encodeURIComponent(askText.trim())}`);
+		}
 	}
+
+	let kpiCards = $derived(
+		statusData
+			? [
+					{ label: 'Users', value: Number(statusData.users_count), color: 'blue' },
+					{
+						label: 'Organizations',
+						value: Number(statusData.organizations_count),
+						color: 'purple',
+					},
+					{ label: 'Proposals', value: Number(statusData.proposals_count), color: 'amber' },
+					{ label: 'Votes', value: Number(statusData.votes_count), color: 'green' },
+					{ label: 'Transfers', value: Number(statusData.transfers_count), color: 'rose' },
+					{ label: 'Licenses', value: Number(statusData.licenses_count), color: 'cyan' },
+				]
+			: [],
+	);
+
+	onMount(async () => {
+		await loadData();
+		await tick();
+		await initMap();
+	});
 </script>
 
-<div class="rt-pd">
-	<div class="header">
-		<h2>Dashboard</h2>
-		<span class="badge">v{version}</span>
-		<button class="refresh" onclick={loadData} disabled={loading}>↻</button>
-	</div>
+<svelte:head>
+	<link
+		rel="stylesheet"
+		href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+		crossorigin=""
+	/>
+</svelte:head>
 
-	{#if error}<div class="error">{error}</div>{/if}
-
+<div class="mt-px pt-20 space-y-4">
 	{#if loading}
-		<div class="empty">Loading dashboard…</div>
+		<div class="flex items-center justify-center py-12">
+			<svg
+				class="animate-spin h-8 w-8 text-gray-400"
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+			>
+				<circle
+					class="opacity-25"
+					cx="12"
+					cy="12"
+					r="10"
+					stroke="currentColor"
+					stroke-width="4"
+				></circle>
+				<path
+					class="opacity-75"
+					fill="currentColor"
+					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+				></path>
+			</svg>
+			<span class="ml-3 text-gray-500">Loading dashboard...</span>
+		</div>
 	{:else}
-		<div class="kpi-row">
-			<div class="kpi"><span class="kpi-label">Users</span><span class="kpi-val">{kpi('users_count')}</span></div>
-			<div class="kpi"><span class="kpi-label">Organizations</span><span class="kpi-val">{kpi('organizations_count')}</span></div>
-			<div class="kpi"><span class="kpi-label">Proposals</span><span class="kpi-val">{kpi('proposals_count')}</span></div>
-			<div class="kpi"><span class="kpi-label">Votes</span><span class="kpi-val">{kpi('votes_count')}</span></div>
-			<div class="kpi"><span class="kpi-label">Tasks</span><span class="kpi-val">{kpi('tasks_count')}</span></div>
-			<div class="kpi"><span class="kpi-label">Transfers</span><span class="kpi-val">{kpi('transfers_count')}</span></div>
-			<div class="kpi"><span class="kpi-label">Disputes</span><span class="kpi-val">{kpi('disputes_count')}</span></div>
-			<div class="kpi"><span class="kpi-label">Extensions</span><span class="kpi-val">{(status?.extensions ?? []).length}</span></div>
+		<!-- Realm Hero Section -->
+		{#if realmData}
+			{@const welcomeExt = realmData.welcome_image
+				? realmData.welcome_image.split('.').pop() || 'png'
+				: ''}
+			{@const bgImage = realmData.welcome_image
+				? `/images/welcome.${welcomeExt}`
+				: '/images/default_welcome.jpg'}
+			<div
+				class="rounded-lg border border-gray-200 shadow-md relative"
+				style="background: linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('{bgImage}') center/cover no-repeat;"
+			>
+				<div class="p-8">
+					<div class="flex items-center gap-3 mb-3">
+						<img
+							src={realmData.logo
+								? `/images/realm_logo.${realmData.logo.split('.').pop() || 'svg'}`
+								: '/images/logo_sphere_only.svg'}
+							alt={realmData.name || 'Realm'}
+							class="w-12 h-12 object-contain"
+						/>
+						<h1 class="text-3xl font-bold text-gray-900">{realmData.name || 'Realm'}</h1>
+					</div>
+					{#if realmData.description}
+						<p class="text-base text-gray-700 leading-relaxed mb-2 max-w-3xl">
+							{realmData.description}
+						</p>
+					{/if}
+					{#if realmData.welcome_message}
+						<p class="text-sm text-gray-600 italic mb-6 max-w-3xl">
+							{realmData.welcome_message}
+						</p>
+					{/if}
+
+					{#if kpiCards.length > 0}
+						<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+							{#each kpiCards as card}
+								<div
+									class="rounded-lg bg-white/60 backdrop-blur-sm border border-white/80 p-3"
+								>
+									<p class="text-xs text-gray-500 font-medium">{card.label}</p>
+									<p class="text-2xl font-bold text-gray-900">
+										{card.value.toLocaleString()}
+									</p>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<a
+						href="/join"
+						class="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gray-900 text-white font-semibold hover:bg-black transition-colors shadow-md"
+					>
+						Join this Realm
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M13 7l5 5m0 0l-5 5m5-5H6"
+							/>
+						</svg>
+					</a>
+				</div>
+			</div>
+		{/if}
+
+		<!-- AI Assistant -->
+		<div class="rounded-lg border border-gray-200 shadow-md bg-white p-5">
+			<div class="flex items-center gap-3 mb-3">
+				<div
+					class="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0"
+				>
+					<svg
+						class="w-5 h-5 text-indigo-600"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+						/>
+					</svg>
+				</div>
+				<div>
+					<h3 class="text-lg font-semibold text-gray-900">Ask the AI Assistant</h3>
+					<p class="text-xs text-gray-500">
+						Get answers about this realm, its governance, and services
+					</p>
+				</div>
+			</div>
+			<form onsubmit={(e) => { e.preventDefault(); askAI(); }} class="flex gap-2">
+				<input
+					type="text"
+					bind:value={askText}
+					placeholder="Ask anything about this realm..."
+					class="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+				/>
+				<button
+					type="submit"
+					disabled={!askText.trim()}
+					class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+						/>
+					</svg>
+					Ask
+				</button>
+			</form>
 		</div>
 
-		{#if realm}
-			<div class="section">
-				<h3>Realm</h3>
-				<div class="card">
-					<div class="kv"><span>Name</span><span class="fw">{realm.name || status?.realm_name || '—'}</span></div>
-					{#if realm.description || status?.realm_description}
-						<div class="kv"><span>Description</span><span>{realm.description || status?.realm_description}</span></div>
-					{/if}
-					<div class="kv"><span>Version</span><span>{status?.version || '—'}</span></div>
-					<div class="kv"><span>Status</span><span class="green">{status?.status || '—'}</span></div>
-				</div>
-			</div>
-		{/if}
-
+		<!-- Zones Map -->
 		{#if zones.length > 0}
-			<div class="section">
-				<h3>Zones ({zones.length})</h3>
-				<div class="grid">
-					{#each zones.slice(0, 20) as z (z.id || z.name)}
-						<div class="tag">{z.name || z.h3_index || z.id || JSON.stringify(z)}</div>
-					{/each}
-					{#if zones.length > 20}<div class="note">+{zones.length - 20} more</div>{/if}
-				</div>
+			<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
+				<h3 class="text-xl font-semibold text-gray-900 mb-1">Realm Zones</h3>
+				<p class="text-sm text-gray-500 mb-4">
+					{zones.length} zone{zones.length !== 1 ? 's' : ''} in this realm
+				</p>
+				<div
+					bind:this={mapContainer}
+					class="w-full h-80 rounded-lg overflow-hidden border border-gray-200 relative z-0"
+				></div>
 			</div>
 		{/if}
 
-		{#if recentUsers.length > 0}
-			<div class="section">
-				<h3>Recent Users</h3>
-				<div class="table-wrap">
-					<table>
-						<thead><tr><th>Name</th><th>Principal</th><th>Joined</th></tr></thead>
-						<tbody>
-							{#each recentUsers as u}
-								<tr>
-									<td class="fw">{u.name || u.username || '—'}</td>
-									<td class="mono">{(u.principal || u.id || '').slice(0, 16)}…</td>
-									<td>{u.created_at || u.joined || '—'}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+		<!-- Latest Users -->
+		{#if latestUsers.length > 0}
+			<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
+				<h3 class="text-lg font-semibold text-gray-900 mb-4">Latest Members</h3>
+				<div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
+					{#each latestUsers as user}
+						<div class="flex flex-col items-center space-y-2">
+							<img
+								src={`https://api.dicebear.com/9.x/glass/svg?seed=${user.name || user.id}`}
+								alt={user.name || user.id}
+								class="w-14 h-14 rounded-full ring-2 ring-gray-200 hover:ring-gray-300 transition-all duration-200"
+							/>
+							<span
+								class="text-xs text-gray-600 text-center truncate w-full"
+								title={user.name || user.id}
+							>
+								{user.name || user.id.substring(0, 8)}
+							</span>
+						</div>
+					{/each}
 				</div>
 			</div>
 		{/if}
 	{/if}
 </div>
-
-<style>
-	.rt-pd { font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 1.5rem; }
-	.header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-	.header h2 { margin: 0; font-size: 1.5rem; }
-	.badge { background: #e0e7ff; color: #3730a3; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; }
-	.refresh { margin-left: auto; padding: 0.35rem 0.75rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.5rem; cursor: pointer; font-size: 0.8rem; }
-	.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; }
-	.empty { color: #6b7280; text-align: center; padding: 2rem; }
-	.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
-	.kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 0.75rem; text-align: center; }
-	.kpi-label { display: block; font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem; }
-	.kpi-val { font-size: 1.5rem; font-weight: 700; color: #1f2937; }
-	.section { margin-bottom: 1.5rem; }
-	.section h3 { margin: 0 0 0.75rem; font-size: 1rem; }
-	.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1rem; }
-	.kv { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem; }
-	.fw { font-weight: 500; }
-	.green { color: #16a34a; }
-	.mono { font-family: ui-monospace, monospace; font-size: 0.75rem; }
-	.grid { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-	.tag { background: #f0fdf4; color: #166534; padding: 0.2rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; border: 1px solid #bbf7d0; }
-	.note { color: #9ca3af; font-size: 0.75rem; padding: 0.25rem; }
-	.table-wrap { overflow-x: auto; }
-	table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-	th { text-align: left; padding: 0.5rem; border-bottom: 2px solid #e5e7eb; color: #6b7280; font-weight: 500; }
-	td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #f3f4f6; }
-</style>
