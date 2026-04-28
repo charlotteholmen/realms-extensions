@@ -3,8 +3,6 @@
 
 	let { ctx }: { ctx: any } = $props();
 
-	const EXTENSION_NAME = 'erd_explorer';
-
 	let entities: Record<string, any> = $state({});
 	let entityData: Record<string, any> = $state({});
 	let loading = $state(true);
@@ -33,18 +31,15 @@
 		Identity: '#F59E0B',
 	};
 
-	async function callExt(fn: string, args: string = '{}') {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({ extension_name: EXTENSION_NAME, function_name: fn, args }),
-		);
-		return JSON.parse(raw);
+	async function callExt(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
 	async function loadEntitySchema() {
 		loading = true;
 		error = '';
 		try {
-			const response = await callExt('get_entity_schema', '{}');
+			const response = await callExt('get_entity_schema');
 			const schema = response?.entities ?? response?.data?.entities ?? response?.data ?? response;
 
 			if (schema && typeof schema === 'object') {
@@ -77,11 +72,11 @@
 
 	async function loadEntityData(entityType: string, page: number = 0) {
 		try {
-			const response = await callExt('get_entity_data', JSON.stringify({
+			const response = await callExt('get_entity_data', {
 				entity_type: entityType,
 				page_num: page,
 				page_size: pageSize,
-			}));
+			});
 			if (response) {
 				entityData = { ...entityData, [entityType]: response?.data ?? response };
 			}

@@ -66,10 +66,8 @@
 
 	let unreadCount = $derived(notifications.filter(n => !n.read).length);
 
-	async function callExt(fn: string, args: string = '{}', ext = 'member_dashboard') {
-		const raw = await ctx.backend.extension_sync_call(JSON.stringify({
-			extension_name: ext, function_name: fn, args,
-		}));
+	async function callOtherExt(ext: string, fn: string, args: Record<string, unknown> = {}) {
+		const raw = await ctx.backend.extension_sync_call(ext, fn, JSON.stringify(args));
 		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
 		if (parsed?.success && parsed?.response) return JSON.parse(parsed.response);
 		return parsed;
@@ -79,10 +77,10 @@
 		loading = true;
 		error = '';
 		try {
-			const args = JSON.stringify({ user_id: ctx.principal || '' });
+			const args = { user_id: ctx.principal || '' };
 			const [sum, cit] = await Promise.all([
-				callExt('get_dashboard_summary', args).catch(() => null),
-				callExt('get_citizenship_status', args).catch(() => null),
+				ctx.callSync('get_dashboard_summary', args).catch(() => null),
+				ctx.callSync('get_citizenship_status', args).catch(() => null),
 			]);
 			summary = sum?.data ?? sum;
 			citizenship = cit?.data ?? cit;
@@ -96,8 +94,8 @@
 	async function loadNotifications() {
 		notificationsLoading = true;
 		try {
-			const args = JSON.stringify({ user_id: ctx.principal || '' });
-			const notif = await callExt('get_notifications', args, 'notifications').catch(() => ({ data: [] }));
+			const args = { user_id: ctx.principal || '' };
+			const notif = await callOtherExt('notifications', 'get_notifications', args).catch(() => ({ data: [] }));
 			const n = notif?.data ?? notif?.notifications ?? notif;
 			notifications = Array.isArray(n) ? n : [];
 		} catch {
@@ -111,8 +109,7 @@
 		invoiceLoading = true;
 		invoiceError = '';
 		try {
-			const args = JSON.stringify({ user_id: ctx.principal || '' });
-			const result = await callExt('get_invoice_information', args);
+			const result = await ctx.callSync('get_invoice_information', { user_id: ctx.principal || '' });
 			if (result?.success) {
 				invoiceData = result.data;
 			} else {
@@ -129,8 +126,7 @@
 		accountsLoading = true;
 		accountsError = '';
 		try {
-			const args = JSON.stringify({ user_id: ctx.principal || '' });
-			const result = await callExt('list_payment_accounts', args);
+			const result = await ctx.callSync('list_payment_accounts', { user_id: ctx.principal || '' });
 			if (result?.success && result?.data) {
 				paymentAccounts = result.data;
 			} else {
@@ -158,14 +154,14 @@
 	async function toggleRead(notif: any) {
 		try {
 			const newRead = !notif.read;
-			await callExt('mark_as_read', JSON.stringify({ id: notif.id, read: newRead }), 'notifications');
+			await callOtherExt('notifications', 'mark_as_read', { id: notif.id, read: newRead });
 			notifications = notifications.map(n => n.id === notif.id ? { ...n, read: newRead } : n);
 		} catch {}
 	}
 
 	async function deleteNotification(notif: any) {
 		try {
-			await callExt('delete_notification', JSON.stringify({ id: notif.id }), 'notifications');
+			await callOtherExt('notifications', 'delete_notification', { id: notif.id });
 			notifications = notifications.filter(n => n.id !== notif.id);
 		} catch {}
 	}
@@ -235,7 +231,7 @@
 		paymentLoading = true;
 		paymentInfo = null;
 		try {
-			const result = await callExt('get_invoice_deposit_address', JSON.stringify({ invoice_id: record.id }));
+			const result = await ctx.callSync('get_invoice_deposit_address', { invoice_id: record.id });
 			if (result?.success) paymentInfo = result.data;
 		} catch {} finally {
 			paymentLoading = false;
@@ -267,7 +263,7 @@
 
 	async function demoMarkAsPaid(record: any) {
 		try {
-			const result = await callExt('demo_mark_invoice_paid', JSON.stringify({ invoice_id: record.id }));
+			const result = await ctx.callSync('demo_mark_invoice_paid', { invoice_id: record.id });
 			if (result?.success) await loadInvoices();
 		} catch {}
 	}
@@ -277,13 +273,13 @@
 		if (!newAccountAddress || !newAccountLabel) return;
 		addingAccount = true;
 		try {
-			const result = await callExt('add_payment_account', JSON.stringify({
+			const result = await ctx.callSync('add_payment_account', {
 				user_id: ctx.principal || '',
 				address: newAccountAddress,
 				label: newAccountLabel,
 				network: newAccountNetwork,
 				currency: newAccountCurrency,
-			}));
+			});
 			if (result?.success) {
 				await loadPaymentAccounts();
 				newAccountLabel = '';
@@ -299,10 +295,10 @@
 
 	async function removePaymentAccount(accountId: string) {
 		try {
-			const result = await callExt('remove_payment_account', JSON.stringify({
+			const result = await ctx.callSync('remove_payment_account', {
 				user_id: ctx.principal || '',
 				account_id: accountId,
-			}));
+			});
 			if (result?.success) await loadPaymentAccounts();
 		} catch {}
 	}

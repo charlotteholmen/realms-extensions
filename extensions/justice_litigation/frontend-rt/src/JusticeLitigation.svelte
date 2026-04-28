@@ -44,30 +44,18 @@
 	);
 	let resolvedCount = $derived(litigations.filter((l) => l.status === 'resolved').length);
 
-	async function callExt(fn: string, args: string = '{}') {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({
-				extension_name: 'justice_litigation',
-				function_name: fn,
-				args,
-			}),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.success === false) throw new Error(parsed.error || 'Request failed');
-		return parsed;
+	async function callExt(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
 	async function loadLitigations() {
 		loading = true;
 		error = '';
 		try {
-			const res = await callExt(
-				'get_litigations',
-				JSON.stringify({
-					user_principal: principal,
-					user_profile: userProfile,
-				}),
-			);
+			const res = await callExt('get_litigations', {
+				user_principal: principal,
+				user_profile: userProfile,
+			});
 			const data = res?.data ?? res;
 			litigations = data?.litigations ?? (Array.isArray(data) ? data : []);
 			totalCount = data?.total_count ?? litigations.length;
@@ -88,15 +76,12 @@
 		createError = '';
 		createSuccess = false;
 		try {
-			await callExt(
-				'create_litigation',
-				JSON.stringify({
-					requester_principal: principal,
-					defendant_principal: formDefendant.trim(),
-					case_title: formTitle.trim(),
-					description: formDescription.trim(),
-				}),
-			);
+			await callExt('create_litigation', {
+				requester_principal: principal,
+				defendant_principal: formDefendant.trim(),
+				case_title: formTitle.trim(),
+				description: formDescription.trim(),
+			});
 			createSuccess = true;
 			formTitle = '';
 			formDescription = '';
@@ -138,14 +123,11 @@
 		verdictError = '';
 		verdictSuccess = false;
 		try {
-			await callExt(
-				'execute_verdict',
-				JSON.stringify({
-					litigation_id: verdictCase.id,
-					verdict_code: verdictCode.trim(),
-					executor_principal: principal,
-				}),
-			);
+			await callExt('execute_verdict', {
+				litigation_id: verdictCase.id,
+				verdict_code: verdictCode.trim(),
+				executor_principal: principal,
+			});
 			verdictSuccess = true;
 			await loadLitigations();
 			setTimeout(closeVerdict, 1500);

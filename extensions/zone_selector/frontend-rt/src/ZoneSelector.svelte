@@ -3,7 +3,6 @@
 
 	let { ctx }: { ctx: any } = $props();
 
-	const EXTENSION_NAME = 'zone_selector';
 	const H3_RESOLUTION = 6;
 
 	let activeTab = $state<'map' | 'list'>('map');
@@ -27,11 +26,8 @@
 
 	let userId = $derived(ctx.principal || null);
 
-	async function callExt(fn: string, args: string = '{}') {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({ extension_name: EXTENSION_NAME, function_name: fn, args }),
-		);
-		return JSON.parse(raw);
+	async function callExt(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
 	async function loadMyZones() {
@@ -39,7 +35,7 @@
 		loading = true;
 		error = '';
 		try {
-			const res = await callExt('get_my_zones', JSON.stringify({ user_id: userId }));
+			const res = await callExt('get_my_zones', { user_id: userId });
 			if (res?.success) {
 				zones = res.data || [];
 			} else {
@@ -56,14 +52,14 @@
 		if (!userId) { error = 'You must be logged in to add zones'; return; }
 		loading = true; error = ''; success = '';
 		try {
-			const res = await callExt('add_zone', JSON.stringify({
+			const res = await callExt('add_zone', {
 				user_id: userId,
 				latitude: lat,
 				longitude: lng,
 				name,
 				description: `Zone of influence at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
 				resolution: H3_RESOLUTION,
-			}));
+			});
 			if (res?.success) {
 				success = 'Zone added successfully!';
 				await loadMyZones();
@@ -77,7 +73,7 @@
 		if (!confirm('Are you sure you want to remove this zone?')) return;
 		loading = true; error = ''; success = '';
 		try {
-			const res = await callExt('remove_zone', JSON.stringify({ user_id: userId, zone_id: zoneId }));
+			const res = await callExt('remove_zone', { user_id: userId, zone_id: zoneId });
 			if (res?.success) {
 				success = 'Zone removed successfully!';
 				await loadMyZones();

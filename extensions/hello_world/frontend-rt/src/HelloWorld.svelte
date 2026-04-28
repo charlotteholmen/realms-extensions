@@ -13,16 +13,7 @@
 		error = '';
 		response = '';
 		try {
-			const result = await ctx.backend.extension_sync_call({
-				extension_name: 'hello_world',
-				function_name: 'greet',
-				args: name || '',
-			});
-			if (result.success) {
-				response = result.response;
-			} else {
-				error = result.response;
-			}
+			response = await ctx.callSync('greet', { name });
 		} catch (e: any) {
 			error = e?.message ?? String(e);
 		} finally {

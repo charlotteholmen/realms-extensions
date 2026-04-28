@@ -82,19 +82,8 @@
 		}, 4000);
 	}
 
-	async function callSync(fn: string, args: Record<string, any> = {}) {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({
-				extension_name: 'task_monitor',
-				function_name: fn,
-				args: JSON.stringify(args),
-			}),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.response) {
-			return typeof parsed.response === 'string' ? JSON.parse(parsed.response) : parsed.response;
-		}
-		return parsed;
+	async function callSync(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
 	async function loadTasks() {

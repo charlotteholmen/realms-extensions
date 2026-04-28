@@ -99,12 +99,8 @@
 		return className.replace(/([A-Z])/g, ' $1').trim();
 	}
 
-	async function callExt(fn: string, args: string = '{}') {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({ extension_name: 'admin_dashboard', function_name: fn, args }),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		return parsed;
+	async function callExt(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
 	function parseEntities(response: any): { objects: any[]; pagination: any } {
@@ -125,7 +121,7 @@
 		loading = true;
 		error = '';
 		try {
-			const res = await callExt('get_entity_types', '{}');
+			const res = await callExt('get_entity_types');
 			const classes = res?.data ?? (Array.isArray(res) ? res : []);
 			entityTypes = classes.map((className: string) => ({
 				value: className,
@@ -275,10 +271,10 @@
 		deletingId = String(entityId);
 
 		try {
-			const result = await callExt('delete_entity', JSON.stringify({
+			const result = await callExt('delete_entity', {
 				entity_type: entityType,
 				entity_id: String(entityId),
-			}));
+			});
 			if (result?.success) {
 				items = items.filter(i => !((i._id || i.id) === entityId && (i._type || selectedType) === entityType));
 				totalItems = Math.max(0, totalItems - 1);
@@ -302,7 +298,7 @@
 			const exportArgs = all
 				? { include_codexes: true }
 				: { entity_types: [selectedType], include_codexes: true };
-			const result = await callExt('export_data', JSON.stringify(exportArgs));
+			const result = await callExt('export_data', exportArgs);
 			if (result?.success && result?.data) {
 				const exportData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
 				exportResult = exportData;
@@ -414,10 +410,10 @@
 				allRecords.push({ ...codex, _type: 'Codex' });
 			}
 
-			const result = await callExt('import_data', JSON.stringify({
+			const result = await callExt('import_data', {
 				format: 'json',
 				data: JSON.stringify(allRecords),
-			}));
+			});
 
 			importResult = result;
 			if (result?.success) {

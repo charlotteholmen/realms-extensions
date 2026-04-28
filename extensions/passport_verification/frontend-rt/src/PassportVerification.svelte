@@ -27,34 +27,12 @@
 		{ label: 'Verified', index: 3 },
 	];
 
-	async function callSync(fn: string, args: string = '') {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({
-				extension_name: 'passport_verification',
-				function_name: fn,
-				args,
-			}),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.response) {
-			return typeof parsed.response === 'string' ? JSON.parse(parsed.response) : parsed.response;
-		}
-		return parsed;
+	async function callSync(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
-	async function callAsync(fn: string, args: string = '') {
-		const raw = await ctx.backend.extension_async_call(
-			JSON.stringify({
-				extension_name: 'passport_verification',
-				function_name: fn,
-				args,
-			}),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.response) {
-			return typeof parsed.response === 'string' ? JSON.parse(parsed.response) : parsed.response;
-		}
-		return parsed;
+	async function callAsync(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callAsync(fn, args);
 	}
 
 	async function generateVerificationLink() {
@@ -62,11 +40,11 @@
 			step = 'generating';
 			errorMessage = '';
 
-			const eventIdData = await callSync('get_current_application_id', '');
+			const eventIdData = await callSync('get_current_application_id');
 			eventId = eventIdData?.application_id ?? eventIdData?.data?.application_id ?? '';
 
 			const userId = ctx.principal || '';
-			const result = await callAsync('get_verification_link', userId);
+			const result = await callAsync('get_verification_link', { user_id: userId });
 
 			if (result?.data?.attributes) {
 				const verificationUrl =
@@ -94,7 +72,7 @@
 		try {
 			checkingStatus = true;
 			const userId = ctx.principal || '';
-			const result = await callAsync('check_verification_status', userId);
+			const result = await callAsync('check_verification_status', { user_id: userId });
 
 			if (result?.data?.attributes) {
 				const status = result.data.attributes.status;
@@ -122,7 +100,7 @@
 
 	async function createPassportIdentity(verificationData: any) {
 		try {
-			await callSync('create_passport_identity', JSON.stringify(verificationData));
+			await callSync('create_passport_identity', verificationData);
 		} catch (e: any) {
 			console.error('Error creating passport identity:', e);
 		}

@@ -43,11 +43,8 @@
 
 	async function doAsync() {
 		await runTest('async', async () => {
-			const raw = await ctx.backend.extension_async_call(
-				JSON.stringify({ extension_name: extensionId, function_name: 'get_data', args: 'from frontend-rt' }),
-			);
-			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-			asyncResult = JSON.stringify(parsed, null, 2);
+			const data = await ctx.callAsync('get_data', { data: 'from frontend-rt' });
+			asyncResult = JSON.stringify(data, null, 2);
 		});
 	}
 

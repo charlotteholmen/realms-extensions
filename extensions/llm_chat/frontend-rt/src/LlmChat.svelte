@@ -69,12 +69,8 @@
 			const [objType, objId] = explain.split(':');
 			if (objType === 'codex' && objId) {
 				isExplainMode = true;
-				ctx.backend
-					.extension_sync_call({
-						extension_name: 'codex_viewer',
-						function_name: 'get_codex_details',
-						args: JSON.stringify({ codex_id: objId }),
-					})
+			ctx.backend
+				.extension_sync_call('codex_viewer', 'get_codex_details', JSON.stringify({ codex_id: objId }))
 					.then((response: any) => {
 						if (response.success) {
 							const data =

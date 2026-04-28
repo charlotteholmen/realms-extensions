@@ -2681,11 +2681,7 @@ function Ja(e, t) {
       if (!x) return;
       const [H, R] = x.split(":");
       if (H === "codex" && R)
-        w(_, !0), t.ctx.backend.extension_sync_call({
-          extension_name: "codex_viewer",
-          function_name: "get_codex_details",
-          args: JSON.stringify({ codex_id: R })
-        }).then((I) => {
+        w(_, !0), t.ctx.backend.extension_sync_call("codex_viewer", "get_codex_details", JSON.stringify({ codex_id: R })).then((I) => {
           if (I.success) {
             const re = (typeof I.response == "string" ? JSON.parse(I.response) : I.response).codex?.name || `codex_${R}`, z = `/extensions/codex_viewer/${R}`;
             w(p, R, !0), w(n, `Please explain this codex: [${re}](${z})`), setTimeout(() => ft(), 300);

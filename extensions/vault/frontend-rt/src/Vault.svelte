@@ -191,20 +191,11 @@
 
 	async function loadVaultBalance(token: string) {
 		try {
-			const raw = await ctx.backend.extension_sync_call(
-				JSON.stringify({ extension_name: 'vault', function_name: 'get_vault_balance', args: JSON.stringify({ token }) }),
-			);
-			const result = parseRaw(raw);
-			let response: any;
-			try {
-				response = typeof result?.response === 'string' ? JSON.parse(result.response) : result;
-			} catch {
-				return;
-			}
-			if (response?.success && response?.data?.Balance) {
-				tokenBalances[token] = response.data.Balance.amount || 0;
+			const data = await ctx.callSync('get_vault_balance', { token });
+			if (data?.Balance) {
+				tokenBalances[token] = data.Balance.amount || 0;
 				tokenBalances = { ...tokenBalances };
-				vaultPrincipal = response.data.Balance.principal_id || vaultPrincipal;
+				vaultPrincipal = data.Balance.principal_id || vaultPrincipal;
 			}
 		} catch (e: any) {
 			console.error(`Failed to load vault balance for ${token}:`, e);
@@ -223,23 +214,13 @@
 		vaultBalanceLoading = true;
 		error = '';
 		try {
-			const raw = await ctx.backend.extension_async_call(
-				JSON.stringify({ extension_name: 'vault', function_name: 'refresh_vault_balance', args: JSON.stringify({ token }) }),
-			);
-			const result = parseRaw(raw);
-			let inner: any;
-			try {
-				inner = typeof result?.response === 'string' ? JSON.parse(result.response) : result;
-			} catch {
-				error = result?.response || 'Refresh failed';
-				return;
-			}
-			if (inner?.success && inner?.data?.Balance) {
-				tokenBalances[token] = inner.data.Balance.amount || 0;
+			const data = await ctx.callAsync('refresh_vault_balance', { token });
+			if (data?.Balance) {
+				tokenBalances[token] = data.Balance.amount || 0;
 				tokenBalances = { ...tokenBalances };
 				lastRefreshTime = new Date();
 			} else {
-				error = inner?.error || 'Failed to refresh vault balance';
+				error = 'Failed to refresh vault balance';
 			}
 		} catch (e: any) {
 			error = e?.message || 'Failed to refresh vault balance';
@@ -261,25 +242,11 @@
 		loading = true;
 		error = '';
 		try {
-			const raw = await ctx.backend.extension_async_call(
-				JSON.stringify({ extension_name: 'vault', function_name: 'refresh', args: '{}' }),
-			);
-			const result = parseRaw(raw);
-			let inner: any;
-			try {
-				inner = typeof result?.response === 'string' ? JSON.parse(result.response) : result;
-			} catch {
-				error = result?.response || 'Refresh failed';
-				return;
-			}
-			if (inner?.success) {
-				lastRefreshTime = new Date();
-				await loadBalance();
-				await loadAllVaultBalances();
-				await loadTransactions(0);
-			} else {
-				error = inner?.error || 'Refresh failed';
-			}
+			await ctx.callAsync('refresh', {});
+			lastRefreshTime = new Date();
+			await loadBalance();
+			await loadAllVaultBalances();
+			await loadTransactions(0);
 		} catch (e: any) {
 			error = e?.message || 'Failed to refresh vault';
 		} finally {
@@ -300,27 +267,13 @@
 			if (transferFromSubaccount.trim()) args.from_subaccount = transferFromSubaccount.trim();
 			if (transferToken) args.token = transferToken;
 
-			const raw = await ctx.backend.extension_async_call(
-				JSON.stringify({ extension_name: 'vault', function_name: 'transfer', args: JSON.stringify(args) }),
-			);
-			const result = parseRaw(raw);
-			let inner: any;
-			try {
-				inner = typeof result?.response === 'string' ? JSON.parse(result.response) : result;
-			} catch {
-				error = result?.response || 'Transfer failed';
-				return;
-			}
-			if (inner?.success) {
-				transferTo = '';
-				transferAmount = 0;
-				transferToSubaccount = '';
-				transferFromSubaccount = '';
-				await loadBalance();
-				await loadTransactions();
-			} else {
-				error = inner?.error || 'Transfer failed';
-			}
+			await ctx.callAsync('transfer', args);
+			transferTo = '';
+			transferAmount = 0;
+			transferToSubaccount = '';
+			transferFromSubaccount = '';
+			await loadBalance();
+			await loadTransactions();
 		} catch (e: any) {
 			error = e?.message || 'Failed to perform transfer';
 		} finally {
@@ -346,22 +299,11 @@
 				return;
 			}
 
-			const raw = await ctx.backend.extension_async_call(
-				JSON.stringify({ extension_name: 'vault', function_name: 'lookup_balance', args: JSON.stringify(lookupArgs) }),
-			);
-			const result = parseRaw(raw);
-			let inner: any;
-			try {
-				inner = typeof result?.response === 'string' ? JSON.parse(result.response) : result;
-			} catch {
-				error = 'Failed to parse response';
-				lookupLoading = false;
-				return;
-			}
-			if (inner?.success && inner?.data?.LookupBalance) {
-				lookupResult = inner.data.LookupBalance;
+			const data = await ctx.callAsync('lookup_balance', lookupArgs);
+			if (data?.LookupBalance) {
+				lookupResult = data.LookupBalance;
 			} else {
-				error = inner?.error || 'Lookup failed';
+				error = 'Lookup failed';
 			}
 		} catch (e: any) {
 			error = e?.message || 'Failed to look up balance';

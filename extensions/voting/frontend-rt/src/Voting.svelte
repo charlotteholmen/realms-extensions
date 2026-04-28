@@ -46,27 +46,11 @@
 	});
 
 	async function callSync(fn: string, args: Record<string, any> = {}) {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({ extension_name: 'voting', function_name: fn, args: JSON.stringify(args) }),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.response) {
-			const inner = typeof parsed.response === 'string' ? JSON.parse(parsed.response) : parsed.response;
-			return inner;
-		}
-		return parsed;
+		return await ctx.callSync(fn, args);
 	}
 
 	async function callAsync(fn: string, args: Record<string, any> = {}) {
-		const raw = await ctx.backend.extension_async_call(
-			JSON.stringify({ extension_name: 'voting', function_name: fn, args: JSON.stringify(args) }),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.response) {
-			const inner = typeof parsed.response === 'string' ? JSON.parse(parsed.response) : parsed.response;
-			return inner;
-		}
-		return parsed;
+		return await ctx.callAsync(fn, args);
 	}
 
 	async function loadProposals() {

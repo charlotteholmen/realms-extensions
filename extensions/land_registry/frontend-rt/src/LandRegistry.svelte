@@ -3,8 +3,6 @@
 
 	let { ctx }: { ctx: any } = $props();
 
-	const EXTENSION_NAME = 'land_registry';
-
 	let activeTab = $state<'geographic' | 'table' | 'admin'>('geographic');
 	let lands: any[] = $state([]);
 	let loading = $state(true);
@@ -57,18 +55,15 @@
 	const ZONE_COLOR = '#f59e0b';
 	const INFLUENCE_RINGS = 2;
 
-	async function callExt(fn: string, args: string = '{}') {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({ extension_name: EXTENSION_NAME, function_name: fn, args }),
-		);
-		return JSON.parse(raw);
+	async function callExt(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
 	async function loadLands() {
 		loading = true;
 		error = '';
 		try {
-			const res = await callExt('get_lands', '{}');
+			const res = await callExt('get_lands');
 			if (res?.success) {
 				lands = res.data ?? [];
 			} else {
@@ -263,7 +258,7 @@
 	async function createLand() {
 		submitting = true; error = ''; success = '';
 		try {
-			const res = await callExt('create_land', JSON.stringify(newLand));
+			const res = await callExt('create_land', newLand);
 			if (res?.success) {
 				success = 'Land created successfully!';
 				newLand = { x_coordinate: 0, y_coordinate: 0, land_type: 'unassigned', size_width: 1, size_height: 1 };
@@ -279,7 +274,7 @@
 			const data: any = { land_id: ownership.land_id };
 			if (ownership.owner_type === 'user') data.owner_user_id = ownership.owner_user_id;
 			else if (ownership.owner_type === 'organization') data.owner_organization_id = ownership.owner_organization_id;
-			const res = await callExt('update_land_ownership', JSON.stringify(data));
+			const res = await callExt('update_land_ownership', data);
 			if (res?.success) {
 				success = 'Ownership updated!';
 				ownership = { land_id: '', owner_user_id: '', owner_organization_id: '', owner_type: 'none' };
@@ -295,7 +290,7 @@
 			const data: any = { land_id: landUpdate.land_id };
 			if (landUpdate.land_type) data.land_type = landUpdate.land_type;
 			if (landUpdate.status) data.status = landUpdate.status;
-			const res = await callExt('update_land', JSON.stringify(data));
+			const res = await callExt('update_land', data);
 			if (res?.success) {
 				success = res?.data?.message || 'Land updated!';
 				landUpdate = { land_id: '', land_type: '', status: '' };
@@ -308,11 +303,11 @@
 	async function mintNFT() {
 		submitting = true; error = ''; success = '';
 		try {
-			const prepRes = await callExt('register_land_nft', JSON.stringify({
+			const prepRes = await callExt('register_land_nft', {
 				land_id: nftMint.land_id,
 				owner_principal: nftMint.owner_principal,
 				registered_by: ctx.principal || 'admin',
-			}));
+			});
 			if (!prepRes?.success) { error = prepRes?.error || 'Failed to prepare NFT'; return; }
 			const mintData = prepRes.data;
 			const mintRaw = await ctx.backend.mint_land_nft_for_parcel(
@@ -320,7 +315,7 @@
 			);
 			const mintRes = JSON.parse(mintRaw);
 			if (mintRes.success) {
-				await callExt('update_land_nft_token', JSON.stringify({ land_id: nftMint.land_id, nft_token_id: mintRes.token_id }));
+				await callExt('update_land_nft_token', { land_id: nftMint.land_id, nft_token_id: mintRes.token_id });
 				success = `NFT minted! Token ID: ${mintRes.token_id}`;
 				nftMint = { land_id: '', owner_principal: '' };
 				await loadLands();

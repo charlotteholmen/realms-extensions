@@ -33,20 +33,15 @@
 			: codexes,
 	);
 
-	async function callExt(fn: string, args: string = '{}') {
-		const raw = await ctx.backend.extension_sync_call(
-			JSON.stringify({ extension_name: 'codex_viewer', function_name: fn, args }),
-		);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.success === false) throw new Error(parsed.error || 'Request failed');
-		return parsed;
+	async function callExt(fn: string, args: Record<string, unknown> = {}) {
+		return await ctx.callSync(fn, args);
 	}
 
 	async function loadCodexes() {
 		loading = true;
 		error = '';
 		try {
-			const res = await callExt('get_all_codexes', '{}');
+			const res = await callExt('get_all_codexes');
 			codexes = res?.codexes ?? res?.data ?? (Array.isArray(res) ? res : []);
 		} catch (e: any) {
 			error = e?.message || String(e);
@@ -60,7 +55,7 @@
 		error = '';
 		try {
 			const codexId = codex._id || codex.id || codex.name;
-			const res = await callExt('get_codex_details', JSON.stringify({ codex_id: codexId }));
+			const res = await callExt('get_codex_details', { codex_id: codexId });
 			selectedCodex = res?.data ?? res;
 		} catch {
 			selectedCodex = codex;

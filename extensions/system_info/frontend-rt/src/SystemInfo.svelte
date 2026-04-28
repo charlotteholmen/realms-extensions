@@ -12,20 +12,8 @@
 		loading = true;
 		error = '';
 		try {
-			const raw = await ctx.backend.extension_sync_call(
-				JSON.stringify({
-					extension_name: 'system_info',
-					function_name: 'get_system_info',
-					kwargs: '{}',
-				})
-			);
-			const result = JSON.parse(raw);
-			if (result.success) {
-				data = result.data;
-				lastRefresh = new Date().toLocaleString();
-			} else {
-				error = result.error || 'Failed to fetch system info';
-			}
+			data = await ctx.callSync('get_system_info');
+			lastRefresh = new Date().toLocaleString();
 		} catch (e: any) {
 			error = e?.message || String(e);
 		} finally {
