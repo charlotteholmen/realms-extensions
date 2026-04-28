@@ -272,13 +272,13 @@ if [ -n "$TEST_CANISTERS_INIT" ]; then
             eval "sed $SED_REPLACEMENTS '$INIT_SCRIPT' > '$INIT_SCRIPT_TEMP'"
             
             echo '[INFO] Running init script with injected canister IDs...'
-            realms run --file "$INIT_SCRIPT_TEMP"
+            basilisk-toolkit exec -f "$INIT_SCRIPT_TEMP"
             
             # Clean up temp file
             rm -f "$INIT_SCRIPT_TEMP"
         else
             echo '[INFO] Running init script as-is (no replacements configured)...'
-            realms run --file "$INIT_SCRIPT"
+            basilisk-toolkit exec -f "$INIT_SCRIPT"
         fi
     else
         echo "[WARNING] Initialization script not found: $INIT_SCRIPT"
@@ -310,12 +310,12 @@ if [ "$BACKEND_TESTS_ENABLED" = "true" ] && [ "$TEST_TYPE" != "e2e_only" ]; then
                 # Perform sed replacements
                 eval "sed $SED_REPLACEMENTS '$PRE_SETUP' > '$PRE_SETUP_TEMP'"
                 
-                realms run --file "$PRE_SETUP_TEMP"
+                basilisk-toolkit exec -f "$PRE_SETUP_TEMP"
                 
                 # Clean up temp file
                 rm -f "$PRE_SETUP_TEMP"
             else
-                realms run --file "$PRE_SETUP"
+                basilisk-toolkit exec -f "$PRE_SETUP"
             fi
         fi
     fi
@@ -337,7 +337,7 @@ if [ "$BACKEND_TESTS_ENABLED" = "true" ] && [ "$TEST_TYPE" != "e2e_only" ]; then
                     python3 "$TEST_PATH"
                     popd > /dev/null
                 else
-                    realms run --file "$TEST_PATH" --wait
+                    basilisk-toolkit exec -f "$TEST_PATH"
                 fi
             else
                 echo "[WARNING] Test file not found: $TEST_PATH"

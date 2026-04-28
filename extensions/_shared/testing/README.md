@@ -112,7 +112,7 @@ my_extension/
 
 ### Writing Tests
 
-Backend tests use the `realms run` command to execute Python code inside the realm canister:
+Backend tests use `basilisk-toolkit exec` to execute Python code inside the realm canister:
 
 **`tests/test_my_extension.py`**:
 ```python
@@ -120,7 +120,7 @@ from kybra import ic
 from ggg import User
 
 def async_task():
-    """Entry point for realms run command"""
+    """Entry point for canister task execution."""
     ic.print("Starting test...")
     
     # Test your extension

@@ -558,7 +558,7 @@ _test_proposal_id = None
 
 
 def async_task():
-    """Entry point for realms run command."""
+    """Entry point for canister task execution."""
     print_info("=" * 60)
     print_info("Voting Extension E2E Tests")
     print_info("=" * 60)

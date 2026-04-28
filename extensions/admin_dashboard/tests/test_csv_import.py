@@ -17,7 +17,7 @@ from test_utils import (
 
 
 def async_task():
-    """Entry point for realms run command"""
+    """Entry point for canister task execution."""
     print_info("Starting CSV import tests...")
 
     # Test 1: Import users from CSV

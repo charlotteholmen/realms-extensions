@@ -13,12 +13,12 @@ echo ""
 # Test 2: Integration test (requires deployed realm)
 echo "🔗 Test 2: Integration tests"
 cd ../../..  # Go to realm root
-if command -v realms &> /dev/null; then
+if command -v basilisk-toolkit &> /dev/null; then
     echo "Running integration tests against deployed realm..."
-    realms run --file extensions/member_dashboard/tests/test_member_dashboard.py --wait
+    basilisk-toolkit exec -f extensions/member_dashboard/tests/test_member_dashboard.py
 else
-    echo "⚠️  Warning: 'realms' command not found. Skipping integration tests."
-    echo "   Install realms-gos or run these tests after deployment."
+    echo "⚠️  Warning: 'basilisk-toolkit' command not found. Skipping integration tests."
+    echo "   Install ic-basilisk-toolkit or run these tests after deployment."
 fi
 
 echo ""

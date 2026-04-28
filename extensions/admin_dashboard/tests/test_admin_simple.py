@@ -11,7 +11,7 @@ from test_utils import print_error, print_info, print_ok, query_ggg_entities
 
 
 def async_task():
-    """Entry point for realms run command"""
+    """Entry point for canister task execution."""
     print_info("Starting simple admin dashboard tests...")
 
     # Test 1: Query basic entities

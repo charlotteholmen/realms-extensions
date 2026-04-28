@@ -33,7 +33,7 @@ Integration test that runs against a deployed realm. Tests:
 **Run against deployed realm:**
 ```bash
 # From realm root
-realms run --file extensions/member_dashboard/tests/test_member_dashboard.py --wait
+basilisk-toolkit exec -f extensions/member_dashboard/tests/test_member_dashboard.py
 
 # Or using the helper script
 ./extensions/member_dashboard/tests/run_tests.sh

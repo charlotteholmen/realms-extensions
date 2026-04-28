@@ -106,7 +106,7 @@ alias vault-e2e='cd tests/e2e && ./run-e2e-tests.sh'
 
 2. **Run specific test file**:
    ```bash
-   realms run --file tests/test_vault.py --wait
+   basilisk-toolkit exec -f tests/test_vault.py
    ```
 
 3. **Debug E2E tests**:

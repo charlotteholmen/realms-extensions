@@ -66,7 +66,7 @@ The voting extension has been migrated from hardcoded data to using GGG (General
 2. Import the voting data:
    ```bash
    cd my-realm
-   realms import extensions/voting/data/voting_data.json
+   realms db import extensions/voting/data/voting_data.json
    ```
 
 ### For Existing Realms
@@ -83,7 +83,7 @@ The voting extension has been migrated from hardcoded data to using GGG (General
 
 3. Import the voting data:
    ```bash
-   realms import extensions/voting/data/voting_data.json
+   realms db import extensions/voting/data/voting_data.json
    ```
 
 ## Data Format
@@ -122,7 +122,7 @@ The `voting_data.json` follows the standard GGG entity format:
 2. **Consistency**: Uses the same entity system as other realm components
 3. **Relationships**: Proper relationships between Users, Proposals, and Votes
 4. **Scalability**: Can handle large numbers of proposals and votes
-5. **Data Import**: Can load initial data via standard `realms import` command
+5. **Data Import**: Can load initial data via `realms db import` command
 
 ## Testing
 
