@@ -52,8 +52,8 @@
 	async function initMap() {
 		if (!mapContainer || zones.length === 0) return;
 
-		const L = await import('leaflet');
-		const { cellToBoundary, gridDisk } = await import('h3-js');
+		const L = await import(/* @vite-ignore */ 'https://esm.sh/leaflet@1.9.4');
+		const { cellToBoundary, gridDisk } = await import(/* @vite-ignore */ 'https://esm.sh/h3-js@4.2.1');
 
 		const map = L.map(mapContainer).setView([20, 0], 2);
 
