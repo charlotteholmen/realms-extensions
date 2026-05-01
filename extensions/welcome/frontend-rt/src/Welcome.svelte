@@ -1,8 +1,6 @@
 <script lang="ts">
 	let { ctx }: { ctx: any } = $props();
 
-	const defaultWelcomeImage = '/images/background.png';
-
 	let realmData = $state<any>({});
 	let authenticated = $state(false);
 	let loading = $state(true);
@@ -10,10 +8,6 @@
 	let realmName = $derived(realmData?.realm_name || realmData?.name || '');
 	let realmDescription = $derived(realmData?.realm_description || realmData?.description || '');
 	let welcomeMessage = $derived(realmData?.realm_welcome_message || realmData?.welcome_message || '');
-	let realmLogo = $derived(realmData?.realm_logo || realmData?.logo || '');
-	let welcomeImage = $derived(realmData?.realm_welcome_image || realmData?.welcome_image || '');
-
-	let welcomeImageUrl = $derived(welcomeImage || defaultWelcomeImage);
 
 	$effect(() => {
 		const unsub = ctx.realmInfo?.subscribe?.((v: any) => {
@@ -45,7 +39,7 @@
 	<!-- Background image -->
 	<div class="absolute inset-0 z-0">
 		<img
-			src={welcomeImageUrl}
+			src="/images/background.png"
 			alt={realmName ? `${realmName} background` : 'Realm background'}
 			class="w-full h-full object-cover opacity-80 transition-opacity duration-1000"
 		/>
@@ -55,19 +49,11 @@
 	<!-- Top bar with logo -->
 	<div class="absolute top-0 left-0 w-full h-20 bg-black/50 backdrop-blur-md z-20 flex items-center px-6 md:px-10">
 		<div class="flex items-center gap-3">
-			{#if realmLogo}
-				<img
-					src={realmLogo}
-					alt={realmName || 'Realm'}
-					class="h-10 md:h-12 lg:h-14 w-auto drop-shadow-lg"
-				/>
-			{:else}
-				<img
-					src="/images/logo_horizontal_white.svg"
-					alt="Realms"
-					class="h-10 md:h-12 lg:h-14 w-auto drop-shadow-lg"
-				/>
-			{/if}
+			<img
+				src="/images/logo.png"
+				alt={realmName || 'Realm'}
+				class="h-10 md:h-12 lg:h-14 w-auto drop-shadow-lg"
+			/>
 		</div>
 	</div>
 
