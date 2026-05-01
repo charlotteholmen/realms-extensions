@@ -203,9 +203,10 @@
 				<div class="p-8">
 					<div class="flex items-center gap-3 mb-3">
 						<img
-							src={realmInfo.logo ? `/images/realm_logo.${realmInfo.logo.split('.').pop() || 'svg'}` : '/images/logo_sphere_only.svg'}
+							src="/images/logo.png"
 							alt={realmInfo.name || 'Realm'}
 							class="w-12 h-12 object-contain"
+							onerror="this.src='/images/logo_sphere_only.svg'"
 						/>
 						<h1 class="text-3xl font-bold text-gray-900">{realmInfo.name || 'Realm'}</h1>
 					</div>

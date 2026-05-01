@@ -2726,7 +2726,7 @@ function ol(e, t) {
               Hs(se, `background: linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('${p(ze) ?? ""}') center/cover no-repeat;`), Ot(Ke, "src", Q), Ot(Ke, "alt", p(r).name || "Realm"), Qe(wn, p(r).name || "Realm");
             },
             [
-              () => p(r).logo ? `/images/realm_logo.${p(r).logo.split(".").pop() || "svg"}` : "/images/logo_sphere_only.svg"
+              () => "/images/logo.png"
             ]
           ), ae(C, se);
         };
