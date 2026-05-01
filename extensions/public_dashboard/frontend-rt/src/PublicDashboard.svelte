@@ -227,7 +227,7 @@
 							src="/images/logo.png"
 							alt={realmData.name || 'Realm'}
 							class="w-12 h-12 object-contain"
-							onerror="this.src='/images/logo_sphere_only.svg'"
+							onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
 						/>
 						<h1 class="text-3xl font-bold text-gray-900">{realmData.name || 'Realm'}</h1>
 					</div>
