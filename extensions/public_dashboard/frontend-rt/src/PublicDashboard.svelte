@@ -216,12 +216,7 @@
 	{:else}
 		<!-- Realm Hero Section -->
 		{#if realmData}
-			{@const welcomeExt = realmData.welcome_image
-				? realmData.welcome_image.split('.').pop() || 'png'
-				: ''}
-			{@const bgImage = realmData.welcome_image
-				? `/images/welcome.${welcomeExt}`
-				: '/images/default_welcome.jpg'}
+			{@const bgImage = '/images/background.png'}
 			<div
 				class="rounded-lg border border-gray-200 shadow-md relative"
 				style="background: linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('{bgImage}') center/cover no-repeat;"

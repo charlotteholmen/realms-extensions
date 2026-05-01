@@ -2682,7 +2682,7 @@ function ol(e, t) {
       var S = ll(), $ = fs(S);
       {
         var R = (C) => {
-          const ie = /* @__PURE__ */ xn(() => p(r).welcome_image ? p(r).welcome_image.split(".").pop() || "png" : ""), ze = /* @__PURE__ */ xn(() => p(r).welcome_image ? `/images/welcome.${p(ie)}` : "/images/default_welcome.jpg");
+          const ze = /* @__PURE__ */ xn(() => "/images/background.png");
           var se = nl(), le = z(se), We = z(le), Ke = z(We), Wt = Z(Ke, 2), wn = z(Wt), Kt = Z(We, 2);
           {
             var ri = (Q) => {
