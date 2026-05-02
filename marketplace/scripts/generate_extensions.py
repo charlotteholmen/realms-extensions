@@ -119,7 +119,7 @@ def process_extensions() -> tuple[list[dict], list[dict]]:
         extension_id = manifest.get("name", manifest_path.parent.name)
         
         # Skip internal/hidden extensions
-        if manifest.get("url_path") is None and not manifest.get("show_in_sidebar", True):
+        if not manifest.get("show_in_sidebar", True):
             print(f"  ⏭️  Skipping hidden extension: {extension_id}")
             continue
         

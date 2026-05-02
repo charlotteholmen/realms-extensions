@@ -67,7 +67,6 @@ extensions/{your_extension_id}/
   "categories": ["public_services", "finances", "oversight", "system", "other"],
   "icon": "table",
   "doc_url": "https://github.com/yourname/your-extension",
-  "url_path": null,
   "show_in_sidebar": true
 }
 ```
@@ -82,7 +81,6 @@ extensions/{your_extension_id}/
 - `categories`: Grouping categories for sidebar organization
 - `icon`: Icon name (from Flowbite icons) (optional) (default: a default icon will be used)
 - `doc_url`: Documentation URL (optional)
-- `url_path`: Custom path for the extension (optional) (default: the extension name, e.g. `/welcome`)
 - `show_in_sidebar`: Whether to show the extension in the sidebar (optional) (default: true)
 
 

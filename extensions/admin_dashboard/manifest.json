@@ -12,6 +12,5 @@
   "profiles": [
     "admin"
   ],
-  "url_path": "admin",
   "show_in_sidebar": true
 }

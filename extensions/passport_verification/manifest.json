@@ -19,7 +19,6 @@
   ],
   "icon": "id_card",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/passport_verification",
-  "url_path": null,
   "show_in_sidebar": true,
   "identity_provider": {
     "name": "RariMe Passport",

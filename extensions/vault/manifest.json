@@ -29,7 +29,6 @@
   ],
   "icon": "wallet",
   "doc_url": "https://github.com/smart-social-contracts/realms-extension-vault",
-  "url_path": null,
   "show_in_sidebar": true,
   "python_dependencies": [
     "ic-basilisk>=0.10.6",
