@@ -13,7 +13,8 @@
 		error = '';
 		response = '';
 		try {
-			response = await ctx.callSync('greet', { name });
+			const result = await ctx.callSync('greet', { name });
+			response = typeof result === 'string' ? result : String(result);
 		} catch (e: any) {
 			error = e?.message ?? String(e);
 		} finally {
@@ -49,9 +50,7 @@
 		<button
 			onclick={greet}
 			disabled={!canSubmit}
-			class="mt-4 w-full px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg
-				hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40
-				disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+			class="hw-btn"
 		>
 			{#if loading}
 				<svg class="inline-block w-4 h-4 mr-2 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -77,3 +76,27 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.hw-btn {
+		margin-top: 1rem;
+		display: block;
+		width: 100%;
+		padding: 0.625rem 1rem;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: #ffffff !important;
+		background-color: #4f46e5 !important;
+		border: none !important;
+		border-radius: 0.5rem;
+		cursor: pointer;
+		transition: background-color 150ms;
+	}
+	.hw-btn:hover:not(:disabled) {
+		background-color: #4338ca !important;
+	}
+	.hw-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+</style>

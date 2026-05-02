@@ -2,10 +2,16 @@ def greet(args: str) -> str:
     """Return a hello world greeting for the given name.
 
     Args:
-        args: The name to greet (plain string).
+        args: JSON string, e.g. '{"name": "Alice"}'.
 
     Returns:
-        "Hello, <name>!" string.
+        JSON string with the greeting, e.g. '{"greeting": "Hello, Alice!"}'.
     """
-    name = (args or "").strip() or "World"
-    return f"Hello, {name}!"
+    import json
+    try:
+        data = json.loads(args) if args else {}
+        name = data.get("name", "").strip() if isinstance(data, dict) else ""
+    except (json.JSONDecodeError, AttributeError):
+        name = (args or "").strip()
+    name = name or "World"
+    return json.dumps(f"Hello, {name}!")
