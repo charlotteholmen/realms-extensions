@@ -101,6 +101,7 @@
 	let registries = $state<Registry[]>([]);
 	let registriesLoading = $state(true);
 	let registriesError = $state('');
+	let marketplaceCanisterId = $state('');
 
 	let installed = $state<InstalledItem[]>([]);
 	let installedLoading = $state(true);
@@ -175,7 +176,14 @@
 			const raw = await ctx.backend.status();
 			const resp = parseRaw(raw);
 			if (resp?.success && resp?.data?.status) {
-				registries = (resp.data.status.registries ?? []) as Registry[];
+				const canisters: { canister_id: string; canister_type: string }[] =
+					resp.data.status.canisters ?? [];
+				const fileRegs = canisters
+					.filter((c) => c.canister_type === 'file_registry')
+					.map((c) => ({ canister_id: c.canister_id, canister_type: c.canister_type }));
+				registries = fileRegs as Registry[];
+				const mp = canisters.find((c) => c.canister_type === 'marketplace');
+				marketplaceCanisterId = mp?.canister_id ?? '';
 			} else {
 				registries = [];
 				registriesError = 'status() did not return a success payload';
@@ -235,7 +243,13 @@
 		registryErrors = [];
 		const out: CatalogEntry[] = [];
 
-		for (const reg of registries) {
+		const regsToQuery = registries.length > 0
+			? registries
+			: FILE_REGISTRY_FALLBACK
+				? [{ canister_id: FILE_REGISTRY_FALLBACK, canister_type: 'file_registry' }]
+				: [];
+
+		for (const reg of regsToQuery) {
 			try {
 				const [exts, codices] = await Promise.all([
 					listRegistryExtensions(reg.canister_id),
@@ -631,9 +645,9 @@
 				<div class={cn('p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-300 mb-4')}>
 					Could not read realm.registries: {registriesError}
 				</div>
-			{:else if registries.length === 0}
+			{:else if registries.length === 0 && !FILE_REGISTRY_FALLBACK}
 				<p class={cn('text-sm text-gray-500 dark:text-gray-400 text-center py-12')}>
-					No file registries are linked to this realm. Connect one from the realm's settings before browsing.
+					No file registry configured for this realm. Set <code class={cn('bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs')}>file_registry_canister_id</code> via <code class={cn('bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs')}>set_canister_config</code> or add it to the deploy descriptor's <code class={cn('bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs')}>infra</code> section.
 				</p>
 			{:else}
 				{#if registryErrors.length > 0}
