@@ -106,7 +106,7 @@ pytest tests/ -v
 ## Code Style
 
 - **Python**: Follow PEP 8
-- **Logging**: Use `kybra_simple_logging` for all logging
+- **Logging**: Use `ic_python_logging` for all logging
 - **Error Handling**: Always catch exceptions and return JSON errors
 - **Documentation**: Add docstrings to all public functions
 

@@ -28,7 +28,7 @@ This extension integrates **Rarimo's zero-knowledge proof technology** to verify
 ## Technical Architecture
 
 **Frontend**: Svelte component with QR code display and status management
-**Backend**: Python Kybra extension using IC HTTP outcalls
+**Backend**: Python Basilisk extension using IC HTTP outcalls
 **External Service**: Rarimo API (`api.app.rarime.com`)
 **Proof System**: Zero-knowledge cryptography with NFC passport reading
 

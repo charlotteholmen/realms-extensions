@@ -606,7 +606,7 @@ def delete_task(args):
 
 def get_task_logs(args):
     """
-    Get recent logs from kybra-simple-logging for a specific task
+    Get recent logs from ic-python-logging for a specific task
     """
     try:
         # Parse args if it's a string

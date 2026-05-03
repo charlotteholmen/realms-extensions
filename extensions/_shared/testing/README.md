@@ -116,7 +116,7 @@ Backend tests use `basilisk-toolkit exec` to execute Python code inside the real
 
 **`tests/test_my_extension.py`**:
 ```python
-from kybra import ic
+from basilisk import ic
 from ggg import User
 
 def async_task():
@@ -204,7 +204,7 @@ If your init scripts need the actual deployed canister IDs (not hardcoded), use 
 
 1. **Use placeholders** in your init script (`tests/init_my_extension.py`):
 ```python
-from kybra import ic
+from basilisk import ic
 from extension_packages.my_extension.entities import Canisters
 
 # Placeholders will be replaced by test framework

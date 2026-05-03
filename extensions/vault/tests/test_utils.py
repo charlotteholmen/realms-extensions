@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Utility functions for vault extension testing.
-Adapted from kybra-simple-vault/tests/utils/
+Adapted from ic-vault/tests/utils/
 """
 
 import json

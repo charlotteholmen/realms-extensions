@@ -147,9 +147,9 @@ The extension exposes the following functions:
 - **Realms Version**: >=0.1.0, <0.2.x
 - **Python**: 3.10.7
 - **Required Dependencies**:
-  - kybra>=0.10.0
-  - kybra-simple-db>=1.0.0
-  - kybra-simple-logging>=1.0.0
+  - basilisk
+  - ic-python-db>=1.0.0
+  - ic-python-logging>=1.0.0
 
 ## Development
 

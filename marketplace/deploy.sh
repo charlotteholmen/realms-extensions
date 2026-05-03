@@ -41,10 +41,9 @@ fi
 
 echo "🚀 Deploying Marketplace to $NETWORK network..."
 
-# Kybra requires Python 3.10 (imp module removed in 3.12+)
 PYTHON_BIN="python3.10"
 if ! command -v $PYTHON_BIN &> /dev/null; then
-    echo "❌ Python 3.10 is required for Kybra but not found."
+    echo "❌ Python 3.10 is required but not found."
     echo "   Install with: sudo apt install python3.10 python3.10-venv"
     exit 1
 fi

@@ -71,9 +71,9 @@ The voting extension has been migrated from hardcoded data to using GGG (General
 
 ### For Existing Realms
 
-1. Clear the Kybra build cache:
+1. Clear the Basilisk build cache:
    ```bash
-   rm -rf .kybra/realm_backend
+   rm -rf .basilisk/realm_backend
    ```
 
 2. Redeploy the realm:
@@ -146,7 +146,7 @@ After migration, verify that:
 - Solution: Ensure voting_data.json has been imported and the user IDs in the `proposer` field exist
 
 **Issue**: Build errors about missing imports
-- Solution: Clear Kybra cache with `rm -rf .kybra/realm_backend` and rebuild
+- Solution: Clear Basilisk cache with `rm -rf .basilisk/realm_backend` and rebuild
 
 **Issue**: Vote casting fails
 - Solution: Check that the user and proposal entities exist in the database

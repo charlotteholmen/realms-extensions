@@ -4,8 +4,8 @@
     "marketplace_backend": {
       "type": "custom",
       "candid": "marketplace_backend/marketplace_backend.did",
-      "build": "python -m kybra marketplace_backend marketplace_backend/main.py",
-      "wasm": ".kybra/marketplace_backend/marketplace_backend.wasm",
+      "build": "python -m basilisk marketplace_backend marketplace_backend/main.py",
+      "wasm": ".basilisk/marketplace_backend/marketplace_backend.wasm",
       "gzip": true,
       "declarations": {
         "node_compatibility": true

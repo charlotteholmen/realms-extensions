@@ -39,7 +39,7 @@ realms-extension-vault/
 - Version: `0.1.0`
 - Realms compatibility: `>=0.1.0, <0.2.x`
 - Entry points: `get_balance`, `get_status`, `get_transactions`, `transfer`, `refresh`
-- Dependencies: kybra, kybra-simple-db, kybra-simple-logging
+- Dependencies: basilisk, ic-python-db, ic-python-logging
 
 **backend/entry.py**
 - `get_balance(args)` - Get balance for a principal
@@ -199,7 +199,7 @@ gh release create v0.1.0 vault-0.1.0.zip \
 
 - **Realms**: >=0.1.0, <0.2.x
 - **Python**: 3.10.7
-- **Kybra**: >=0.10.0
+- **Basilisk**: latest
 
 ## Status
 

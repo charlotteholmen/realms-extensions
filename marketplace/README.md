@@ -6,7 +6,7 @@ An independent marketplace canister system for the Realms platform, enabling dev
 
 ```
 extensions/marketplace/
-├── marketplace_backend/     # Python/Kybra backend canister
+├── marketplace_backend/     # Python/Basilisk backend canister
 │   ├── api/                # Business logic
 │   ├── core/               # Candid types and entities
 │   ├── main.py            # Canister entry point
@@ -39,7 +39,7 @@ extensions/marketplace/
 
 ### Prerequisites
 - dfx (Internet Computer SDK)
-- Python 3.10+ with Kybra
+- Python 3.10+ with Basilisk
 - Node.js 18+
 
 ### Local Development

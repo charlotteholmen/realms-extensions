@@ -25,9 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct integration with realm entities for atomic operations
 
 ### Dependencies
-- kybra>=0.10.0
-- kybra-simple-db>=1.0.0
-- kybra-simple-logging>=1.0.0
+- basilisk
+- ic-python-db>=1.0.0
+- ic-python-logging>=1.0.0
 
 ### Security
 - ⚠️ WARNING: Not production-ready, use only for testing
