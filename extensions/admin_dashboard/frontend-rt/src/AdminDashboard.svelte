@@ -1,9 +1,11 @@
 <script lang="ts">
+	import InvitationManager from './InvitationManager.svelte';
+
 	let { ctx }: { ctx: any } = $props();
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
 
-	type TabId = 'browse' | 'export' | 'import';
+	type TabId = 'browse' | 'export' | 'import' | 'invitations';
 
 	interface EntityType {
 		value: string;
@@ -447,6 +449,7 @@
 		{ id: 'browse', label: 'Browse' },
 		{ id: 'export', label: 'Export' },
 		{ id: 'import', label: 'Import' },
+		{ id: 'invitations', label: 'Invitations' },
 	];
 
 	let exportJson = $derived(exportResult ? JSON.stringify(exportResult, null, 2) : '');
@@ -792,6 +795,9 @@
 		</div>
 
 	<!-- ==================== IMPORT TAB ==================== -->
+	{:else if activeTab === 'invitations'}
+		<InvitationManager {ctx} />
+
 	{:else if activeTab === 'import'}
 		<div class="bg-white shadow-sm rounded-lg p-6">
 			<h2 class="text-lg font-semibold text-gray-900 mb-4">Import Entities</h2>

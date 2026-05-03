@@ -14,14 +14,20 @@ import base64
 import csv
 import json
 import traceback
-from datetime import datetime
 from io import StringIO
 from typing import Any, Dict, List
 
 from ic_python_db import Database, Entity
 from ic_python_logging import get_logger
 
-from .models import RegistrationCode
+from ggg.system.registration_code import (
+    RegistrationCode,
+    consume_registration_code as _consume,
+    create_registration_code as _create,
+    list_registration_codes as _list_codes,
+    revoke_registration_code as _revoke,
+    validate_registration_code as _validate,
+)
 
 logger = get_logger("extensions.admin_dashboard")
 
@@ -47,7 +53,6 @@ def extension_sync_call(method_name: str, args: dict):
     """
     Synchronous extension API calls for admin operations
     """
-    # Method mapping with argument requirements
     methods = {
         "import_data": (import_data, True),
         "export_data": (export_data, True),
@@ -56,6 +61,8 @@ def extension_sync_call(method_name: str, args: dict):
         "validate_registration_code": (validate_registration_code, True),
         "get_registration_codes": (get_registration_codes, True),
         "get_entity_types": (get_entity_types, False),
+        "consume_registration_code": (consume_registration_code, True),
+        "revoke_registration_code": (revoke_registration_code, True),
     }
 
     if method_name not in methods:
@@ -93,7 +100,6 @@ def export_data(args):
         all_entities = []
         codexes = []
 
-        # Iterate registered entity types (de-duplicated)
         seen = set()
         for cls in db._entity_types.values():
             name = cls.__name__
@@ -101,7 +107,6 @@ def export_data(args):
                 continue
             seen.add(name)
 
-            # Filter if specific types requested
             if requested_types and name not in requested_types:
                 continue
 
@@ -167,7 +172,6 @@ def import_data(args):
         if not data_content:
             return {"success": False, "error": "No data provided"}
 
-        # Parse input
         parsed_data = []
         if data_format == "csv":
             csv_reader = csv.DictReader(StringIO(data_content))
@@ -183,8 +187,6 @@ def import_data(args):
         logger.debug(f"Importing {len(parsed_data)} records")
         results = process_bulk_import(parsed_data)
 
-        # Clear in-memory entity context to prevent state bloat across
-        # successive canister calls (kybra persists the Python heap between calls)
         Entity._context.clear()
 
         return {
@@ -216,7 +218,6 @@ def process_bulk_import(data: List[Dict[str, Any]]) -> Dict[str, Any]:
         try:
             entity = Entity.deserialize(record, level=1)
 
-            # Codex entities may have base64-encoded code
             if record.get("_type") == "Codex" and "code" in record:
                 code_val = record["code"]
                 if isinstance(code_val, str) and code_val.startswith("base64:"):
@@ -272,33 +273,51 @@ def delete_entity(args):
 
 
 def generate_registration_url(args: dict):
-    """Generate a registration URL for a user"""
-    try:
-        user_id = args.get("user_id")
-        created_by = args.get("created_by", "admin")
-        frontend_url = args.get("frontend_url", "https://localhost:3000")
-        email = args["email"]
-        expires_in_hours = args.get("expires_in_hours", 24)
+    """Generate a registration URL for a user.
 
+    Delegates to ggg.system.registration_code; kept for extension API compat.
+    """
+    try:
+        if isinstance(args, str):
+            args = json.loads(args)
+
+        user_id = args.get("user_id")
         if not user_id:
             return {"success": False, "error": "user_id is required"}
 
-        # Create registration code
-        reg_code = RegistrationCode.create(
+        from datetime import datetime
+
+        reg_code = _create(
+            code_hash=args.get("code_hash", ""),
+            profile=args.get("profile", "member"),
+            max_uses=args.get("max_uses", 1),
+            expires_in_hours=args.get("expires_in_hours", 24),
+            created_by=args.get("created_by", "admin"),
             user_id=user_id,
-            created_by=created_by,
-            frontend_url=frontend_url,
-            email=email,
-            expires_in_hours=expires_in_hours,
+            frontend_url=args.get("frontend_url", "https://localhost:3000"),
+            email=args.get("email", ""),
         )
+
+        code_hash = args.get("code_hash")
+        if code_hash:
+            return {
+                "success": True,
+                "data": {
+                    "code_hash": code_hash[:8],
+                    "expires_at": datetime.fromtimestamp(reg_code.expires_at).isoformat(),
+                    "profile": args.get("profile", "member"),
+                },
+            }
 
         return {
             "success": True,
             "data": {
                 "code": reg_code.code,
+                "code_hash": reg_code.code_hash,
                 "registration_url": reg_code.registration_url,
                 "expires_at": datetime.fromtimestamp(reg_code.expires_at).isoformat(),
                 "user_id": reg_code.user_id,
+                "profile": args.get("profile", "member"),
             },
         }
     except Exception as e:
@@ -306,73 +325,93 @@ def generate_registration_url(args: dict):
 
 
 def validate_registration_code(args: dict):
-    """Validate a registration code"""
+    """Validate a registration code. Delegates to ggg.
+
+    Accepts plaintext ``code`` or pre-hashed ``code_hash``.  When plaintext
+    is provided it is SHA-256 hashed before calling the core function.
+    """
     try:
-        code = args.get("code")
-        if not code:
-            return {"success": False, "error": "code is required"}
+        if isinstance(args, str):
+            args = json.loads(args)
 
-        # Find registration code
-        reg_code = RegistrationCode.find_by_code(code)
-        if not reg_code:
-            return {"success": False, "error": "Invalid registration code"}
+        code_hash = args.get("code_hash", "")
+        if not code_hash:
+            import hashlib
+            plaintext = args.get("code", "")
+            if not plaintext:
+                return {"success": False, "error": "code or code_hash is required"}
+            code_hash = hashlib.sha256(plaintext.encode()).hexdigest()
 
-        # Check if valid
-        if not reg_code.is_valid():
-            current_timestamp = int(datetime.utcnow().timestamp())
-            reason = (
-                "expired" if reg_code.expires_at < current_timestamp else "already used"
-            )
-            return {"success": False, "error": f"Registration code is {reason}"}
+        return _validate(code_hash)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
-        return {
-            "success": True,
-            "data": {
-                "user_id": reg_code.user_id,
-                "email": reg_code.email,
-                "expires_at": datetime.fromtimestamp(reg_code.expires_at).isoformat(),
-                "created_by": reg_code.created_by,
-            },
-        }
+
+def consume_registration_code(args: dict):
+    """Consume a registration code. Delegates to ggg.
+
+    Accepts plaintext ``code`` or pre-hashed ``code_hash``.
+    """
+    try:
+        if isinstance(args, str):
+            args = json.loads(args)
+
+        code_hash = args.get("code_hash", "")
+        if not code_hash:
+            import hashlib
+            plaintext = args.get("code", "")
+            if not plaintext:
+                return {"success": False, "error": "code or code_hash is required"}
+            code_hash = hashlib.sha256(plaintext.encode()).hexdigest()
+
+        return _consume(code_hash, args.get("principal", ""))
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def revoke_registration_code(args: dict):
+    """Revoke a registration code. Delegates to ggg."""
+    try:
+        if isinstance(args, str):
+            args = json.loads(args)
+        return _revoke(code=args.get("code"), code_hash=args.get("code_hash"))
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
 def get_registration_codes(args: dict):
-    """Get registration codes with optional filtering"""
+    """List registration codes. Delegates to ggg."""
     try:
+        if isinstance(args, str):
+            args = json.loads(args)
+
         user_id = args.get("user_id")
         include_used = args.get("include_used", False)
 
         if user_id:
+            from datetime import datetime
             codes = RegistrationCode.find_by_user_id(user_id)
-        else:
-            codes = RegistrationCode.instances()
+            if not include_used:
+                codes = [c for c in codes if c.used == 0]
+            return {
+                "success": True,
+                "data": [
+                    {
+                        "code_hash": c.code_hash[:8],
+                        "user_id": c.user_id,
+                        "email": c.email,
+                        "profile": c.profile,
+                        "expires_at": datetime.fromtimestamp(c.expires_at).isoformat(),
+                        "uses_count": c.uses_count,
+                        "max_uses": c.max_uses,
+                        "revoked": c.revoked == 1,
+                        "is_valid": c.is_valid(),
+                        "created_by": c.created_by,
+                    }
+                    for c in codes
+                ],
+            }
 
-        # Filter out used codes if requested
-        if not include_used:
-            codes = [code for code in codes if code.used == 0]
-
-        return {
-            "success": True,
-            "data": [
-                {
-                    "code": code.code,
-                    "user_id": code.user_id,
-                    "email": code.email,
-                    "registration_url": code.registration_url,
-                    "expires_at": datetime.fromtimestamp(code.expires_at).isoformat(),
-                    "used": code.used == 1,
-                    "used_at": (
-                        datetime.fromtimestamp(code.used_at).isoformat()
-                        if code.used_at > 0
-                        else None
-                    ),
-                    "created_by": code.created_by,
-                    "is_valid": code.is_valid(),
-                }
-                for code in codes
-            ],
-        }
+        return {"success": True, "data": _list_codes(include_used=include_used)}
     except Exception as e:
         return {"success": False, "error": str(e)}

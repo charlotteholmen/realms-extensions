@@ -1,12 +1,16 @@
 {
   "name": "hello_world",
-  "version": "0.1.0",
-  "description": "Simple hello world extension — runtime extension demo",
+  "version": "0.1.1",
+  "description": "Simple hello world extension \u2014 runtime extension demo",
   "author": "Realms Team",
   "permissions": [],
-  "profiles": ["member", "admin"],
-  "categories": ["other"],
+  "profiles": [
+    "member",
+    "admin"
+  ],
+  "categories": [
+    "other"
+  ],
   "icon": "hand_wave",
-  "show_in_sidebar": true,
-  "url_path": null
+  "show_in_sidebar": true
 }
