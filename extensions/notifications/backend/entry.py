@@ -115,36 +115,34 @@ def _notification_to_dict(notification: Notification) -> Dict[str, Any]:
 
 
 def get_notifications(args: str = "{}"):
-    """Get all notifications for the current user"""
+    """Get notifications for the current user"""
     try:
         logger.info("Fetching notifications")
 
         params = json.loads(args) if args else {}
         user_id = params.get("user_id")
+        if not user_id and _ic is not None:
+            user_id = _ic.caller().to_str()
         logger.info(f"Looking for notifications for user_id: {user_id}")
 
         # Get all notifications from database
         notifications = Notification.instances()
         logger.info(f"Total notifications in DB: {len(notifications)}")
 
-        # Filter by user if user_id provided (principal string)
+        # Always filter by user
+        filtered = []
         if user_id:
-            filtered = []
             for n in notifications:
                 try:
                     u = n.user
                     if not u:
-                        logger.debug(f"Notification {n._id}: no user attached, skipping")
                         continue
-                    # User.id stores the principal string; also check _id as fallback
                     if (getattr(u, "id", None) == user_id or
                             getattr(u, "_id", None) == user_id):
                         filtered.append(n)
-                    else:
-                        logger.debug(f"Notification {n._id}: user {getattr(u, 'id', '?')} != {user_id}")
                 except Exception as exc:
                     logger.warning(f"Notification {n._id}: error resolving user: {exc}")
-            notifications = filtered
+        notifications = filtered
 
         # Convert to dict format
         notifications_list = [_notification_to_dict(n) for n in notifications]

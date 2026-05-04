@@ -68,13 +68,8 @@ def get_dashboard_summary(args: str) -> Async[str]:
         all_services = Service.instances()
         all_invoices = Invoice.instances()
 
-        # Filter by user if provided
-        if user_id and user_id != "anonymous":
-            user_services = [s for s in all_services if s.user and s.user.id == user_id]
-            user_invoices = [i for i in all_invoices if i.user and i.user.id == user_id]
-        else:
-            user_services = list(all_services)
-            user_invoices = list(all_invoices)
+        user_services = [s for s in all_services if s.user and s.user.id == user_id]
+        user_invoices = [i for i in all_invoices if i.user and i.user.id == user_id]
 
         # Calculate summary
         services_approaching = len(
@@ -116,16 +111,12 @@ def get_public_services(args: str) -> Async[str]:
     try:
         logger.info(f"get_public_services called with args: {args}")
         params = json.loads(args)
-        user_id = params.get("user_id", "anonymous")
+        user_id = params.get("user_id") or ic.caller().to_str()
 
         # Get services from database
         all_services = Service.instances()
 
-        # Filter by user if user_id provided
-        if user_id and user_id != "anonymous":
-            services = [s for s in all_services if s.user and s.user.id == user_id]
-        else:
-            services = list(all_services)
+        services = [s for s in all_services if s.user and s.user.id == user_id]
 
         # Convert to dict format
         services_list = [_service_to_dict(s) for s in services]
@@ -234,16 +225,12 @@ def get_tax_information(args: str) -> str:
     try:
         logger.info(f"get_tax_information called with args: {args}")
         params = json.loads(args) if args else {}
-        user_id = params.get("user_id", "anonymous")
+        user_id = params.get("user_id") or ic.caller().to_str()
 
         # Get invoices from database
         all_invoices = Invoice.instances()
 
-        # Filter by user if user_id provided
-        if user_id and user_id != "anonymous":
-            invoices = [i for i in all_invoices if i.user and i.user.id == user_id]
-        else:
-            invoices = list(all_invoices)
+        invoices = [i for i in all_invoices if i.user and i.user.id == user_id]
 
         # Convert to dict format
         invoices_list = [_invoice_to_dict(i) for i in invoices]
@@ -314,7 +301,6 @@ def get_vault_address(args: str) -> str:
                 "data": {
                     "vault_principal": vault_principal,
                     "network": "ICP",
-                    "currency": "ckBTC",
                 },
             }
         )
