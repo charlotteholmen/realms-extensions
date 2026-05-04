@@ -46,14 +46,21 @@
 			const userId = ctx.principal || '';
 			const result = await callAsync('get_verification_link', { user_id: userId });
 
-			if (result?.data?.attributes) {
-				const verificationUrl =
-					result.data.attributes.rarime_app_url || result.data.attributes.get_proof_params;
-				verificationLink = verificationUrl;
-				qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verificationUrl)}`;
+		if (result?.data?.attributes) {
+			if (result.data.attributes.test_mode) {
 				sessionId = result.data.id || userId;
-				step = 'pending';
-			} else if (result?.link || result?.data?.link) {
+				step = 'verified';
+				verificationResult = result.data.attributes;
+				await createPassportIdentity(result);
+				return;
+			}
+			const verificationUrl =
+				result.data.attributes.rarime_app_url || result.data.attributes.get_proof_params;
+			verificationLink = verificationUrl;
+			qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verificationUrl)}`;
+			sessionId = result.data.id || userId;
+			step = 'pending';
+		} else if (result?.link || result?.data?.link) {
 				verificationLink = result.link ?? result.data.link;
 				qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verificationLink)}`;
 				sessionId = userId;

@@ -107,6 +107,21 @@ def get_verification_link(args: str) -> Async[str]:
 
     logger.info(f"🔗 Getting verification link for session: {session_id}")
 
+    from config import TEST_MODE_SKIP_PASSPORT_ZKPROOF
+    if TEST_MODE_SKIP_PASSPORT_ZKPROOF:
+        logger.info(f"🧪 TEST MODE: Returning mock verification link for {session_id}")
+        return json.dumps({
+            "data": {
+                "id": session_id,
+                "type": "verification",
+                "attributes": {
+                    "status": "verified",
+                    "rarime_app_url": "https://test-mode/passport-bypass",
+                    "test_mode": True
+                }
+            }
+        })
+
     payload = {
         "data": {
             "id": session_id,
@@ -173,6 +188,17 @@ def check_verification_status(args: str) -> Async[str]:
     """Check the verification status from Rarimo API"""
     session_id = get_session_id(args)
     logger.info(f"🔍 Checking verification status for session: {session_id}")
+
+    from config import TEST_MODE_SKIP_PASSPORT_ZKPROOF
+    if TEST_MODE_SKIP_PASSPORT_ZKPROOF:
+        logger.info(f"🧪 TEST MODE: Skipping Rarimo API, returning verified for {session_id}")
+        return json.dumps({
+            "data": {
+                "id": session_id,
+                "type": "verification",
+                "attributes": {"status": "verified", "test_mode": True}
+            }
+        })
 
     logger.info("📤 Sending HTTP GET request to check status")
     logger.info("🔄 Using 100M cycles for status check request")
