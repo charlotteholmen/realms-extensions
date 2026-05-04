@@ -99,16 +99,11 @@ def get_event_id(args: str) -> str:
     return app_id
 
 
-@update
-def get_verification_link(args: str) -> Async[str]:
-    """Get the verification link from Rarimo API"""
-
-    session_id = get_session_id(args)
-
-    logger.info(f"🔗 Getting verification link for session: {session_id}")
-
+def get_verification_link(args: str):
+    """Get the verification link -- bypasses Rarimo API in test mode."""
     from config import TEST_MODE_SKIP_PASSPORT_ZKPROOF
     if TEST_MODE_SKIP_PASSPORT_ZKPROOF:
+        session_id = get_session_id(args)
         logger.info(f"🧪 TEST MODE: Returning mock verification link for {session_id}")
         return json.dumps({
             "data": {
@@ -121,6 +116,14 @@ def get_verification_link(args: str) -> Async[str]:
                 }
             }
         })
+    return _get_verification_link_async(args)
+
+
+@update
+def _get_verification_link_async(args: str) -> Async[str]:
+    """Async implementation that calls Rarimo API."""
+    session_id = get_session_id(args)
+    logger.info(f"🔗 Getting verification link for session: {session_id}")
 
     payload = {
         "data": {
@@ -183,14 +186,11 @@ def get_verification_link(args: str) -> Async[str]:
     )
 
 
-@update
-def check_verification_status(args: str) -> Async[str]:
-    """Check the verification status from Rarimo API"""
-    session_id = get_session_id(args)
-    logger.info(f"🔍 Checking verification status for session: {session_id}")
-
+def check_verification_status(args: str):
+    """Check verification status -- bypasses Rarimo API in test mode."""
     from config import TEST_MODE_SKIP_PASSPORT_ZKPROOF
     if TEST_MODE_SKIP_PASSPORT_ZKPROOF:
+        session_id = get_session_id(args)
         logger.info(f"🧪 TEST MODE: Skipping Rarimo API, returning verified for {session_id}")
         return json.dumps({
             "data": {
@@ -199,7 +199,14 @@ def check_verification_status(args: str) -> Async[str]:
                 "attributes": {"status": "verified", "test_mode": True}
             }
         })
+    return _check_verification_status_async(args)
 
+
+@update
+def _check_verification_status_async(args: str) -> Async[str]:
+    """Async implementation that calls Rarimo API."""
+    session_id = get_session_id(args)
+    logger.info(f"🔍 Checking verification status for session: {session_id}")
     logger.info("📤 Sending HTTP GET request to check status")
     logger.info("🔄 Using 100M cycles for status check request")
 
