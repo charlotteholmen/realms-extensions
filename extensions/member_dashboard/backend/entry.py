@@ -30,9 +30,6 @@ def _invoice_to_dict(
     invoice: Invoice, include_deposit_address: bool = True
 ) -> Dict[str, Any]:
     """Convert Invoice entity to dictionary format with optional deposit address."""
-    vault_principal = ic.id().to_str()
-
-    # Get recipient name from relationship if available
     recipient_name = None
     if hasattr(invoice, 'recipient') and invoice.recipient:
         recipient_name = getattr(invoice.recipient, 'id', None)
@@ -40,8 +37,9 @@ def _invoice_to_dict(
     result = {
         "id": invoice.id,
         "recipient": recipient_name,
-        "amount": invoice.amount,
-        "currency": getattr(invoice, "currency", "ckBTC") or "ckBTC",
+        "amount": invoice.get_nonce_amount_human(),
+        "amount_base": invoice.amount,
+        "currency": invoice.currency,
         "due_on": getattr(invoice, "due_on", None) or getattr(invoice, "due_date", None),
         "type": getattr(invoice, "type", None),
         "metadata": invoice.metadata,
@@ -50,10 +48,7 @@ def _invoice_to_dict(
     }
 
     if include_deposit_address:
-        result["deposit_address"] = {
-            "owner": vault_principal,
-            "subaccount": invoice.get_subaccount_hex(),
-        }
+        result["payment"] = invoice.get_payment_address()
 
     return result
 
@@ -311,13 +306,10 @@ def get_vault_address(args: str) -> str:
 
 def get_invoice_deposit_address(args: str) -> str:
     """
-    Get the deposit address for a specific invoice.
+    Get the payment instructions for a specific invoice.
 
-    Args:
-        args: JSON string with {"invoice_id": "..."}
-
-    Returns:
-        JSON string with owner (vault principal) and subaccount
+    Returns nonce-based or subaccount-based info depending on the
+    SUBACCOUNT_PAYMENTS_ENABLED flag in Invoice.
     """
     try:
         logger.info(f"get_invoice_deposit_address called with args: {args}")
@@ -327,26 +319,16 @@ def get_invoice_deposit_address(args: str) -> str:
         if not invoice_id:
             return json.dumps({"success": False, "error": "invoice_id is required"})
 
-        # Find the invoice
         invoice = Invoice[invoice_id]
         if not invoice:
             return json.dumps({"success": False, "error": "Invoice not found"})
 
-        vault_principal = ic.id().to_str()
+        payment = invoice.get_payment_address()
+        payment["invoice_id"] = invoice_id
+        if "currency" not in payment:
+            payment["currency"] = invoice.currency
 
-        return json.dumps(
-            {
-                "success": True,
-                "data": {
-                    "owner": vault_principal,
-                    "subaccount": invoice.get_subaccount_hex(),
-                    "subaccount_bytes": invoice.get_subaccount_list(),
-                    "invoice_id": invoice_id,
-                    "amount_due": invoice.amount,
-                    "currency": getattr(invoice, "currency", "ckBTC") or "ckBTC",
-                },
-            }
-        )
+        return json.dumps({"success": True, "data": payment})
     except Exception as e:
         logger.error(
             f"Error in get_invoice_deposit_address: {str(e)}\n{traceback.format_exc()}"

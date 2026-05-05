@@ -225,6 +225,15 @@
 		}
 	}
 
+	function getPaymentCliCommand(info: any): string {
+		if (!info) return '';
+		if (info.amount_raw != null) {
+			const token = (info.currency || 'token').toLowerCase();
+			return `dfx canister call ${token}_backend icrc1_transfer '(record { to = record { owner = principal "${info.principal}" }; amount = ${info.amount_raw} })' --network ic`;
+		}
+		return `dfx canister call token_backend icrc1_transfer '(record { to = record { owner = principal "${info.principal}"; subaccount = opt blob "${info.subaccount}" }; amount = ${info.amount_raw || 0} })' --network ic`;
+	}
+
 	async function openPaymentModal(record: any) {
 		selectedRecord = record;
 		showPaymentModal = true;
@@ -499,8 +508,8 @@
 										<td class="px-4 py-3">
 											<div class="font-medium text-gray-900 dark:text-white text-sm">{record.metadata || 'Invoice'}</div>
 										</td>
-										<td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">{record.amount}</td>
-										<td class="px-4 py-3 text-gray-700 dark:text-gray-300">{record.currency || 'ckBTC'}</td>
+									<td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">{record.amount}</td>
+									<td class="px-4 py-3 text-gray-700 dark:text-gray-300">{record.currency}</td>
 										<td class="px-4 py-3">
 											<span class={cn('px-2.5 py-0.5 text-xs font-medium rounded-full', getStatusColor(record.status))}>{record.status}</span>
 										</td>
@@ -559,8 +568,8 @@
 											<span class="ml-2 font-medium text-gray-900 dark:text-white">{paymentInfo.invoice_id}</span>
 										</div>
 										<div>
-											<span class="text-gray-500 dark:text-gray-400">Amount Due:</span>
-											<span class="ml-2 font-bold text-gray-900 dark:text-white">{paymentInfo.amount_due} {paymentInfo.currency}</span>
+											<span class="text-gray-500 dark:text-gray-400">Currency:</span>
+											<span class="ml-2 font-bold text-gray-900 dark:text-white">{paymentInfo.currency}</span>
 										</div>
 									</div>
 								</div>
@@ -568,29 +577,38 @@
 									<h4 class="font-semibold text-gray-900 dark:text-white mb-3">Transfer Details</h4>
 									<div class="space-y-3">
 										<div>
-											<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Owner (Canister ID)</label>
-											<code class="block px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded font-mono text-sm break-all text-gray-800 dark:text-gray-200">{paymentInfo.owner}</code>
+											<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recipient (Canister ID)</label>
+											<code class="block px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded font-mono text-sm break-all text-gray-800 dark:text-gray-200">{paymentInfo.principal}</code>
 										</div>
-										<div>
-											<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subaccount (Hex)</label>
-											<code class="block px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded font-mono text-xs break-all text-gray-800 dark:text-gray-200">{paymentInfo.subaccount}</code>
-										</div>
+										{#if paymentInfo.amount_human != null}
+											<div>
+												<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Exact Amount to Send</label>
+												<code class="block px-3 py-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded font-mono text-lg font-bold text-blue-800 dark:text-blue-200">{paymentInfo.amount_human} {paymentInfo.currency}</code>
+												<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">The unique last digits identify your invoice — send this <strong>exact</strong> amount.</p>
+											</div>
+										{/if}
+										{#if paymentInfo.subaccount}
+											<div>
+												<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subaccount (Hex)</label>
+												<code class="block px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded font-mono text-xs break-all text-gray-800 dark:text-gray-200">{paymentInfo.subaccount}</code>
+											</div>
+										{/if}
 									</div>
 								</div>
+								{#if paymentInfo.note}
+									<div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+										<p class="text-sm text-amber-800 dark:text-amber-200">{paymentInfo.note}</p>
+									</div>
+								{/if}
 								<div>
-									<h4 class="font-semibold text-gray-900 dark:text-white mb-2">ICW CLI Command</h4>
+									<h4 class="font-semibold text-gray-900 dark:text-white mb-2">DFX CLI Command</h4>
 									<div class="bg-gray-900 rounded-lg p-4 relative">
-										<pre class="text-green-400 font-mono text-sm whitespace-pre-wrap">icw --token ckbtc transfer \
-  {paymentInfo.owner} {paymentInfo.amount_due} \
-  --subaccount {paymentInfo.subaccount}</pre>
+										<pre class="text-green-400 font-mono text-sm whitespace-pre-wrap">{getPaymentCliCommand(paymentInfo)}</pre>
 										<button
-											onclick={() => clipboardCopy(`icw --token ckbtc transfer ${paymentInfo.owner} ${paymentInfo.amount_due} --subaccount ${paymentInfo.subaccount}`)}
+											onclick={() => clipboardCopy(getPaymentCliCommand(paymentInfo))}
 											class="absolute top-2 right-2 p-2 rounded hover:bg-gray-700 transition-colors text-gray-400 hover:text-white text-sm"
 										>{copied ? '✓' : '📋'}</button>
 									</div>
-									<p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
-										Install ICW: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs">pip install icw</code>
-									</p>
 								</div>
 							{:else}
 								<div class="text-red-600 dark:text-red-400 text-center py-4">Failed to load payment details.</div>
