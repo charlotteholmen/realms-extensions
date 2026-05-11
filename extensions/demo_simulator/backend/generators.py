@@ -223,14 +223,18 @@ def generate_vote_batch(state_data, count):
 
 
 def generate_land_batch(state_data, count):
-    """Generate land parcels with zones using proper H3 indices."""
+    """Generate land parcels with zones."""
     from ggg import Land, User, Zone
 
-    try:
-        from core.h3 import latlng_to_cell
-        h3_available = True
-    except ImportError:
-        h3_available = False
+    def _make_h3(lat, lng, res):
+        """Generate a plausible H3-like index from coordinates."""
+        try:
+            from core.h3 import latlng_to_cell
+            return latlng_to_cell(lat, lng, res)
+        except Exception:
+            lat_hex = abs(int(lat * 10000)) & 0xFFFFFF
+            lng_hex = abs(int(lng * 10000)) & 0xFFFFFF
+            return f"8{res}{lat_hex:06x}{lng_hex:06x}f"
 
     total_users = state_data.get("total_users_created", 0)
     base_idx = state_data.get("total_lands_created", 0)
@@ -264,11 +268,7 @@ def generate_land_batch(state_data, count):
                 pass
 
         zone_name = rng.choice(ZONE_NAMES)
-        parcel_res = 9
-        if h3_available:
-            h3_idx = latlng_to_cell(lat, lng, parcel_res)
-        else:
-            h3_idx = f"89{abs(int(lat * 1000)):06x}{abs(int(lng * 1000)):06x}f"
+        h3_idx = _make_h3(lat, lng, 9)
 
         zone = Zone(
             h3_index=h3_idx,
@@ -276,7 +276,7 @@ def generate_land_batch(state_data, count):
             description=f"Land parcel in {city['name']}",
             latitude=lat,
             longitude=lng,
-            resolution=float(parcel_res),
+            resolution=9.0,
         )
         try:
             zone.land = land
