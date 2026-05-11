@@ -116,7 +116,9 @@ def initialize(args):
     """Called by the canister on every start/upgrade.
 
     Creates the TaskSchedule if needed and auto-enables it when
-    TEST_MODE + TEST_MODE_DEMO_DATA are both True.
+    TEST_MODE + TEST_MODE_DEMO_DATA are both True.  Also restarts
+    the TaskManager so that IC timers are registered for the schedule
+    (timers are only set during canister init or explicit restart).
     """
     schedule = get_or_create_schedule()
 
@@ -126,11 +128,39 @@ def initialize(args):
     else:
         logger.info("Demo simulator initialized (schedule disabled — demo mode flags not set)")
 
+    _restart_task_manager()
+
     return json.dumps({
         "success": True,
         "auto_activated": is_demo_mode_active(),
         "running": not schedule.disabled,
     })
+
+
+def _restart_task_manager():
+    """Re-initialize the TaskManager so IC timers are set for our schedule."""
+    try:
+        from ggg import Call, Task, TaskSchedule, TaskStep
+        from core.task_manager import TaskManager
+
+        list(Task.instances())
+        list(Call.instances())
+        list(TaskStep.instances())
+        list(TaskSchedule.instances())
+
+        manager = TaskManager()
+        for t in Task.instances():
+            if t.status and t.status != "completed":
+                t.status = "pending"
+                t.step_to_execute = 0
+                for step in t.steps:
+                    step.status = "pending"
+                    step.timer_id = None
+            manager.add_task(t)
+        manager.run()
+        logger.info("TaskManager restarted — demo_simulator schedule registered")
+    except Exception as e:
+        logger.error(f"Failed to restart TaskManager: {e}\n{traceback.format_exc()}")
 
 
 def get_status(args):
