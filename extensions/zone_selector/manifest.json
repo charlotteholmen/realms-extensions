@@ -1,6 +1,6 @@
 {
   "name": "zone_selector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Allow users to set their zones of influence via geolocation or map selection",
   "permissions": [],
   "entry_points": [

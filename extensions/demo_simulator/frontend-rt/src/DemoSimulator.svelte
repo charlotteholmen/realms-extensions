@@ -185,86 +185,18 @@
 			</div>
 		{/if}
 
-		<!-- Stats cards -->
-		<div class="grid grid-cols-3 gap-3 mb-6">
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-			>
-				<div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-					{status.stats.users}
-				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Users</div>
-			</div>
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-			>
-				<div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-					{status.stats.organizations}
-				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Orgs</div>
-			</div>
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-			>
-				<div class="text-2xl font-bold text-purple-600 dark:text-purple-400">
-					{status.stats.proposals}
-				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Proposals</div>
-			</div>
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-			>
-				<div class="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
-					{status.stats.transfers}
-				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Transfers</div>
-			</div>
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-			>
-			<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
-				{status.stats.disputes}
-			</div>
-			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Disputes</div>
-		</div>
-		<div
-			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-		>
-			<div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-				{status.stats.votes ?? 0}
-			</div>
-			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Votes</div>
-		</div>
-		<div
-			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-		>
-			<div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-				{status.stats.lands ?? 0}
-			</div>
-			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Lands</div>
-		</div>
-		<div
-			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-		>
-			<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
-				{status.stats.courts ?? 0}
-			</div>
-			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Courts</div>
-		</div>
-		<div
-			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-		>
-			<div class="text-2xl font-bold text-red-600 dark:text-red-400">
-				{status.stats.cases ?? 0}
-			</div>
-			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Cases</div>
-		</div>
-		<div
-			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-		>
-			<div class="text-2xl font-bold text-gray-700 dark:text-gray-200">{status.batch_number}</div>
-			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Batches</div>
-		</div>
+		<!-- Stats grid -->
+		<div class="ds-stats-grid mb-4">
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#4f46e5">{status.stats.users}</span><span class="ds-stat-lbl">Users</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#059669">{status.stats.organizations}</span><span class="ds-stat-lbl">Orgs</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#7c3aed">{status.stats.proposals}</span><span class="ds-stat-lbl">Proposals</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#0891b2">{status.stats.transfers}</span><span class="ds-stat-lbl">Transfers</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#e11d48">{status.stats.disputes}</span><span class="ds-stat-lbl">Disputes</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#4f46e5">{status.stats.votes ?? 0}</span><span class="ds-stat-lbl">Votes</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#059669">{status.stats.lands ?? 0}</span><span class="ds-stat-lbl">Lands</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#d97706">{status.stats.courts ?? 0}</span><span class="ds-stat-lbl">Courts</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#dc2626">{status.stats.cases ?? 0}</span><span class="ds-stat-lbl">Cases</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#374151">{status.batch_number}</span><span class="ds-stat-lbl">Batches</span></div>
 		</div>
 
 		<!-- Progress bar -->
@@ -393,6 +325,37 @@
 </div>
 
 <style>
+	.ds-stats-grid {
+		display: grid;
+		grid-template-columns: repeat(5, 1fr);
+		gap: 0.375rem;
+	}
+	.ds-stat {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 0.375rem 0.25rem;
+		border: 1px solid #e5e7eb;
+		border-radius: 0.375rem;
+		background: #fff;
+	}
+	:global(.dark) .ds-stat {
+		background: #1f2937;
+		border-color: #374151;
+	}
+	.ds-stat-val {
+		font-size: 1.125rem;
+		font-weight: 700;
+		line-height: 1.2;
+	}
+	.ds-stat-lbl {
+		font-size: 0.625rem;
+		color: #6b7280;
+		margin-top: 0.125rem;
+	}
+	:global(.dark) .ds-stat-lbl {
+		color: #9ca3af;
+	}
 	.ds-btn {
 		padding: 0.5rem 1rem;
 		font-size: 0.875rem;

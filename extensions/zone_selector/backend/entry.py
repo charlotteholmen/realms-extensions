@@ -34,7 +34,7 @@ def get_my_zones(args: str) -> str:
         for zone in Zone.instances():
             if zone.user and zone.user.id == user_id:
                 zones.append({
-                    "id": zone.id,
+                    "id": zone.h3_index,
                     "h3_index": zone.h3_index,
                     "name": zone.name,
                     "description": zone.description,
@@ -123,7 +123,7 @@ def add_zone(args: str) -> str:
         return json.dumps({
             "success": True,
             "data": {
-                "id": zone.id,
+                "id": zone.h3_index,
                 "h3_index": zone.h3_index,
                 "name": zone.name,
                 "latitude": zone.latitude,
@@ -155,7 +155,7 @@ def remove_zone(args: str) -> str:
         # Find the zone
         zone = None
         for z in Zone.instances():
-            if z.id == zone_id:
+            if z.h3_index == zone_id:
                 zone = z
                 break
 
@@ -192,7 +192,7 @@ def get_all_zones(args: str) -> str:
         zones = []
         for zone in Zone.instances():
             zone_data = {
-                "id": zone.id,
+                "id": zone.h3_index,
                 "h3_index": zone.h3_index,
                 "name": zone.name,
                 "latitude": zone.latitude,
