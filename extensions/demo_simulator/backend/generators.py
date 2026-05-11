@@ -111,16 +111,16 @@ def generate_proposal_batch(state_data, count):
         proposer = None
         if total_users > 0:
             proposer = User[f"demo_user_{rng.randint(0, total_users - 1):04d}"]
-        Proposal(
+        p = Proposal(
             proposal_id=f"demo_prop_{idx:04d}",
             title=f"{title} (#{idx + 1})",
             description=f"Auto-generated demo proposal for: {title}",
             status=rng.choice(["draft", "open", "voting", "approved", "rejected"]),
             proposer=proposer,
-            votes_yes=rng.randint(0, 20),
-            votes_no=rng.randint(0, 10),
-            votes_abstain=rng.randint(0, 5),
         )
+        p.votes_yes = float(rng.randint(0, 20))
+        p.votes_no = float(rng.randint(0, 10))
+        p.votes_abstain = float(rng.randint(0, 5))
         created.append(f"demo_prop_{idx:04d}")
 
     state_data["total_proposals_created"] = base_idx + count

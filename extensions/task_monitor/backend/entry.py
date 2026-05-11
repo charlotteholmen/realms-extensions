@@ -88,6 +88,13 @@ def get_all_tasks(args: str = "{}"):
                     continue
 
                 task_id = str(task._id)
+                exec_count = 0
+                try:
+                    if hasattr(task, "executions"):
+                        exec_count = len(list(task.executions))
+                except Exception:
+                    pass
+
                 task_data = {
                     "_id": task_id,
                     "name": task.name,
@@ -97,6 +104,7 @@ def get_all_tasks(args: str = "{}"):
                         task.step_to_execute if hasattr(task, "step_to_execute") else 0
                     ),
                     "total_steps": len(list(task.steps)) if hasattr(task, "steps") else 0,
+                    "executions_count": exec_count,
                     "schedules": [],
                     "created_at": task._timestamp_created if hasattr(task, "_timestamp_created") else None,
                     "updated_at": task._timestamp_updated if hasattr(task, "_timestamp_updated") else None,

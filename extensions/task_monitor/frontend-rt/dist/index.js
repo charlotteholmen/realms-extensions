@@ -3067,7 +3067,7 @@ function wo(e, t) {
                 }
                 ae(
                   (R, B) => {
-                    j(dr, d(F).name), j(vr, `ID: ${R ?? ""}`), It(da, 1, `px-2 py-0.5 rounded-full text-xs font-medium ${B ?? ""}`, "svelte-11d5b98"), j(Di, d(F).status || "Unknown"), j(Bi, ` ${d(F).executions_count ?? ""} runs`), $r.disabled = u[d(F)._id], Sn.disabled = h[d(F)._id];
+                    j(dr, d(F).name), j(vr, `ID: ${R ?? ""}`), It(da, 1, `px-2 py-0.5 rounded-full text-xs font-medium ${B ?? ""}`, "svelte-11d5b98"), j(Di, d(F).status || "Unknown"), j(Bi, ` ${d(F).executions_count ?? 0 ?? ""} runs`), $r.disabled = u[d(F)._id], Sn.disabled = h[d(F)._id];
                   },
                   [
                     () => d(F)._id.substring(0, 12),
