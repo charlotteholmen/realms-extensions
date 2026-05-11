@@ -17,6 +17,18 @@ from .constants import (
 )
 
 
+def random_seed():
+    """Generate a random seed from ic.time() (nanoseconds), with fallback."""
+    try:
+        import ic as _ic
+        t = _ic.time()
+        if t > 0:
+            return t % 1_000_000
+    except Exception:
+        pass
+    return random.randint(1, 999999)
+
+
 def get_state():
     """Load or create the simulator state entity."""
     from ggg import Service
@@ -39,7 +51,7 @@ def _default_state_data():
         "total_proposals_created": 0,
         "total_transfers_created": 0,
         "total_disputes_created": 0,
-        "seed": random.randint(1, 999999),
+        "seed": 0,
         "batch_size": DEFAULT_BATCH_SIZE,
         "max_entities": MAX_ENTITIES_TOTAL,
     }

@@ -13,7 +13,7 @@
 		running: boolean;
 		interval_seconds: number;
 		batch_size: number;
-		max_entities: number;
+		max_entities: number | null;
 		batch_number: number;
 		seed: number;
 		stats: Stats;
@@ -29,7 +29,7 @@
 
 	let editInterval = $state(60);
 	let editBatchSize = $state(3);
-	let editMaxEntities = $state(500);
+	let editMaxEntities = $state('');
 	let editSeed = $state('');
 
 	let totalEntities = $derived(
@@ -43,7 +43,9 @@
 	);
 
 	let progressPercent = $derived(
-		status ? Math.min(100, Math.round((totalEntities / status.max_entities) * 100)) : 0
+		status && status.max_entities
+			? Math.min(100, Math.round((totalEntities / status.max_entities) * 100))
+			: 0
 	);
 
 	async function fetchStatus() {
@@ -54,8 +56,8 @@
 				status = data;
 				editInterval = data.interval_seconds;
 				editBatchSize = data.batch_size;
-				editMaxEntities = data.max_entities;
-				editSeed = String(data.seed || '');
+				editMaxEntities = data.max_entities != null ? String(data.max_entities) : '';
+				editSeed = String(data.seed ?? '');
 			} else {
 				error = data.error || 'Failed to fetch status';
 			}
@@ -89,10 +91,11 @@
 		saving = true;
 		error = '';
 		try {
+			const maxVal = editMaxEntities.toString().trim();
 			const config: Record<string, any> = {
 				interval_seconds: editInterval,
 				batch_size: editBatchSize,
-				max_entities: editMaxEntities,
+				max_entities: maxVal ? parseInt(maxVal, 10) : null,
 			};
 			if (editSeed.trim()) {
 				config.seed = parseInt(editSeed, 10);
@@ -219,31 +222,69 @@
 			<div
 				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
 			>
-				<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
-					{status.stats.disputes}
-				</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Disputes</div>
+			<div class="text-2xl font-bold text-rose-600 dark:text-rose-400">
+				{status.stats.disputes}
 			</div>
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
-			>
-				<div class="text-2xl font-bold text-gray-700 dark:text-gray-200">{status.batch_number}</div>
-				<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Batches</div>
+			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Disputes</div>
+		</div>
+		<div
+			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
+		>
+			<div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+				{status.stats.votes ?? 0}
 			</div>
+			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Votes</div>
+		</div>
+		<div
+			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
+		>
+			<div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+				{status.stats.lands ?? 0}
+			</div>
+			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Lands</div>
+		</div>
+		<div
+			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
+		>
+			<div class="text-2xl font-bold text-amber-600 dark:text-amber-400">
+				{status.stats.courts ?? 0}
+			</div>
+			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Courts</div>
+		</div>
+		<div
+			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
+		>
+			<div class="text-2xl font-bold text-red-600 dark:text-red-400">
+				{status.stats.cases ?? 0}
+			</div>
+			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Cases</div>
+		</div>
+		<div
+			class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-center"
+		>
+			<div class="text-2xl font-bold text-gray-700 dark:text-gray-200">{status.batch_number}</div>
+			<div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Batches</div>
+		</div>
 		</div>
 
 		<!-- Progress bar -->
 		<div class="mb-6">
-			<div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-				<span>{totalEntities} / {status.max_entities} entities</span>
-				<span>{progressPercent}%</span>
-			</div>
-			<div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-				<div
-					class="h-full bg-indigo-500 dark:bg-indigo-400 rounded-full transition-all duration-500"
-					style="width: {progressPercent}%"
-				></div>
-			</div>
+			{#if status.max_entities}
+				<div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+					<span>{totalEntities} / {status.max_entities} entities</span>
+					<span>{progressPercent}%</span>
+				</div>
+				<div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+					<div
+						class="h-full bg-indigo-500 dark:bg-indigo-400 rounded-full transition-all duration-500"
+						style="width: {progressPercent}%"
+					></div>
+				</div>
+			{:else}
+				<div class="text-xs text-gray-500 dark:text-gray-400">
+					{totalEntities} entities (unlimited)
+				</div>
+			{/if}
 		</div>
 
 		<!-- Controls -->
@@ -313,9 +354,8 @@
 					>
 					<input
 						id="ds-max"
-						type="number"
-						min="10"
-						max="10000"
+						type="text"
+						placeholder="unlimited"
 						bind:value={editMaxEntities}
 						class="ds-input"
 					/>

@@ -8,7 +8,7 @@ TASK_NAME = "demo_simulator_task"
 SCHEDULE_NAME = "demo_simulator_schedule"
 DEFAULT_INTERVAL_SECONDS = 60
 DEFAULT_BATCH_SIZE = 3
-MAX_ENTITIES_TOTAL = 500
+MAX_ENTITIES_TOTAL = None  # None = unlimited
 
 FIRST_NAMES = [
     "Alice", "Bob", "Charlie", "Diana", "Edward", "Fiona", "George", "Helen",
@@ -55,6 +55,54 @@ DISPUTE_DESCRIPTIONS = [
     "Environmental compliance violation",
     "Tax assessment contestation",
     "Zoning regulation interpretation",
+]
+
+COURT_NAMES = [
+    "District Court of Commerce",
+    "Civil Rights Tribunal",
+    "Environmental Court",
+    "Labor Arbitration Court",
+    "Family & Property Court",
+    "Digital Disputes Tribunal",
+    "Tax Appeals Court",
+    "Supreme Court of Appeals",
+]
+
+JUDGE_SPECIALIZATIONS = [
+    "Commercial law",
+    "Civil rights",
+    "Environmental law",
+    "Labor disputes",
+    "Property law",
+    "Digital & IP law",
+    "Tax law",
+    "Constitutional law",
+]
+
+CASE_TITLES = [
+    "Breach of rental agreement",
+    "Unpaid service fees dispute",
+    "Property damage claim",
+    "Wrongful termination case",
+    "Copyright infringement suit",
+    "Environmental pollution claim",
+    "Tax evasion investigation",
+    "Contract non-performance",
+    "Data privacy violation",
+    "Noise complaint escalation",
+]
+
+VERDICT_DECISIONS = [
+    "guilty", "not_guilty", "liable", "not_liable", "dismissed",
+    "settled", "partially_liable",
+]
+
+LAND_TYPES = ["residential", "agricultural", "industrial", "commercial"]
+
+ZONE_NAMES = [
+    "Central District", "Harbor Quarter", "Innovation Park", "Old Town",
+    "Riverside", "Mountain View", "Lake District", "Sunset Hills",
+    "Market Square", "Garden Heights", "Tech Valley", "Arts Quarter",
 ]
 
 CITY_COORDINATES = [

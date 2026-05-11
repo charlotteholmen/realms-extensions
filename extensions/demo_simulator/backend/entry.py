@@ -6,24 +6,28 @@ to the generator and state modules.
 """
 
 import json
-import random
 import traceback
 
 from ic_python_logging import get_logger
 
 from .constants import DEFAULT_BATCH_SIZE, DEFAULT_INTERVAL_SECONDS, MAX_ENTITIES_TOTAL, SCHEDULE_NAME
 from .generators import (
+    generate_case_batch,
+    generate_court_batch,
     generate_dispute_batch,
+    generate_land_batch,
     generate_org_batch,
     generate_proposal_batch,
     generate_transfer_batch,
     generate_user_batch,
+    generate_vote_batch,
 )
 from .state import (
     get_or_create_schedule,
     get_state,
     is_demo_mode_active,
     load_state_data,
+    random_seed,
     save_state_data,
 )
 
@@ -52,16 +56,20 @@ def run_batch(args: str = "{}"):
         state_data.get("total_proposals_created", 0),
         state_data.get("total_transfers_created", 0),
         state_data.get("total_disputes_created", 0),
+        state_data.get("total_votes_created", 0),
+        state_data.get("total_lands_created", 0),
+        state_data.get("total_courts_created", 0),
+        state_data.get("total_cases_created", 0),
     ])
 
-    if total_created >= max_entities:
+    if max_entities and total_created >= max_entities:
         logger.info(f"Demo simulator reached max entities ({max_entities}), pausing.")
         schedule = TaskSchedule[SCHEDULE_NAME]
         if schedule:
             schedule.disabled = True
         return json.dumps({"status": "paused", "reason": "max_entities_reached", "total": total_created})
 
-    batch_type = batch_number % 5
+    batch_type = batch_number % 9
     results = {}
 
     try:
@@ -75,6 +83,14 @@ def run_batch(args: str = "{}"):
             results["transfers"] = generate_transfer_batch(state_data, batch_size)
         elif batch_type == 4:
             results["disputes"] = generate_dispute_batch(state_data, max(1, batch_size // 3))
+        elif batch_type == 5:
+            results["votes"] = generate_vote_batch(state_data, batch_size)
+        elif batch_type == 6:
+            results["lands"] = generate_land_batch(state_data, max(1, batch_size // 2))
+        elif batch_type == 7:
+            results["courts"] = generate_court_batch(state_data, max(1, batch_size // 3))
+        elif batch_type == 8:
+            results["cases"] = generate_case_batch(state_data, max(1, batch_size // 2))
     except Exception as e:
         logger.error(f"Demo simulator batch {batch_number} failed: {e}")
         logger.error(traceback.format_exc())
@@ -188,6 +204,10 @@ def get_status(args):
             "proposals": state_data.get("total_proposals_created", 0),
             "transfers": state_data.get("total_transfers_created", 0),
             "disputes": state_data.get("total_disputes_created", 0),
+            "votes": state_data.get("total_votes_created", 0),
+            "lands": state_data.get("total_lands_created", 0),
+            "courts": state_data.get("total_courts_created", 0),
+            "cases": state_data.get("total_cases_created", 0),
         },
         "demo_mode_active": is_demo_mode_active(),
     })
@@ -224,7 +244,8 @@ def update_config(args):
     if "batch_size" in args:
         state_data["batch_size"] = max(1, min(20, int(args["batch_size"])))
     if "max_entities" in args:
-        state_data["max_entities"] = max(10, int(args["max_entities"]))
+        val = args["max_entities"]
+        state_data["max_entities"] = None if val is None or val == 0 else max(10, int(val))
     if "seed" in args:
         state_data["seed"] = int(args["seed"])
 
@@ -250,7 +271,7 @@ def set_seed(args):
 
     seed_value = args.get("seed")
     if seed_value is None:
-        state_data["seed"] = random.randint(1, 999999)
+        state_data["seed"] = random_seed()
     else:
         state_data["seed"] = int(seed_value)
 
@@ -278,9 +299,13 @@ def reset(args):
     state_data["total_proposals_created"] = 0
     state_data["total_transfers_created"] = 0
     state_data["total_disputes_created"] = 0
+    state_data["total_votes_created"] = 0
+    state_data["total_lands_created"] = 0
+    state_data["total_courts_created"] = 0
+    state_data["total_cases_created"] = 0
 
     if not keep_seed:
-        state_data["seed"] = random.randint(1, 999999)
+        state_data["seed"] = random_seed()
 
     save_state_data(state, state_data)
     return json.dumps({"success": True, "action": "reset", "seed": state_data["seed"]})

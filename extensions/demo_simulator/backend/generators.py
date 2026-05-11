@@ -10,11 +10,17 @@ import random
 import time
 
 from .constants import (
+    CASE_TITLES,
     CITY_COORDINATES,
+    COURT_NAMES,
     FIRST_NAMES,
+    JUDGE_SPECIALIZATIONS,
+    LAND_TYPES,
     LAST_NAMES,
     ORG_NAMES,
     PROPOSAL_TITLES,
+    VERDICT_DECISIONS,
+    ZONE_NAMES,
 )
 
 
@@ -181,4 +187,190 @@ def generate_dispute_batch(state_data, count):
         created.append(f"demo_dispute_{idx:04d}")
 
     state_data["total_disputes_created"] = base_idx + count
+    return created
+
+
+def generate_vote_batch(state_data, count):
+    """Generate votes on existing proposals."""
+    from ggg import Proposal, User, Vote
+
+    total_users = state_data.get("total_users_created", 0)
+    total_proposals = state_data.get("total_proposals_created", 0)
+    if total_users < 1 or total_proposals < 1:
+        return []
+
+    base_idx = state_data.get("total_votes_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 50000)
+
+    created = []
+    for i in range(count):
+        prop_idx = rng.randint(0, total_proposals - 1)
+        user_idx = rng.randint(0, total_users - 1)
+        proposal = Proposal[f"demo_prop_{prop_idx:04d}"]
+        voter = User[f"demo_user_{user_idx:04d}"]
+        if not proposal or not voter:
+            continue
+        Vote(
+            proposal=proposal,
+            voter=voter,
+            vote_choice=rng.choice(["yes", "yes", "yes", "no", "no", "abstain"]),
+        )
+        created.append(f"vote_{base_idx + i}")
+
+    state_data["total_votes_created"] = base_idx + len(created)
+    return created
+
+
+def generate_land_batch(state_data, count):
+    """Generate land parcels with zones using proper H3 indices."""
+    from ggg import Land, User, Zone
+
+    try:
+        from core.h3 import latlng_to_cell
+        h3_available = True
+    except ImportError:
+        h3_available = False
+
+    total_users = state_data.get("total_users_created", 0)
+    base_idx = state_data.get("total_lands_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 60000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        city = rng.choice(CITY_COORDINATES)
+        lat = city["lat"] + rng.uniform(-0.5, 0.5)
+        lng = city["lng"] + rng.uniform(-0.5, 0.5)
+
+        owner = None
+        if total_users > 0 and rng.random() > 0.3:
+            owner = User[f"demo_user_{rng.randint(0, total_users - 1):04d}"]
+
+        land = Land(
+            id=f"demo_land_{idx:04d}",
+            x_coordinate=int(lat * 1000),
+            y_coordinate=int(lng * 1000),
+            land_type=rng.choice(LAND_TYPES),
+            owner_user=owner,
+            size_width=rng.randint(1, 10),
+            size_height=rng.randint(1, 10),
+            status="active",
+        )
+
+        zone_name = rng.choice(ZONE_NAMES)
+        parcel_res = 9
+        if h3_available:
+            h3_idx = latlng_to_cell(lat, lng, parcel_res)
+        else:
+            h3_idx = f"89{abs(int(lat * 1000)):06x}{abs(int(lng * 1000)):06x}f"
+
+        Zone(
+            h3_index=h3_idx,
+            name=f"{zone_name} {idx + 1}",
+            description=f"Land parcel in {city['name']}",
+            latitude=lat,
+            longitude=lng,
+            resolution=float(parcel_res),
+            user=owner,
+            land=land,
+        )
+        created.append(f"demo_land_{idx:04d}")
+
+    state_data["total_lands_created"] = base_idx + count
+    return created
+
+
+def generate_court_batch(state_data, count):
+    """Generate courts and judges."""
+    from ggg import Court, Judge, Member
+
+    base_idx = state_data.get("total_courts_created", 0)
+    total_members = state_data.get("total_users_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 70000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        court_name = COURT_NAMES[idx % len(COURT_NAMES)]
+        level = rng.choice(["first_instance", "first_instance", "appellate", "specialized"])
+
+        court = Court(
+            name=f"{court_name} #{idx + 1}",
+            description=f"Demo court for {JUDGE_SPECIALIZATIONS[idx % len(JUDGE_SPECIALIZATIONS)]}",
+            jurisdiction="General",
+            level=level,
+            status="active",
+        )
+
+        if total_members > 2:
+            judge_member_idx = rng.randint(0, total_members - 1)
+            member = Member[f"demo_mem_{judge_member_idx:04d}"]
+            if member:
+                Judge(
+                    id=f"demo_judge_{idx:04d}",
+                    appointment_date="2026-01-01",
+                    status="active",
+                    specialization=JUDGE_SPECIALIZATIONS[idx % len(JUDGE_SPECIALIZATIONS)],
+                    member=member,
+                    court=court,
+                )
+
+        created.append(court.name)
+
+    state_data["total_courts_created"] = base_idx + count
+    return created
+
+
+def generate_case_batch(state_data, count):
+    """Generate cases with verdicts."""
+    from ggg import Case, Court, User, Verdict
+
+    total_users = state_data.get("total_users_created", 0)
+    total_courts = state_data.get("total_courts_created", 0)
+    if total_users < 2 or total_courts < 1:
+        return []
+
+    base_idx = state_data.get("total_cases_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 80000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        plaintiff_idx = rng.randint(0, total_users - 1)
+        defendant_idx = rng.randint(0, total_users - 2)
+        if defendant_idx >= plaintiff_idx:
+            defendant_idx += 1
+
+        plaintiff = User[f"demo_user_{plaintiff_idx:04d}"]
+        defendant = User[f"demo_user_{defendant_idx:04d}"]
+        if not plaintiff or not defendant:
+            continue
+
+        status = rng.choice(["filed", "assigned", "in_progress", "verdict_issued", "closed"])
+        case = Case(
+            case_number=f"DEMO-2026-{idx:04d}",
+            title=rng.choice(CASE_TITLES),
+            description=f"Auto-generated demo case #{idx + 1}",
+            status=status,
+            filed_date="2026-01-15",
+            plaintiff=plaintiff,
+            defendant=defendant,
+        )
+
+        if status in ("verdict_issued", "closed"):
+            Verdict(
+                id=f"demo_verdict_{idx:04d}",
+                decision=rng.choice(VERDICT_DECISIONS),
+                reasoning=f"Based on evidence presented in case DEMO-2026-{idx:04d}",
+                issued_date="2026-03-01",
+                case=case,
+            )
+
+        created.append(case.case_number)
+
+    state_data["total_cases_created"] = base_idx + count
     return created
