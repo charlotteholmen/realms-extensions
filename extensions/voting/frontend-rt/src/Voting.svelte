@@ -46,11 +46,13 @@
 	});
 
 	async function callSync(fn: string, args: Record<string, any> = {}) {
-		return await ctx.callSync(fn, args);
+		const raw = await ctx.callSync(fn, args);
+		return typeof raw === 'string' ? JSON.parse(raw) : raw;
 	}
 
 	async function callAsync(fn: string, args: Record<string, any> = {}) {
-		return await ctx.callAsync(fn, args);
+		const raw = await ctx.callAsync(fn, args);
+		return typeof raw === 'string' ? JSON.parse(raw) : raw;
 	}
 
 	async function loadProposals() {
