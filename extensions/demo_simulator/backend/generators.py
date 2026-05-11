@@ -268,7 +268,7 @@ def generate_land_batch(state_data, count):
                 pass
 
         zone_name = rng.choice(ZONE_NAMES)
-        h3_idx = _make_h3(lat, lng, 9)
+        h3_idx = _make_h3(lat, lng, 6)
 
         zone = Zone(
             h3_index=h3_idx,
@@ -276,7 +276,7 @@ def generate_land_batch(state_data, count):
             description=f"Land parcel in {city['name']}",
             latitude=lat,
             longitude=lng,
-            resolution=9.0,
+            resolution=6.0,
         )
         try:
             zone.land = land
