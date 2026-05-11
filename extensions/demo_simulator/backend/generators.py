@@ -97,9 +97,10 @@ def generate_org_batch(state_data, count):
 
 def generate_proposal_batch(state_data, count):
     """Generate a batch of proposals."""
-    from ggg import Proposal
+    from ggg import Proposal, User
 
     base_idx = state_data.get("total_proposals_created", 0)
+    total_users = state_data.get("total_users_created", 0)
     seed = state_data.get("seed", 42)
     rng = random.Random(seed + base_idx + 20000)
 
@@ -107,10 +108,18 @@ def generate_proposal_batch(state_data, count):
     for i in range(count):
         idx = base_idx + i
         title = rng.choice(PROPOSAL_TITLES)
+        proposer = None
+        if total_users > 0:
+            proposer = User[f"demo_user_{rng.randint(0, total_users - 1):04d}"]
         Proposal(
-            id=f"demo_prop_{idx:04d}",
+            proposal_id=f"demo_prop_{idx:04d}",
             title=f"{title} (#{idx + 1})",
+            description=f"Auto-generated demo proposal for: {title}",
             status=rng.choice(["draft", "open", "voting", "approved", "rejected"]),
+            proposer=proposer,
+            votes_yes=rng.randint(0, 20),
+            votes_no=rng.randint(0, 10),
+            votes_abstain=rng.randint(0, 5),
         )
         created.append(f"demo_prop_{idx:04d}")
 
@@ -166,7 +175,7 @@ def generate_dispute_batch(state_data, count):
     for i in range(count):
         idx = base_idx + i
         Dispute(
-            id=f"demo_dispute_{idx:04d}",
+            dispute_id=f"demo_dispute_{idx:04d}",
             status=rng.choice(["open", "investigating", "resolved", "closed", "appealed"]),
         )
         created.append(f"demo_dispute_{idx:04d}")

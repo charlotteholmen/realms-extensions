@@ -121,12 +121,17 @@
 		selectedTask = taskId;
 		detailLoading = true;
 		try {
-			const [det, logs] = await Promise.all([
-				callSync('get_task_details', { task_id: taskId }).catch(() => null),
-				callSync('get_task_logs', { task_id: taskId }).catch(() => ({ data: [] })),
-			]);
-			taskDetail = det?.data ?? det;
-			taskLogs = logs?.data ?? (Array.isArray(logs) ? logs : []);
+		const [det, logs] = await Promise.all([
+			callSync('get_task_details', { task_id: taskId }).catch(() => null),
+			callSync('get_task_logs', { task_id: taskId }).catch(() => ({ data: [] })),
+		]);
+		const raw = det?.task ?? det?.data?.task ?? det?.data ?? det;
+		if (raw && raw.executions) {
+			raw.executions_count = raw.executions.length;
+			raw.total_steps = raw.steps?.length ?? 0;
+		}
+		taskDetail = raw;
+		taskLogs = logs?.data ?? (Array.isArray(logs) ? logs : []);
 		} catch (e: any) {
 			error = e?.message || String(e);
 		} finally {
@@ -204,7 +209,8 @@
 
 	function formatRelativeTime(timestamp: number | null): string {
 		if (!timestamp) return '-';
-		const diffMs = Date.now() - new Date(timestamp).getTime();
+		const ms = timestamp > 1e15 ? timestamp / 1e6 : timestamp > 1e12 ? timestamp : timestamp * 1000;
+		const diffMs = Date.now() - ms;
 		const diffSec = Math.floor(diffMs / 1000);
 		const diffMin = Math.floor(diffSec / 60);
 		const diffHour = Math.floor(diffMin / 60);
@@ -228,7 +234,8 @@
 
 	function formatTimestamp(ts: number | null): string {
 		if (!ts) return '-';
-		return new Date(ts).toLocaleString();
+		const ms = ts > 1e15 ? ts / 1e6 : ts > 1e12 ? ts : ts * 1000;
+		return new Date(ms).toLocaleString();
 	}
 
 	function getProgressPercent(task: Task): number {
