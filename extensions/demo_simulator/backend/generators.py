@@ -253,11 +253,15 @@ def generate_land_batch(state_data, count):
             x_coordinate=int(lat * 1000),
             y_coordinate=int(lng * 1000),
             land_type=rng.choice(LAND_TYPES),
-            owner_user=owner,
             size_width=rng.randint(1, 10),
             size_height=rng.randint(1, 10),
             status="active",
         )
+        if owner:
+            try:
+                land.owner_user = owner
+            except Exception:
+                pass
 
         zone_name = rng.choice(ZONE_NAMES)
         parcel_res = 9
@@ -266,16 +270,20 @@ def generate_land_batch(state_data, count):
         else:
             h3_idx = f"89{abs(int(lat * 1000)):06x}{abs(int(lng * 1000)):06x}f"
 
-        Zone(
+        zone = Zone(
             h3_index=h3_idx,
             name=f"{zone_name} {idx + 1}",
             description=f"Land parcel in {city['name']}",
             latitude=lat,
             longitude=lng,
             resolution=float(parcel_res),
-            user=owner,
-            land=land,
         )
+        try:
+            zone.land = land
+            if owner:
+                zone.user = owner
+        except Exception:
+            pass
         created.append(f"demo_land_{idx:04d}")
 
     state_data["total_lands_created"] = base_idx + count
@@ -309,14 +317,17 @@ def generate_court_batch(state_data, count):
             judge_member_idx = rng.randint(0, total_members - 1)
             member = Member[f"demo_mem_{judge_member_idx:04d}"]
             if member:
-                Judge(
+                judge = Judge(
                     id=f"demo_judge_{idx:04d}",
                     appointment_date="2026-01-01",
                     status="active",
                     specialization=JUDGE_SPECIALIZATIONS[idx % len(JUDGE_SPECIALIZATIONS)],
-                    member=member,
-                    court=court,
                 )
+                try:
+                    judge.member = member
+                    judge.court = court
+                except Exception:
+                    pass
 
         created.append(court.name)
 
@@ -357,18 +368,24 @@ def generate_case_batch(state_data, count):
             description=f"Auto-generated demo case #{idx + 1}",
             status=status,
             filed_date="2026-01-15",
-            plaintiff=plaintiff,
-            defendant=defendant,
         )
+        try:
+            case.plaintiff = plaintiff
+            case.defendant = defendant
+        except Exception:
+            pass
 
         if status in ("verdict_issued", "closed"):
-            Verdict(
+            verdict = Verdict(
                 id=f"demo_verdict_{idx:04d}",
                 decision=rng.choice(VERDICT_DECISIONS),
                 reasoning=f"Based on evidence presented in case DEMO-2026-{idx:04d}",
                 issued_date="2026-03-01",
-                case=case,
             )
+            try:
+                verdict.case = case
+            except Exception:
+                pass
 
         created.append(case.case_number)
 
