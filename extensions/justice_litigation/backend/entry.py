@@ -907,7 +907,8 @@ def get_litigations(args: str) -> str:
         for case in cases:
             verdicts = list(case.verdicts) if hasattr(case, 'verdicts') else []
             litigations.append({
-                "id": case.case_number or case._id,
+                "id": str(case._id),
+                "case_number": case.case_number or "",
                 "requester_principal": case.plaintiff._id if case.plaintiff else "unknown",
                 "defendant_principal": case.defendant._id if case.defendant else "unknown",
                 "case_title": case.title or "",

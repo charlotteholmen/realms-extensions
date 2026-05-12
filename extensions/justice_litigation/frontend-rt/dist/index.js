@@ -149,11 +149,11 @@ function st(e, t) {
   throw e;
 }
 const Oa = -7169;
-function j(e, t) {
+function O(e, t) {
   e.f = e.f & Oa | t;
 }
 function _n(e) {
-  (e.f & xe) !== 0 || e.deps === null ? j(e, U) : j(e, je);
+  (e.f & xe) !== 0 || e.deps === null ? O(e, U) : O(e, je);
 }
 function fi(e) {
   if (e !== null)
@@ -164,7 +164,7 @@ function fi(e) {
       ));
 }
 function ui(e, t, r) {
-  (e.f & X) !== 0 ? t.add(e) : (e.f & je) !== 0 && r.add(e), fi(e.deps), j(e, U);
+  (e.f & X) !== 0 ? t.add(e) : (e.f & je) !== 0 && r.add(e), fi(e.deps), O(e, U);
 }
 const _t = /* @__PURE__ */ new Set();
 let E = null, Me = null, sn = null, er = !1, Zr = !1, Nt = null, wr = null;
@@ -276,9 +276,9 @@ const Rr = class Rr {
     if (n) {
       s(this, Le).delete(t);
       for (var i of n.d)
-        j(i, X), r(i);
+        O(i, X), r(i);
       for (i of n.m)
-        j(i, je), r(i);
+        O(i, je), r(i);
     }
     s(this, zt).add(t);
   }
@@ -429,9 +429,9 @@ Vt = new WeakMap(), Lt = new WeakMap(), xt = new WeakMap(), We = new WeakMap(), 
   var o;
   if (Bn++ > 1e3 && (_t.delete(this), Ua()), !F(this, q, kr).call(this)) {
     for (const l of s(this, it))
-      s(this, Je).delete(l), j(l, X), this.schedule(l);
+      s(this, Je).delete(l), O(l, X), this.schedule(l);
     for (const l of s(this, Je))
-      j(l, je), this.schedule(l);
+      O(l, je), this.schedule(l);
   }
   const t = s(this, fe);
   C(this, fe, []), this.apply();
@@ -539,7 +539,7 @@ Cr = function(t) {
         ) : !0
       );
       for (const d of s(this, lr))
-        (d.f & (ye | ee | an)) === 0 && gn(d, l, u) && ((d.f & (nr | Ie)) !== 0 ? (j(d, X), h.schedule(d)) : s(h, it).add(d));
+        (d.f & (ye | ee | an)) === 0 && gn(d, l, u) && ((d.f & (nr | Ie)) !== 0 ? (O(d, X), h.schedule(d)) : s(h, it).add(d));
       if (s(h, fe).length > 0) {
         h.apply();
         for (var f of s(h, fe))
@@ -611,7 +611,7 @@ function ci(e, t, r, n) {
         t,
         r,
         n
-      ) : (a & (nr | Ie)) !== 0 && (a & X) === 0 && gn(i, t, n) && (j(i, X), bn(
+      ) : (a & (nr | Ie)) !== 0 && (a & X) === 0 && gn(i, t, n) && (O(i, X), bn(
         /** @type {Effect} */
         i
       ));
@@ -643,13 +643,13 @@ function bn(e) {
 }
 function vi(e, t) {
   if (!((e.f & Re) !== 0 && (e.f & U) !== 0)) {
-    (e.f & X) !== 0 ? t.d.push(e) : (e.f & je) !== 0 && t.m.push(e), j(e, U);
+    (e.f & X) !== 0 ? t.d.push(e) : (e.f & je) !== 0 && t.m.push(e), O(e, U);
     for (var r = e.first; r !== null; )
       vi(r, t), r = r.next;
   }
 }
 function hi(e) {
-  j(e, U);
+  O(e, U);
   for (var t = e.first; t !== null; )
     hi(t), t = t.next;
 }
@@ -1125,7 +1125,7 @@ function xn(e) {
 function _i(e) {
   var t = xn(e);
   if (!e.equals(t) && (e.wv = Ni(), (!E?.is_fork || e.deps === null) && (E !== null ? E.capture(e, t, !0) : e.v = t, e.deps === null))) {
-    j(e, U);
+    O(e, U);
     return;
   }
   ut || (Me !== null ? (wn() || E?.is_fork) && Me.set(e, t) : _n(e));
@@ -1190,7 +1190,7 @@ function Ht(e, t, r = null) {
 function as() {
   bi = !1;
   for (const e of dn)
-    (e.f & U) !== 0 && j(e, je), vr(e) && Ut(e);
+    (e.f & U) !== 0 && O(e, je), vr(e) && Ut(e);
   dn.clear();
 }
 function tr(e) {
@@ -1201,7 +1201,7 @@ function mi(e, t, r) {
   if (n !== null)
     for (var i = n.length, a = 0; a < i; a++) {
       var u = n[a], o = u.f, l = (o & X) === 0;
-      if (l && j(u, t), (o & Z) !== 0) {
+      if (l && O(u, t), (o & Z) !== 0) {
         var f = (
           /** @type {Derived} */
           u
@@ -1486,7 +1486,7 @@ function wn() {
 }
 function vs(e) {
   const t = dt(Vr, null);
-  return j(t, U), t.teardown = e, t;
+  return O(t, U), t.teardown = e, t;
 }
 function Gn(e) {
   ds();
@@ -1568,7 +1568,7 @@ function se(e, t = !0) {
     e.nodes.start,
     /** @type {TemplateNode} */
     e.nodes.end
-  ), r = !0), j(e, qn), En(e, t && !r), ir(e, 0);
+  ), r = !0), O(e, qn), En(e, t && !r), ir(e, 0);
   var n = e.nodes && e.nodes.t;
   if (n !== null)
     for (const a of n)
@@ -1625,7 +1625,7 @@ function Cn(e) {
 }
 function Mi(e, t) {
   if ((e.f & ee) !== 0) {
-    e.f ^= ee, (e.f & U) === 0 && (j(e, X), Mt.ensure().schedule(e));
+    e.f ^= ee, (e.f & U) === 0 && (O(e, X), Mt.ensure().schedule(e));
     for (var r = e.first; r !== null; ) {
       var n = r.next, i = (r.f & qt) !== 0 || (r.f & Re) !== 0;
       Mi(r, i ? t : !1), r = n;
@@ -1691,7 +1691,7 @@ function vr(e) {
     }
     (t & xe) !== 0 && // During time traveling we don't want to reset the status so that
     // traversal of the graph in the other batches still happens
-    Me === null && j(e, U);
+    Me === null && O(e, U);
   }
   return !1;
 }
@@ -1705,7 +1705,7 @@ function Pi(e, t, r = !0) {
         a,
         t,
         !1
-      ) : t === a && (r ? j(a, X) : (a.f & U) !== 0 && j(a, je), bn(
+      ) : t === a && (r ? O(a, X) : (a.f & U) !== 0 && O(a, je), bn(
         /** @type {Effect} */
         a
       ));
@@ -1791,7 +1791,7 @@ function ir(e, t) {
 function Ut(e) {
   var t = e.f;
   if ((t & ye) === 0) {
-    j(e, U);
+    O(e, U);
     var r = A, n = Ar;
     A = e, Ar = !0;
     try {
@@ -2051,7 +2051,7 @@ function D(e, t) {
     t
   );
 }
-function I(e, t) {
+function j(e, t) {
   var r = t == null ? "" : typeof t == "object" ? `${t}` : t;
   r !== (e.__t ?? (e.__t = e.nodeValue)) && (e.__t = r, e.nodeValue = `${r}`);
 }
@@ -2625,7 +2625,7 @@ function ul(e, t) {
   {
     var Ki = (g) => {
       var V = js(), Be = x(b(V));
-      le(() => I(Be, ` ${c(o) ?? ""}`)), D(g, V);
+      le(() => j(Be, ` ${c(o) ?? ""}`)), D(g, V);
     };
     H(Rn, (g) => {
       c(o) && !c(u) && g(Ki);
@@ -2644,13 +2644,13 @@ function ul(e, t) {
           {
             var Ue = (re) => {
               var ne = qs(), Se = x(b(ne), 2), ve = b(Se);
-              le(() => I(ve, c(a) === "admin" ? "No litigations found in the system." : "You have no litigation cases.")), D(re, ne);
+              le(() => j(ve, c(a) === "admin" ? "No litigations found in the system." : "You have no litigation cases.")), D(re, ne);
             }, et = (re) => {
               var ne = Xs(), Se = b(ne), ve = b(Se), tt = b(ve), rt = x(b(tt), 4);
               {
                 var R = (W) => {
-                  var O = Bs();
-                  D(W, O);
+                  var I = Bs();
+                  D(W, I);
                 };
                 H(rt, (W) => {
                   c(a) === "admin" && W(R);
@@ -2659,33 +2659,33 @@ function ul(e, t) {
               var G = x(rt, 2);
               {
                 var Ye = (W) => {
-                  var O = Hs();
-                  D(W, O);
+                  var I = Hs();
+                  D(W, I);
                 }, ht = (W) => {
-                  var O = Us();
-                  D(W, O);
+                  var I = Us();
+                  D(W, I);
                 };
                 H(G, (W) => {
                   c(a) === "admin" ? W(Ye) : W(ht, -1);
                 });
               }
               var Xt = x(ve);
-              Ps(Xt, 21, () => c(n), (W) => W.id, (W, O) => {
+              Ps(Xt, 21, () => c(n), (W) => W.id, (W, I) => {
                 var gr = Js(), P = b(gr), Pe = b(P), br = x(P), Pn = b(br), $i = b(Pn), Qi = x(Pn, 2);
                 {
                   var ea = (J) => {
                     var he = Ys(), pt = b(he);
-                    le(() => I(pt, c(O).description)), D(J, he);
+                    le(() => j(pt, c(I).description)), D(J, he);
                   };
                   H(Qi, (J) => {
-                    c(O).description && J(ea);
+                    c(I).description && J(ea);
                   });
                 }
                 var Fn = x(br), Vn = b(Fn), ta = b(Vn), Ln = x(Fn), ra = b(Ln), zn = x(Ln);
                 {
                   var na = (J) => {
                     var he = Gs(), pt = b(he);
-                    le((Wr) => I(pt, Wr), [() => An(c(O).defendant_principal)]), D(J, he);
+                    le((Wr) => j(pt, Wr), [() => An(c(I).defendant_principal)]), D(J, he);
                   };
                   H(zn, (J) => {
                     c(a) === "admin" && J(na);
@@ -2696,25 +2696,25 @@ function ul(e, t) {
                   var la = (J) => {
                     var he = Ks();
                     Fe("click", he, (pt) => {
-                      pt.stopPropagation(), zr(c(O));
+                      pt.stopPropagation(), zr(c(I));
                     }), D(J, he);
                   }, oa = (J) => {
                     var he = Ws();
                     D(J, he);
                   };
                   H(sa, (J) => {
-                    c(a) === "admin" && c(O).status !== "resolved" ? J(la) : c(O).status === "resolved" && J(oa, 1);
+                    c(a) === "admin" && c(I).status !== "resolved" ? J(la) : c(I).status === "resolved" && J(oa, 1);
                   });
                 }
                 le(
                   (J, he, pt, Wr) => {
-                    I(Pe, c(O).id), I($i, c(O).case_title), xr(Vn, 1, `inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${J ?? ""}`), I(ta, he), I(ra, pt), I(ia, Wr);
+                    j(Pe, c(I).case_number || c(I).id), j($i, c(I).case_title), xr(Vn, 1, `inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${J ?? ""}`), j(ta, he), j(ra, pt), j(ia, Wr);
                   },
                   [
-                    () => Bi(c(O).status),
-                    () => c(O).status?.replace("_", " ") || "unknown",
-                    () => An(c(O).requester_principal),
-                    () => Hi(c(O).requested_at)
+                    () => Bi(c(I).status),
+                    () => c(I).status?.replace("_", " ") || "unknown",
+                    () => An(c(I).requester_principal),
+                    () => Hi(c(I).requested_at)
                   ]
                 ), D(W, gr);
               }), D(re, ne);
@@ -2729,7 +2729,7 @@ function ul(e, t) {
           {
             var rt = (P) => {
               var Pe = Zs(), br = x(b(Pe));
-              le(() => I(br, ` ${c(h) ?? ""}`)), D(P, Pe);
+              le(() => j(br, ` ${c(h) ?? ""}`)), D(P, Pe);
             };
             H(tt, (P) => {
               c(h) && P(rt);
@@ -2747,7 +2747,7 @@ function ul(e, t) {
           }
           var Ye = x(R, 2), ht = b(Ye), Xt = x(ht, 2), W = b(Xt);
           {
-            var O = (P) => {
+            var I = (P) => {
               var Pe = Qs();
               D(P, Pe);
             }, gr = (P) => {
@@ -2755,7 +2755,7 @@ function ul(e, t) {
               D(P, Pe);
             };
             H(W, (P) => {
-              c(p) ? P(O) : P(gr, -1);
+              c(p) ? P(I) : P(gr, -1);
             });
           }
           le(
@@ -2769,7 +2769,7 @@ function ul(e, t) {
         }, _r = (ce) => {
           var Ce = tl(), He = b(Ce), Ue = x(b(He), 2), et = b(Ue), re = x(He, 2), ne = x(b(re), 2), Se = b(ne), ve = x(re, 2), tt = x(b(ve), 2), rt = b(tt), R = x(ve, 2), G = x(b(R), 2), Ye = b(G);
           le(() => {
-            I(et, c(i)), I(Se, c(qe)), I(rt, c(Ne)), I(Ye, c(ct));
+            j(et, c(i)), j(Se, c(qe)), j(rt, c(Ne)), j(Ye, c(ct));
           }), D(ce, Ce);
         };
         H(Yr, (ce) => {
@@ -2777,7 +2777,7 @@ function ul(e, t) {
         });
       }
       le(() => {
-        I(qr, c(a)), I(pr, c(i)), xr(vt, 1, `flex items-center gap-2 px-4 py-2.5 text-sm font-medium -mb-0.5 border-b-2 transition-colors ${c(r) === "list" ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`), I(Hr, ` ${c(a) === "admin" ? "All Litigations" : "My Litigations"}`), xr(Wt, 1, `flex items-center gap-2 px-4 py-2.5 text-sm font-medium -mb-0.5 border-b-2 transition-colors ${c(r) === "create" ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`), xr(Jt, 1, `flex items-center gap-2 px-4 py-2.5 text-sm font-medium -mb-0.5 border-b-2 transition-colors ${c(r) === "stats" ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`);
+        j(qr, c(a)), j(pr, c(i)), xr(vt, 1, `flex items-center gap-2 px-4 py-2.5 text-sm font-medium -mb-0.5 border-b-2 transition-colors ${c(r) === "list" ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`), j(Hr, ` ${c(a) === "admin" ? "All Litigations" : "My Litigations"}`), xr(Wt, 1, `flex items-center gap-2 px-4 py-2.5 text-sm font-medium -mb-0.5 border-b-2 transition-colors ${c(r) === "create" ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`), xr(Jt, 1, `flex items-center gap-2 px-4 py-2.5 text-sm font-medium -mb-0.5 border-b-2 transition-colors ${c(r) === "stats" ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`);
       }), Fe("click", vt, () => m(r, "list")), Fe("click", Wt, () => m(r, "create")), Fe("click", Jt, () => m(r, "stats")), D(g, V);
     };
     H(Nn, (g) => {
@@ -2794,7 +2794,7 @@ function ul(e, t) {
           {
             var Kr = (R) => {
               var G = nl(), Ye = x(b(G), 2), ht = b(Ye);
-              le(() => I(ht, c(y).description)), D(R, G);
+              le(() => j(ht, c(y).description)), D(R, G);
             };
             H(Gr, (R) => {
               c(y).description && R(Kr);
@@ -2804,7 +2804,7 @@ function ul(e, t) {
           {
             var He = (R) => {
               var G = il(), Ye = x(b(G));
-              le(() => I(Ye, ` ${c(B) ?? ""}`)), D(R, G);
+              le(() => j(Ye, ` ${c(B) ?? ""}`)), D(R, G);
             };
             H(Ce, (R) => {
               c(B) && R(He);
@@ -2835,7 +2835,7 @@ function ul(e, t) {
           }
           le(
             (R) => {
-              I(Wt, c(y).id), I(Yr, c(y).case_title), ce.disabled = c(S), ne.disabled = c(S), Se.disabled = R;
+              j(Wt, c(y).id), j(Yr, c(y).case_title), ce.disabled = c(S), ne.disabled = c(S), Se.disabled = R;
             },
             [() => c(S) || !c(M).trim()]
           ), yr(ce, () => c(M), (R) => m(M, R)), Fe("click", ne, Ir), Fe("click", Se, Oi), D(Gt, pr);

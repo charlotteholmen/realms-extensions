@@ -386,9 +386,9 @@
 									<tr
 										class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
 									>
-										<td class="px-4 py-3 font-mono text-xs text-indigo-600 dark:text-indigo-400">
-											{lit.id}
-										</td>
+									<td class="px-4 py-3 font-mono text-xs text-indigo-600 dark:text-indigo-400">
+										{lit.case_number || lit.id}
+									</td>
 										<td class="px-4 py-3">
 											<div class="font-medium text-gray-900 dark:text-white">
 												{lit.case_title}
