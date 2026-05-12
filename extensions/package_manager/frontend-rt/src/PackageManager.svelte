@@ -249,31 +249,35 @@
 				? [{ canister_id: FILE_REGISTRY_FALLBACK, canister_type: 'file_registry' }]
 				: [];
 
-		for (const reg of regsToQuery) {
-			try {
-				const [exts, codices] = await Promise.all([
-					listRegistryExtensions(reg.canister_id),
-					listRegistryCodices(reg.canister_id),
-				]);
-				for (const e of exts) {
-					out.push({
-						kind: 'extension', id: e.ext_id, versions: e.versions, latest: e.latest,
-						manifest: e.manifest as any, registryCanisterId: reg.canister_id,
-					});
-				}
-				for (const c of codices) {
-					out.push({
-						kind: 'codex', id: c.codex_id, versions: c.versions, latest: c.latest,
-						manifest: null, registryCanisterId: reg.canister_id,
-					});
-				}
-			} catch (e: any) {
-				registryErrors = [
-					...registryErrors,
-					`Failed to load from registry ${shortId(reg.canister_id)}: ${e?.message ?? String(e)}`,
-				];
-			}
+	for (const reg of regsToQuery) {
+		const errors: string[] = [];
+		const exts = await listRegistryExtensions(reg.canister_id).catch((e: any) => {
+			errors.push(`extensions: ${e?.message ?? String(e)}`);
+			return [] as RegistryExtension[];
+		});
+		const codices = await listRegistryCodices(reg.canister_id).catch((e: any) => {
+			errors.push(`codices: ${e?.message ?? String(e)}`);
+			return [] as RegistryCodex[];
+		});
+		for (const e of exts) {
+			out.push({
+				kind: 'extension', id: e.ext_id, versions: e.versions, latest: e.latest,
+				manifest: e.manifest as any, registryCanisterId: reg.canister_id,
+			});
 		}
+		for (const c of codices) {
+			out.push({
+				kind: 'codex', id: c.codex_id, versions: c.versions, latest: c.latest,
+				manifest: null, registryCanisterId: reg.canister_id,
+			});
+		}
+		if (errors.length > 0 && exts.length === 0 && codices.length === 0) {
+			registryErrors = [
+				...registryErrors,
+				`Failed to load from registry ${shortId(reg.canister_id)}: ${errors.join('; ')}`,
+			];
+		}
+	}
 
 		registryEntries = out.sort((a, b) =>
 			a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind.localeCompare(b.kind),
