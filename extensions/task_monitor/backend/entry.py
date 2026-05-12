@@ -5,6 +5,7 @@ Provides task monitoring and management operations for administrators.
 
 import json
 import traceback
+from datetime import datetime
 from typing import Any, Dict, List
 
 import ggg
@@ -16,6 +17,28 @@ from ic_python_logging import get_logger
 logger = get_logger("extensions.task_monitor")
 
 DEFAULT_PAGE_SIZE = 10
+
+
+def _get_timestamp_ms(entity, field: str):
+    """Extract a millisecond timestamp from an entity.
+
+    Tries the private `_timestamp_*` attribute first (int, ms since epoch).
+    Falls back to the public `timestamp_*` formatted string set during load,
+    parsing it back to milliseconds.  Returns None when unavailable.
+    """
+    private = f"_timestamp_{field}"
+    val = getattr(entity, private, 0) or 0
+    if val:
+        return val
+    public = f"timestamp_{field}"
+    formatted = getattr(entity, public, None)
+    if formatted and isinstance(formatted, str) and formatted != "None":
+        try:
+            dt = datetime.strptime(formatted, "%Y-%m-%d %H:%M:%S.%f")
+            return int(dt.timestamp() * 1000)
+        except ValueError:
+            pass
+    return None
 
 
 def extension_sync_call(method_name: str, args: dict):
@@ -106,8 +129,8 @@ def get_all_tasks(args: str = "{}"):
                     "total_steps": len(list(task.steps)) if hasattr(task, "steps") else 0,
                     "executions_count": exec_count,
                     "schedules": [],
-                    "created_at": task._timestamp_created if hasattr(task, "_timestamp_created") else None,
-                    "updated_at": task._timestamp_updated if hasattr(task, "_timestamp_updated") else None,
+                    "created_at": _get_timestamp_ms(task, "created"),
+                    "updated_at": _get_timestamp_ms(task, "updated"),
                 }
 
                 if hasattr(task, "schedules"):
@@ -167,6 +190,14 @@ def get_task_details(args):
             return json.dumps({"success": False, "error": f"Task {task_id} not found"})
         logger.info(f"get_task_details: task loaded: {task.name}")
 
+        # Total executions count (full relation, not paginated)
+        exec_count = 0
+        try:
+            if hasattr(task, "executions"):
+                exec_count = len(list(task.executions))
+        except Exception:
+            pass
+
         # Build detailed task data
         task_data = {
             "_id": str(task._id),
@@ -178,8 +209,9 @@ def get_task_details(args):
             ),
             "steps": [],
             "schedules": [],
-            "created_at": task._timestamp_created if hasattr(task, "_timestamp_created") else None,
-            "updated_at": task._timestamp_updated if hasattr(task, "_timestamp_updated") else None,
+            "created_at": _get_timestamp_ms(task, "created"),
+            "updated_at": _get_timestamp_ms(task, "updated"),
+            "executions_count": exec_count,
         }
         logger.info("get_task_details: basic data built")
 
@@ -269,8 +301,8 @@ def get_task_details(args):
                 "name": execution.name,
                 "status": execution.status,
                 "result": execution.result if hasattr(execution, "result") else "",
-                "created_at": execution._timestamp_created if hasattr(execution, "_timestamp_created") else None,
-                "updated_at": execution._timestamp_updated if hasattr(execution, "_timestamp_updated") else None,
+                "created_at": _get_timestamp_ms(execution, "created"),
+                "updated_at": _get_timestamp_ms(execution, "updated"),
                 "logger_name": execution._logger_name() if hasattr(execution, "_logger_name") else "",
             }
             task_data["executions"].append(exec_data)
@@ -314,16 +346,8 @@ def get_task_executions(args):
                         "result": (
                             execution.result if hasattr(execution, "result") else ""
                         ),
-                        "created_at": (
-                            execution._timestamp_created
-                            if hasattr(execution, "_timestamp_created")
-                            else None
-                        ),
-                        "updated_at": (
-                            execution._timestamp_updated
-                            if hasattr(execution, "_timestamp_updated")
-                            else None
-                        ),
+                        "created_at": _get_timestamp_ms(execution, "created"),
+                        "updated_at": _get_timestamp_ms(execution, "updated"),
                     }
                 )
 

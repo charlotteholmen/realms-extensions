@@ -126,8 +126,10 @@
 			callSync('get_task_logs', { task_id: taskId }).catch(() => ({ data: [] })),
 		]);
 		const raw = det?.task ?? det?.data?.task ?? det?.data ?? det;
-		if (raw && raw.executions) {
-			raw.executions_count = raw.executions.length;
+		if (raw) {
+			if (raw.executions_count == null && raw.executions) {
+				raw.executions_count = raw.executions.length;
+			}
 			raw.total_steps = raw.steps?.length ?? 0;
 		}
 		taskDetail = raw;
@@ -438,60 +440,49 @@
 				<svg class="animate-spin h-10 w-10 text-blue-600" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
 			</div>
 		{:else}
-			<!-- Stats -->
-			<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-				<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-					<div class="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</div>
-					<div class="text-sm text-gray-500 dark:text-gray-400">Total Tasks</div>
-				</div>
-				<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-					<div class="text-2xl font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2">
-						{stats.running}
-						{#if stats.running > 0}
-							<span class="relative flex h-3 w-3">
-								<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-								<span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-							</span>
-						{/if}
+			<!-- Stats & Search -->
+			<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 mb-4">
+				<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+					<div class="flex items-center gap-4 text-sm">
+						<span class="font-medium text-gray-700 dark:text-gray-300">{stats.total} tasks</span>
+						<span class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-medium">
+							{#if stats.running > 0}
+								<span class="relative flex h-2 w-2">
+									<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+									<span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+								</span>
+							{/if}
+							{stats.running} running
+						</span>
+						<span class="text-yellow-600 dark:text-yellow-400 font-medium">{stats.pending} pending</span>
+						<span class="text-green-600 dark:text-green-400 font-medium">{stats.completed} completed</span>
+						<span class="text-red-600 dark:text-red-400 font-medium">{stats.failed} failed</span>
 					</div>
-					<div class="text-sm text-gray-500 dark:text-gray-400">Running</div>
-				</div>
-				<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-					<div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</div>
-					<div class="text-sm text-gray-500 dark:text-gray-400">Pending</div>
-				</div>
-				<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-					<div class="text-2xl font-bold text-green-600 dark:text-green-400">{stats.completed}</div>
-					<div class="text-sm text-gray-500 dark:text-gray-400">Completed</div>
-				</div>
-				<div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-					<div class="text-2xl font-bold text-red-600 dark:text-red-400">{stats.failed}</div>
-					<div class="text-sm text-gray-500 dark:text-gray-400">Failed</div>
+					<div class="flex flex-1 items-center gap-2 ml-auto min-w-0">
+						<div class="flex-1 relative min-w-[150px]">
+							<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+							<input
+								type="text"
+								bind:value={searchTerm}
+								placeholder="Search tasks..."
+								class="w-full pl-8 pr-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+							/>
+						</div>
+						<select
+							bind:value={statusFilter}
+							class="w-36 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+						>
+							<option value="">All Status</option>
+							<option value="running">Running</option>
+							<option value="pending">Pending</option>
+							<option value="completed">Completed</option>
+							<option value="failed">Failed</option>
+						</select>
+					</div>
 				</div>
 			</div>
 
-			<!-- Search & Filter -->
-			<div class="flex flex-col sm:flex-row gap-3 mb-6">
-				<div class="flex-1 relative">
-					<svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-					<input
-						type="text"
-						bind:value={searchTerm}
-						placeholder="Search tasks..."
-						class="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-					/>
-				</div>
-				<select
-					bind:value={statusFilter}
-					class="w-full sm:w-48 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-				>
-					<option value="">All Status</option>
-					<option value="running">Running</option>
-					<option value="pending">Pending</option>
-					<option value="completed">Completed</option>
-					<option value="failed">Failed</option>
-				</select>
-			</div>
+		
 
 			{#if filteredTasks.length === 0}
 				<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-12 text-center">
