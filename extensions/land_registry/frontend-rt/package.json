@@ -6,6 +6,10 @@
   "scripts": {
     "build": "vite build"
   },
+  "dependencies": {
+    "h3-js": "^4.2.1",
+    "leaflet": "^1.9.4"
+  },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "svelte": "^5.19.0",

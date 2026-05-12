@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import * as leafletLib from 'leaflet';
+	import * as h3Lib from 'h3-js';
+	import leafletCss from 'leaflet/dist/leaflet.css?inline';
 
 	let { ctx }: { ctx: any } = $props();
 
@@ -81,15 +84,14 @@
 	async function initMap() {
 		if (!mapContainer || mapInstance) return;
 
-		L = await import(/* @vite-ignore */ 'https://esm.sh/leaflet@1.9.4');
-		h3 = await import(/* @vite-ignore */ 'https://esm.sh/h3-js@4.2.1');
+		L = leafletLib.default ?? leafletLib;
+		h3 = h3Lib;
 
-		if (!document.querySelector('link[href*="leaflet"]')) {
-			const link = document.createElement('link');
-			link.rel = 'stylesheet';
-			link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-			document.head.appendChild(link);
-			await new Promise((r) => setTimeout(r, 150));
+		if (!document.querySelector('style[data-leaflet-css]')) {
+			const style = document.createElement('style');
+			style.setAttribute('data-leaflet-css', '');
+			style.textContent = leafletCss;
+			document.head.appendChild(style);
 		}
 
 		mapInstance = L.map(mapContainer).setView([20, 0], 2);
