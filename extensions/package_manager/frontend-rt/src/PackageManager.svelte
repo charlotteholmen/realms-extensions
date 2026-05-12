@@ -65,7 +65,9 @@
 
 	async function fetchJson<T>(url: string): Promise<T> {
 		const resp = await fetch(url, { headers: { Accept: 'application/json' } });
-		if (!resp.ok) throw new Error(`HTTP ${resp.status} from ${url}: ${await resp.text().catch(() => '')}`);
+		if (!resp.ok) {
+			throw new Error(`HTTP ${resp.status} from ${url}: ${await resp.text().catch(() => '')}`);
+		}
 		return (await resp.json()) as T;
 	}
 

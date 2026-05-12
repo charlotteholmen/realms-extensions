@@ -2592,7 +2592,8 @@ function hl(e, t) {
   }
   async function a(d) {
     const _ = await fetch(d, { headers: { Accept: "application/json" } });
-    if (!_.ok) throw new Error(`HTTP ${_.status} from ${d}: ${await _.text().catch(() => "")}`);
+    if (!_.ok)
+      throw new Error(`HTTP ${_.status} from ${d}: ${await _.text().catch(() => "")}`);
     return await _.json();
   }
   async function c(d) {
