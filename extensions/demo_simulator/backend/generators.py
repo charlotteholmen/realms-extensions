@@ -13,12 +13,17 @@ from .constants import (
     CASE_TITLES,
     CITY_COORDINATES,
     COURT_NAMES,
+    EXPENSE_BUDGETS,
     FIRST_NAMES,
+    FISCAL_PERIOD_DEFINITIONS,
+    FUND_DEFINITIONS,
     JUDGE_SPECIALIZATIONS,
     LAND_TYPES,
     LAST_NAMES,
+    LEDGER_TEMPLATES,
     ORG_NAMES,
     PROPOSAL_TITLES,
+    REVENUE_BUDGETS,
     VERDICT_DECISIONS,
     ZONE_NAMES,
 )
@@ -390,4 +395,161 @@ def generate_case_batch(state_data, count):
         created.append(case.case_number)
 
     state_data["total_cases_created"] = base_idx + count
+    return created
+
+
+# ── Finance generators (for Metrics extension) ──────────────────────────────
+
+
+def generate_fund_batch(state_data, count):
+    """Generate governmental funds (idempotent — skips existing codes)."""
+    from ggg import Fund
+
+    created = []
+    for defn in FUND_DEFINITIONS[:count]:
+        existing = Fund[defn["code"]]
+        if existing:
+            continue
+        Fund(
+            code=defn["code"],
+            name=defn["name"],
+            fund_type=defn["fund_type"],
+            description=defn["description"],
+        )
+        created.append(defn["code"])
+
+    state_data["total_funds_created"] = state_data.get("total_funds_created", 0) + len(created)
+    return created
+
+
+def generate_fiscal_period_batch(state_data, count):
+    """Generate fiscal periods (idempotent — skips existing IDs)."""
+    from ggg import FiscalPeriod
+
+    created = []
+    for defn in FISCAL_PERIOD_DEFINITIONS[:count]:
+        existing = FiscalPeriod[defn["id"]]
+        if existing:
+            continue
+        FiscalPeriod(
+            id=defn["id"],
+            name=defn["name"],
+            start_date=defn["start_date"],
+            end_date=defn["end_date"],
+            status=defn["status"],
+        )
+        created.append(defn["id"])
+
+    state_data["total_fiscal_periods_created"] = state_data.get("total_fiscal_periods_created", 0) + len(created)
+    return created
+
+
+def generate_budget_batch(state_data, count):
+    """Generate budget line items linked to funds and fiscal periods."""
+    from ggg import Budget, FiscalPeriod, Fund
+
+    funds = list(Fund.instances())
+    periods = list(FiscalPeriod.instances())
+    if not funds or not periods:
+        return []
+
+    base_idx = state_data.get("total_budgets_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 90000)
+
+    all_budgets = REVENUE_BUDGETS + EXPENSE_BUDGETS
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        template = all_budgets[idx % len(all_budgets)]
+        fund = rng.choice(funds)
+        period = rng.choice(periods)
+
+        planned = rng.randint(10_000, 500_000)
+        variance = rng.uniform(-0.15, 0.25)
+        actual = max(0, int(planned * (1 + variance)))
+
+        Budget(
+            id=f"demo_budget_{idx:04d}",
+            name=template["name"],
+            category=template["category"],
+            budget_type=template["budget_type"],
+            planned_amount=planned,
+            actual_amount=actual,
+            status=rng.choice(["draft", "proposed", "adopted", "adopted", "adopted"]),
+            fund=fund,
+            fiscal_period=period,
+        )
+        created.append(f"demo_budget_{idx:04d}")
+
+    state_data["total_budgets_created"] = base_idx + count
+    return created
+
+
+def generate_ledger_batch(state_data, count):
+    """Generate double-entry ledger entries linked to funds and fiscal periods."""
+    from ggg import FiscalPeriod, Fund, LedgerEntry
+
+    funds = list(Fund.instances())
+    periods = list(FiscalPeriod.instances())
+    if not funds or not periods:
+        return []
+
+    base_idx = state_data.get("total_ledger_entries_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 100000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        template = rng.choice(LEDGER_TEMPLATES)
+        fund = rng.choice(funds)
+        period = rng.choice(periods)
+
+        amount = rng.randint(500, 150_000)
+        tx_id = f"demo_tx_{idx:04d}"
+
+        month = rng.randint(1, 12)
+        day = rng.randint(1, 28)
+        year = 2026 if period.id == "FY2026" else 2025
+        entry_date = f"{year}-{month:02d}-{day:02d}"
+
+        # Primary entry
+        if template["entry_type"] in ("revenue", "liability", "equity"):
+            debit, credit = 0, amount
+        else:
+            debit, credit = amount, 0
+
+        LedgerEntry(
+            id=f"demo_le_{idx:04d}_a",
+            transaction_id=tx_id,
+            entry_type=template["entry_type"],
+            category=template["category"],
+            debit=debit,
+            credit=credit,
+            entry_date=entry_date,
+            fund=fund,
+            fiscal_period=period,
+            description=template["description"],
+            tags=template.get("tags", ""),
+        )
+
+        # Balancing cash entry (the other side of double-entry)
+        LedgerEntry(
+            id=f"demo_le_{idx:04d}_b",
+            transaction_id=tx_id,
+            entry_type="asset",
+            category="cash",
+            debit=credit,
+            credit=debit,
+            entry_date=entry_date,
+            fund=fund,
+            fiscal_period=period,
+            description=f"Cash {'receipt' if credit > 0 else 'disbursement'} — {template['description']}",
+            tags=template.get("tags", ""),
+        )
+
+        created.append(tx_id)
+
+    state_data["total_ledger_entries_created"] = base_idx + count
     return created

@@ -12,10 +12,14 @@ from ic_python_logging import get_logger
 
 from .constants import DEFAULT_BATCH_SIZE, DEFAULT_INTERVAL_SECONDS, MAX_ENTITIES_TOTAL, SCHEDULE_NAME
 from .generators import (
+    generate_budget_batch,
     generate_case_batch,
     generate_court_batch,
     generate_dispute_batch,
+    generate_fiscal_period_batch,
+    generate_fund_batch,
     generate_land_batch,
+    generate_ledger_batch,
     generate_org_batch,
     generate_proposal_batch,
     generate_transfer_batch,
@@ -60,6 +64,10 @@ def run_batch(args: str = "{}"):
         state_data.get("total_lands_created", 0),
         state_data.get("total_courts_created", 0),
         state_data.get("total_cases_created", 0),
+        state_data.get("total_funds_created", 0),
+        state_data.get("total_fiscal_periods_created", 0),
+        state_data.get("total_budgets_created", 0),
+        state_data.get("total_ledger_entries_created", 0),
     ])
 
     if max_entities and total_created >= max_entities:
@@ -69,7 +77,7 @@ def run_batch(args: str = "{}"):
             schedule.disabled = True
         return json.dumps({"status": "paused", "reason": "max_entities_reached", "total": total_created})
 
-    batch_type = batch_number % 9
+    batch_type = batch_number % 13
     results = {}
 
     try:
@@ -91,6 +99,14 @@ def run_batch(args: str = "{}"):
             results["courts"] = generate_court_batch(state_data, max(1, batch_size // 3))
         elif batch_type == 8:
             results["cases"] = generate_case_batch(state_data, max(1, batch_size // 2))
+        elif batch_type == 9:
+            results["funds"] = generate_fund_batch(state_data, 5)
+        elif batch_type == 10:
+            results["fiscal_periods"] = generate_fiscal_period_batch(state_data, 2)
+        elif batch_type == 11:
+            results["budgets"] = generate_budget_batch(state_data, max(2, batch_size))
+        elif batch_type == 12:
+            results["ledger_entries"] = generate_ledger_batch(state_data, batch_size * 2)
     except Exception as e:
         logger.error(f"Demo simulator batch {batch_number} failed: {e}")
         logger.error(traceback.format_exc())
@@ -208,6 +224,10 @@ def get_status(args):
             "lands": state_data.get("total_lands_created", 0),
             "courts": state_data.get("total_courts_created", 0),
             "cases": state_data.get("total_cases_created", 0),
+            "funds": state_data.get("total_funds_created", 0),
+            "fiscal_periods": state_data.get("total_fiscal_periods_created", 0),
+            "budgets": state_data.get("total_budgets_created", 0),
+            "ledger_entries": state_data.get("total_ledger_entries_created", 0),
         },
         "demo_mode_active": is_demo_mode_active(),
     })
@@ -303,6 +323,10 @@ def reset(args):
     state_data["total_lands_created"] = 0
     state_data["total_courts_created"] = 0
     state_data["total_cases_created"] = 0
+    state_data["total_funds_created"] = 0
+    state_data["total_fiscal_periods_created"] = 0
+    state_data["total_budgets_created"] = 0
+    state_data["total_ledger_entries_created"] = 0
 
     if not keep_seed:
         state_data["seed"] = random_seed()
