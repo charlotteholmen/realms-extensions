@@ -161,11 +161,11 @@
 	async function sendMessage(): Promise<void> {
 		if (!newMessage.trim()) return;
 
+		error = '';
 		messages = [...messages, { text: newMessage, isUser: true }];
 		const messageToSend = newMessage;
 		newMessage = '';
 		isLoading = true;
-		error = '';
 
 		try {
 			const payload: Record<string, any> = {
@@ -265,24 +265,31 @@
 		}
 	}
 
+	function dismissError() {
+		error = '';
+	}
+
 	function renderMarkdown(text: string): string {
-		return text
+		let html = text
 			.replace(/&/g, '&amp;')
 			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
+			.replace(/>/g, '&gt;');
+
+		html = html
+			.replace(/```([^`]*?)```/gs, '<pre class="bg-gray-100 dark:bg-gray-900 rounded-md p-3 my-2 overflow-x-auto text-xs font-mono"><code>$1</code></pre>')
 			.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
 			.replace(/\*(.+?)\*/g, '<em>$1</em>')
-			.replace(/`(.+?)`/g, '<code>$1</code>')
-			.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-600 underline">$1</a>')
-			.replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
-			.replace(/^## (.+)$/gm, '<h2 class="text-xl font-semibold mt-4 mb-2">$1</h2>')
-			.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mt-4 mb-2">$1</h1>')
+			.replace(/`(.+?)`/g, '<code class="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-xs font-mono">$1</code>')
+			.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800">$1</a>')
+			.replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
+			.replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-3 mb-1">$1</h2>')
+			.replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-3 mb-1">$1</h1>')
 			.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
 			.replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal">$2</li>')
-			.replace(/\n{2,}/g, '</p><p class="my-2">')
-			.replace(/\n/g, '<br/>')
-			.replace(/^/, '<p class="my-2">')
-			.replace(/$/, '</p>');
+			.replace(/\n{2,}/g, '<br/><br/>')
+			.replace(/\n/g, '<br/>');
+
+		return html;
 	}
 
 	function autoResizeTextarea(): void {
@@ -320,284 +327,458 @@
 	});
 </script>
 
-<div class="w-full flex flex-col max-w-none" style="height: calc(100vh - 80px);">
-	<h2 class="text-2xl font-bold text-gray-900 mb-6 flex-shrink-0">AI Chat</h2>
-
-	<div class="w-full flex flex-col flex-grow min-h-0">
-		<!-- Assistant Selector -->
-		{#if availableAssistants.length > 1}
-			<div
-				class="flex gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0"
-			>
-				{#each availableAssistants as assistant}
-					<button
-						class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors duration-200
-							{selectedAssistant?.id === assistant.id
-							? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-							: 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}"
-						onclick={() => selectAssistant(assistant)}
-						title={assistant.description}
-					>
-						<span class="text-lg">{assistant.emoji}</span>
-						<span class="text-sm font-medium">{assistant.name}</span>
-					</button>
-				{/each}
-			</div>
-		{/if}
-
-		<!-- Messages Container -->
-		<div
-			class="w-full flex-grow flex flex-col m-0 p-0 rounded-none border border-gray-200 bg-white max-w-none min-h-0"
-		>
-			<div
-				bind:this={messagesContainer}
-				class="flex-grow overflow-y-auto p-4 bg-gray-50 dark:bg-gray-800"
-				style="min-height: 300px;"
-			>
-				{#if messages.length === 0 && !isExplainMode}
-					<div class="flex justify-start mb-6 mt-8">
-						<div class="flex items-start space-x-4 max-w-[85%]">
-							<div
-								class="flex-shrink-0 w-12 h-12 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-lg flex items-center justify-center bg-white dark:bg-gray-700"
-							>
-								{#if selectedAssistant}
-									<span class="text-2xl">{selectedAssistant.emoji}</span>
-								{:else}
-									<span class="text-2xl">🤖</span>
-								{/if}
-							</div>
-							<div class="flex-1">
-								<div
-									class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-md px-6 py-5 shadow-lg"
-								>
-									<div
-										class="text-sm text-gray-600 dark:text-gray-400 space-y-3 leading-relaxed"
-									>
-										{#if isAuthenticated}
-											<p>
-												Welcome back! I'm your AI assistant. Ask me anything about this realm
-												— governance, proposals, codices, or general questions.
-											</p>
-										{:else}
-											<p>
-												Hello! I'm the realm's AI assistant. Feel free to ask me about this
-												realm, its governance structure, or anything you'd like to know.
-											</p>
-										{/if}
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-				{:else}
-					{#each messages as message}
-						<div class="mb-6 {message.isUser ? 'flex justify-end' : 'flex justify-start'}">
-							<div class="flex items-start space-x-4 max-w-[85%]">
-								{#if !message.isUser}
-									<div
-										class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-md flex items-center justify-center bg-white dark:bg-gray-700"
-									>
-										{#if selectedAssistant}
-											<span class="text-xl">{selectedAssistant.emoji}</span>
-										{:else}
-											<span class="text-xl">🤖</span>
-										{/if}
-									</div>
-								{/if}
-								<div class="flex-1">
-									{#if message.isUser}
-										<div
-											class="bg-indigo-600 text-white rounded-2xl rounded-br-md px-5 py-4 shadow-lg"
-										>
-											<div
-												class="text-sm leading-relaxed whitespace-pre-wrap font-sans m-0"
-											>
-												{message.text}
-											</div>
-										</div>
-									{:else}
-										<div
-											class="markdown-content prose prose-sm max-w-none dark:prose-invert"
-										>
-											{@html renderMarkdown(message.text)}
-										</div>
-									{/if}
-								</div>
-							</div>
-						</div>
-					{/each}
-
-					{#if isLoading}
-						<div class="mb-6 flex justify-start">
-							<div class="flex items-start space-x-4 max-w-[85%]">
-								<div
-									class="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-600 shadow-md flex items-center justify-center bg-white dark:bg-gray-700"
-								>
-									{#if selectedAssistant}
-										<span class="text-xl">{selectedAssistant.emoji}</span>
-									{:else}
-										<span class="text-xl">🤖</span>
-									{/if}
-								</div>
-								<div class="flex-1">
-									<div
-										class="flex items-center space-x-3 text-gray-600 dark:text-gray-400"
-									>
-										<div class="typing-animation">
-											<span></span>
-											<span></span>
-											<span></span>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-					{/if}
-
-					{#if error}
-						<div class="mb-4">
-							<div
-								class="inline-block rounded-lg px-4 py-2 bg-red-50 border border-red-200 text-red-800"
-							>
-								{error}
-							</div>
-						</div>
-					{/if}
-				{/if}
-			</div>
+<div class="llm-chat-root">
+	<!-- Assistant Selector -->
+	{#if availableAssistants.length > 1}
+		<div class="assistant-selector">
+			{#each availableAssistants as assistant}
+				<button
+					class="assistant-btn {selectedAssistant?.id === assistant.id ? 'active' : ''}"
+					onclick={() => selectAssistant(assistant)}
+					title={assistant.description}
+				>
+					<span class="text-lg">{assistant.emoji}</span>
+					<span class="text-sm font-medium">{assistant.name}</span>
+				</button>
+			{/each}
 		</div>
+	{/if}
 
-		<!-- Input section -->
-		<div
-			class="flex-shrink-0 flex flex-col p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700"
-		>
-			<!-- Suggestions -->
-			<div class="mb-3 px-1">
-				<div class="flex flex-wrap gap-2 justify-center">
-					{#if isLoadingSuggestions}
-						<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-							<svg
-								class="animate-spin h-4 w-4"
-								xmlns="http://www.w3.org/2000/svg"
-								fill="none"
-								viewBox="0 0 24 24"
-							>
-								<circle
-									class="opacity-25"
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="4"
-								></circle>
-								<path
-									class="opacity-75"
-									fill="currentColor"
-									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-								></path>
-							</svg>
-							<span class="text-xs">Loading suggestions...</span>
-						</div>
-					{:else if suggestions.length > 0}
-						{#each suggestions as suggestion}
-							<button
-								class="px-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 whitespace-nowrap"
-								onclick={() => handleSuggestionClick(suggestion)}
-							>
-								{suggestion}
-							</button>
-						{/each}
+	<!-- Messages area (scrollable) -->
+	<div
+		bind:this={messagesContainer}
+		class="messages-area"
+	>
+		{#if messages.length === 0 && !isExplainMode}
+			<div class="welcome-message">
+				<div class="avatar">
+					{#if selectedAssistant}
+						<span>{selectedAssistant.emoji}</span>
+					{:else}
+						<span>🏛</span>
+					{/if}
+				</div>
+				<div class="bubble assistant-bubble">
+					{#if isAuthenticated}
+						<p>Welcome back! I'm your AI assistant. Ask me anything about this realm — governance, proposals, codices, or general questions.</p>
+					{:else}
+						<p>Hello! I'm the realm's AI assistant. Feel free to ask me about this realm, its governance structure, or anything you'd like to know.</p>
 					{/if}
 				</div>
 			</div>
+		{:else}
+			{#each messages as message}
+				{#if message.isUser}
+					<div class="message-row user-row">
+						<div class="bubble user-bubble">
+							{message.text}
+						</div>
+					</div>
+				{:else}
+					<div class="message-row assistant-row">
+						<div class="avatar small">
+							{#if selectedAssistant}
+								<span>{selectedAssistant.emoji}</span>
+							{:else}
+								<span>🏛</span>
+							{/if}
+						</div>
+						<div class="bubble assistant-bubble markdown-content">
+							{@html renderMarkdown(message.text)}
+						</div>
+					</div>
+				{/if}
+			{/each}
 
-			<!-- Message input -->
-			<div class="flex gap-2">
-				<textarea
-					bind:this={textareaElement}
-					class="flex-grow resize-none px-4 py-3 rounded-lg border border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-					placeholder="Type a message..."
-					rows="1"
-					bind:value={newMessage}
-					onkeydown={handleKeydown}
-					oninput={() => autoResizeTextarea()}
-					style="min-height: 40px; max-height: 120px; overflow-y: auto; height: 40px;"
-				></textarea>
-				<button
-					class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center min-w-[50px]"
-					disabled={isLoading || !newMessage.trim()}
-					onclick={() => sendMessage()}
-					title="Send message (Enter)"
-				>
-					{#if isLoading}
-						<svg
-							class="animate-spin h-4 w-4"
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
+			{#if isLoading}
+				<div class="message-row assistant-row">
+					<div class="avatar small">
+						{#if selectedAssistant}
+							<span>{selectedAssistant.emoji}</span>
+						{:else}
+							<span>🏛</span>
+						{/if}
+					</div>
+					<div class="bubble assistant-bubble">
+						<div class="typing-animation">
+							<span></span>
+							<span></span>
+							<span></span>
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			{#if error}
+				<div class="error-banner">
+					<span>{error}</span>
+					<button class="error-dismiss" onclick={dismissError} title="Dismiss">&times;</button>
+				</div>
+			{/if}
+		{/if}
+	</div>
+
+	<!-- Input section (always visible at bottom) -->
+	<div class="input-section">
+		{#if suggestions.length > 0 || isLoadingSuggestions}
+			<div class="suggestions">
+				{#if isLoadingSuggestions}
+					<span class="suggestion-loading">Loading suggestions...</span>
+				{:else}
+					{#each suggestions as suggestion}
+						<button
+							class="suggestion-chip"
+							onclick={() => handleSuggestionClick(suggestion)}
 						>
-							<circle
-								class="opacity-25"
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="4"
-							></circle>
-							<path
-								class="opacity-75"
-								fill="currentColor"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-							></path>
-						</svg>
-					{:else}
-						<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-							<path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-						</svg>
-					{/if}
-				</button>
+							{suggestion}
+						</button>
+					{/each}
+				{/if}
 			</div>
+		{/if}
+
+		<div class="input-row">
+			<textarea
+				bind:this={textareaElement}
+				class="chat-input"
+				placeholder="Type a message..."
+				rows="1"
+				bind:value={newMessage}
+				onkeydown={handleKeydown}
+				oninput={() => autoResizeTextarea()}
+			></textarea>
+			<button
+				class="send-btn"
+				disabled={isLoading || !newMessage.trim()}
+				onclick={() => sendMessage()}
+				title="Send message (Enter)"
+			>
+				{#if isLoading}
+					<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+					</svg>
+				{:else}
+					<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+						<path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+					</svg>
+				{/if}
+			</button>
 		</div>
 	</div>
 </div>
 
 <style>
+	.llm-chat-root {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		max-height: calc(100vh - 120px);
+		overflow: hidden;
+		border-radius: 12px;
+		border: 1px solid #e5e7eb;
+		background: #ffffff;
+	}
+
+	/* Assistant selector */
+	.assistant-selector {
+		display: flex;
+		gap: 8px;
+		padding: 10px 16px;
+		border-bottom: 1px solid #e5e7eb;
+		flex-shrink: 0;
+		overflow-x: auto;
+	}
+
+	.assistant-btn {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 12px;
+		border-radius: 8px;
+		border: 1px solid #e5e7eb;
+		background: #fff;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		white-space: nowrap;
+	}
+
+	.assistant-btn:hover {
+		background: #f3f4f6;
+		border-color: #d1d5db;
+	}
+
+	.assistant-btn.active {
+		border-color: #6366f1;
+		background: #eef2ff;
+		color: #4338ca;
+	}
+
+	/* Messages area */
+	.messages-area {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 20px 16px;
+		background: #f9fafb;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	/* Welcome message */
+	.welcome-message {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		margin-top: 20px;
+	}
+
+	/* Message rows */
+	.message-row {
+		display: flex;
+		gap: 10px;
+		max-width: 100%;
+	}
+
+	.user-row {
+		justify-content: flex-end;
+	}
+
+	.assistant-row {
+		justify-content: flex-start;
+		align-items: flex-start;
+	}
+
+	/* Avatar */
+	.avatar {
+		flex-shrink: 0;
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		background: #fff;
+		border: 2px solid #e5e7eb;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 20px;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+	}
+
+	.avatar.small {
+		width: 32px;
+		height: 32px;
+		font-size: 16px;
+	}
+
+	/* Bubbles */
+	.bubble {
+		padding: 12px 16px;
+		border-radius: 16px;
+		line-height: 1.5;
+		font-size: 14px;
+		max-width: 80%;
+		word-wrap: break-word;
+		overflow-wrap: break-word;
+	}
+
+	.user-bubble {
+		background: #4f46e5;
+		color: #fff;
+		border-bottom-right-radius: 4px;
+		box-shadow: 0 1px 3px rgba(79, 70, 229, 0.3);
+		white-space: pre-wrap;
+	}
+
+	.assistant-bubble {
+		background: #fff;
+		color: #1f2937;
+		border: 1px solid #e5e7eb;
+		border-bottom-left-radius: 4px;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	}
+
+	/* Markdown content inside assistant bubbles */
+	.markdown-content :global(h1),
+	.markdown-content :global(h2),
+	.markdown-content :global(h3) {
+		margin-top: 12px;
+		margin-bottom: 4px;
+		font-weight: 600;
+	}
+	.markdown-content :global(h1) { font-size: 1.125rem; }
+	.markdown-content :global(h2) { font-size: 1rem; }
+	.markdown-content :global(h3) { font-size: 0.9375rem; }
+
+	.markdown-content :global(li) {
+		margin-left: 16px;
+		margin-bottom: 2px;
+	}
+
+	.markdown-content :global(pre) {
+		margin: 8px 0;
+		border-radius: 6px;
+	}
+
+	.markdown-content :global(strong) {
+		font-weight: 600;
+	}
+
+	.markdown-content :global(a) {
+		color: #4f46e5;
+		text-decoration: underline;
+	}
+
+	/* Error banner */
+	.error-banner {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 8px 14px;
+		border-radius: 8px;
+		background: #fef2f2;
+		border: 1px solid #fecaca;
+		color: #991b1b;
+		font-size: 13px;
+	}
+
+	.error-dismiss {
+		background: none;
+		border: none;
+		font-size: 18px;
+		cursor: pointer;
+		color: #991b1b;
+		padding: 0 4px;
+		line-height: 1;
+		opacity: 0.7;
+	}
+
+	.error-dismiss:hover {
+		opacity: 1;
+	}
+
+	/* Typing animation */
 	.typing-animation {
 		display: flex;
 		align-items: center;
-		gap: 2px;
+		gap: 4px;
+		padding: 4px 0;
 	}
 
 	.typing-animation span {
-		width: 6px;
-		height: 6px;
+		width: 7px;
+		height: 7px;
 		background-color: #9ca3af;
 		border-radius: 50%;
 		animation: typing 1.4s infinite ease-in-out;
 	}
 
-	.typing-animation span:nth-child(1) {
-		animation-delay: 0s;
-	}
-
-	.typing-animation span:nth-child(2) {
-		animation-delay: 0.2s;
-	}
-
-	.typing-animation span:nth-child(3) {
-		animation-delay: 0.4s;
-	}
+	.typing-animation span:nth-child(1) { animation-delay: 0s; }
+	.typing-animation span:nth-child(2) { animation-delay: 0.2s; }
+	.typing-animation span:nth-child(3) { animation-delay: 0.4s; }
 
 	@keyframes typing {
-		0%,
-		60%,
-		100% {
+		0%, 60%, 100% {
 			transform: translateY(0);
 			opacity: 0.4;
 		}
 		30% {
-			transform: translateY(-10px);
+			transform: translateY(-6px);
 			opacity: 1;
 		}
+	}
+
+	/* Input section */
+	.input-section {
+		flex-shrink: 0;
+		padding: 12px 16px;
+		border-top: 1px solid #e5e7eb;
+		background: #fff;
+	}
+
+	.suggestions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-bottom: 10px;
+		justify-content: center;
+	}
+
+	.suggestion-loading {
+		font-size: 12px;
+		color: #9ca3af;
+	}
+
+	.suggestion-chip {
+		padding: 5px 12px;
+		font-size: 12px;
+		border-radius: 16px;
+		border: 1px solid #e5e7eb;
+		background: #f9fafb;
+		color: #4b5563;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		white-space: nowrap;
+	}
+
+	.suggestion-chip:hover {
+		background: #eef2ff;
+		border-color: #c7d2fe;
+		color: #4338ca;
+	}
+
+	.input-row {
+		display: flex;
+		gap: 8px;
+		align-items: flex-end;
+	}
+
+	.chat-input {
+		flex: 1;
+		resize: none;
+		padding: 10px 14px;
+		border-radius: 12px;
+		border: 1px solid #d1d5db;
+		font-size: 14px;
+		line-height: 1.4;
+		min-height: 42px;
+		max-height: 120px;
+		overflow-y: auto;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+		outline: none;
+	}
+
+	.chat-input:focus {
+		border-color: #6366f1;
+		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+	}
+
+	.chat-input::placeholder {
+		color: #9ca3af;
+	}
+
+	.send-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 42px;
+		height: 42px;
+		border-radius: 12px;
+		border: none;
+		background: #4f46e5;
+		color: #fff;
+		cursor: pointer;
+		transition: background 0.15s ease, opacity 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.send-btn:hover:not(:disabled) {
+		background: #4338ca;
+	}
+
+	.send-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 </style>
