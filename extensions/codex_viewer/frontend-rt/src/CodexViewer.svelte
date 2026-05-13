@@ -90,54 +90,86 @@
 			.trim();
 	}
 
-	function highlightPython(code: string): string {
-		const escaped = code
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;');
+	function highlightPython(line: string): string {
+		const KEYWORDS = new Set([
+			'def','class','import','from','return','if','elif','else','for','while',
+			'try','except','finally','with','as','raise','pass','break','continue',
+			'and','or','not','in','is','None','True','False','self','lambda','yield',
+			'async','await','global','nonlocal',
+		]);
+		const BUILTINS = new Set([
+			'print','len','range','int','str','float','list','dict','set','tuple',
+			'type','isinstance','getattr','setattr','hasattr','sum','min','max',
+			'abs','round','enumerate','zip','map','filter','sorted','reversed','open','super',
+		]);
 
-		const lines = escaped.split('\n');
-		return lines
-			.map((line) => {
-				let result = line;
+		const tokens: { text: string; cls: string }[] = [];
+		let i = 0;
 
-				// Comments
-				result = result.replace(/(#.*)$/gm, '<span class="hl-comment">$1</span>');
+		while (i < line.length) {
+			// Comment
+			if (line[i] === '#') {
+				tokens.push({ text: line.slice(i), cls: 'hl-comment' });
+				break;
+			}
+			// Strings
+			if (line[i] === '"' || line[i] === "'") {
+				const quote = line[i];
+				const triple = line.slice(i, i + 3) === quote.repeat(3);
+				const end = triple ? quote.repeat(3) : quote;
+				const start = i;
+				i += triple ? 3 : 1;
+				while (i < line.length) {
+					if (line[i] === '\\') { i += 2; continue; }
+					if (line.slice(i, i + end.length) === end) { i += end.length; break; }
+					i++;
+				}
+				tokens.push({ text: line.slice(start, i), cls: 'hl-string' });
+				continue;
+			}
+			// Decorator
+			if (line[i] === '@' && (i === 0 || line.slice(0, i).trim() === '')) {
+				const start = i;
+				i++;
+				while (i < line.length && /[\w.]/.test(line[i])) i++;
+				tokens.push({ text: line.slice(start, i), cls: 'hl-decorator' });
+				continue;
+			}
+			// Numbers
+			if (/\d/.test(line[i]) && (i === 0 || !/\w/.test(line[i - 1]))) {
+				const start = i;
+				while (i < line.length && /[\d._eE+\-]/.test(line[i])) i++;
+				tokens.push({ text: line.slice(start, i), cls: 'hl-number' });
+				continue;
+			}
+			// Words (identifiers/keywords)
+			if (/[a-zA-Z_]/.test(line[i])) {
+				const start = i;
+				while (i < line.length && /\w/.test(line[i])) i++;
+				const word = line.slice(start, i);
+				if (KEYWORDS.has(word)) {
+					tokens.push({ text: word, cls: 'hl-keyword' });
+				} else if (BUILTINS.has(word)) {
+					tokens.push({ text: word, cls: 'hl-builtin' });
+				} else {
+					tokens.push({ text: word, cls: '' });
+				}
+				continue;
+			}
+			// Other characters
+			tokens.push({ text: line[i], cls: '' });
+			i++;
+		}
 
-				// Strings (triple-quoted and single/double)
-				result = result.replace(
-					/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
-					'<span class="hl-string">$1</span>',
-				);
-
-				// Numbers
-				result = result.replace(
-					/\b(\d+\.?\d*(?:e[+-]?\d+)?)\b/g,
-					'<span class="hl-number">$1</span>',
-				);
-
-				// Keywords
-				const keywords =
-					/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|raise|pass|break|continue|and|or|not|in|is|None|True|False|self|lambda|yield|async|await|global|nonlocal)\b/g;
-				result = result.replace(keywords, '<span class="hl-keyword">$1</span>');
-
-				// Built-in functions
-				const builtins =
-					/\b(print|len|range|int|str|float|list|dict|set|tuple|type|isinstance|getattr|setattr|hasattr|sum|min|max|abs|round|enumerate|zip|map|filter|sorted|reversed|open|super)\b/g;
-				result = result.replace(builtins, '<span class="hl-builtin">$1</span>');
-
-				// Decorators
-				result = result.replace(/^(\s*@\w+)/gm, '<span class="hl-decorator">$1</span>');
-
-				// Function/class definitions
-				result = result.replace(
-					/\b(def|class)\b(\s+)(\w+)/g,
-					'<span class="hl-keyword">$1</span>$2<span class="hl-funcname">$3</span>',
-				);
-
-				return result;
+		return tokens
+			.map((t) => {
+				const escaped = t.text
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;');
+				return t.cls ? `<span class="${t.cls}">${escaped}</span>` : escaped;
 			})
-			.join('\n');
+			.join('');
 	}
 
 	function getCodexId(codex: Codex): string {
