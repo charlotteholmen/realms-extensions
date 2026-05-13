@@ -472,19 +472,17 @@
 	.llm-chat-root {
 		display: flex;
 		flex-direction: column;
-		height: calc(100vh - 240px);
+		height: calc(100vh - 200px);
 		min-height: 300px;
 		overflow: hidden;
-		border-radius: 12px;
-		border: 1px solid #e5e7eb;
-		background: #ffffff;
+		background: transparent;
 	}
 
 	/* Assistant selector */
 	.assistant-selector {
 		display: flex;
 		gap: 8px;
-		padding: 10px 16px;
+		padding: 10px 0;
 		border-bottom: 1px solid #e5e7eb;
 		flex-shrink: 0;
 		overflow-x: auto;
@@ -519,8 +517,8 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 20px 16px;
-		background: #f9fafb;
+		padding: 16px 0;
+		background: transparent;
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
@@ -692,9 +690,9 @@
 	/* Input section */
 	.input-section {
 		flex-shrink: 0;
-		padding: 12px 16px;
+		padding: 12px 0;
 		border-top: 1px solid #e5e7eb;
-		background: #fff;
+		background: transparent;
 	}
 
 	.suggestions {
