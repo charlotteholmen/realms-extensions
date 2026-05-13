@@ -472,8 +472,8 @@
 	.llm-chat-root {
 		display: flex;
 		flex-direction: column;
-		height: 100%;
-		max-height: calc(100vh - 120px);
+		height: calc(100vh - 240px);
+		min-height: 300px;
 		overflow: hidden;
 		border-radius: 12px;
 		border: 1px solid #e5e7eb;
