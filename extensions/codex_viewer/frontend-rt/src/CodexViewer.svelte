@@ -56,7 +56,12 @@
 		try {
 			const codexId = codex._id || codex.id || codex.name;
 			const res = await callExt('get_codex_details', { codex_id: codexId });
-			selectedCodex = res?.data ?? res;
+			const detail = res?.codex ?? res?.data ?? res;
+			if (detail && typeof detail === 'object' && (detail.code || detail.name)) {
+				selectedCodex = detail;
+			} else {
+				selectedCodex = codex;
+			}
 		} catch {
 			selectedCodex = codex;
 		} finally {
@@ -73,26 +78,93 @@
 		return new Date(timestamp / 1_000_000).toLocaleString();
 	}
 
+	function unescapeCode(code: string | undefined | null): string {
+		if (!code) return '';
+		return code
+			.replace(/\\n/g, '\n')
+			.replace(/\\t/g, '\t')
+			.replace(/\\"/g, '"')
+			.replace(/\\\\/g, '\\')
+			.replace(/^"""\s*\n?/, '')
+			.replace(/\n?"""$/, '')
+			.trim();
+	}
+
+	function highlightPython(code: string): string {
+		const escaped = code
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;');
+
+		const lines = escaped.split('\n');
+		return lines
+			.map((line) => {
+				let result = line;
+
+				// Comments
+				result = result.replace(/(#.*)$/gm, '<span class="hl-comment">$1</span>');
+
+				// Strings (triple-quoted and single/double)
+				result = result.replace(
+					/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
+					'<span class="hl-string">$1</span>',
+				);
+
+				// Numbers
+				result = result.replace(
+					/\b(\d+\.?\d*(?:e[+-]?\d+)?)\b/g,
+					'<span class="hl-number">$1</span>',
+				);
+
+				// Keywords
+				const keywords =
+					/\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|raise|pass|break|continue|and|or|not|in|is|None|True|False|self|lambda|yield|async|await|global|nonlocal)\b/g;
+				result = result.replace(keywords, '<span class="hl-keyword">$1</span>');
+
+				// Built-in functions
+				const builtins =
+					/\b(print|len|range|int|str|float|list|dict|set|tuple|type|isinstance|getattr|setattr|hasattr|sum|min|max|abs|round|enumerate|zip|map|filter|sorted|reversed|open|super)\b/g;
+				result = result.replace(builtins, '<span class="hl-builtin">$1</span>');
+
+				// Decorators
+				result = result.replace(/^(\s*@\w+)/gm, '<span class="hl-decorator">$1</span>');
+
+				// Function/class definitions
+				result = result.replace(
+					/\b(def|class)\b(\s+)(\w+)/g,
+					'<span class="hl-keyword">$1</span>$2<span class="hl-funcname">$3</span>',
+				);
+
+				return result;
+			})
+			.join('\n');
+	}
+
+	function getCodexId(codex: Codex): string {
+		return codex._id || codex.id || codex.name || '';
+	}
+
+	function explainWithAI() {
+		if (!selectedCodex) return;
+		const codexId = getCodexId(selectedCodex);
+		const url = `/extensions/llm_chat?explain=codex:${encodeURIComponent(codexId)}`;
+		window.open(url, '_blank');
+	}
+
 	$effect(() => {
 		void loadCodexes();
 	});
 </script>
 
-<div class="p-6 max-w-6xl mx-auto relative">
+<div class="codex-root">
 	<!-- Header -->
-	<div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+	<div class="header">
 		<div>
-			<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Codex Viewer</h1>
-			<p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-				Browse installed codex packages
-			</p>
+			<h1 class="title">Codex Viewer</h1>
+			<p class="subtitle">Browse installed codex packages</p>
 		</div>
-		<button
-			class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-			onclick={loadCodexes}
-			disabled={loading}
-		>
-			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<button class="btn-refresh" onclick={loadCodexes} disabled={loading}>
+			<svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path
 					stroke-linecap="round"
 					stroke-linejoin="round"
@@ -105,206 +177,160 @@
 	</div>
 
 	{#if error}
-		<div
-			class="mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg text-sm"
-		>
-			{error}
-		</div>
+		<div class="error-banner">{error}</div>
 	{/if}
 
 	<!-- Detail View -->
 	{#if selectedCodex}
 		<div>
-			<button
-				class="text-indigo-600 dark:text-indigo-400 text-sm hover:underline mb-4 inline-block"
-				onclick={goBack}
-			>
-				← Back to list
-			</button>
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6"
-			>
-				<div class="flex items-center gap-3 mb-4">
-					<svg
-						class="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-						/>
-					</svg>
-					<h2 class="text-xl font-semibold text-gray-900 dark:text-white">
-						{selectedCodex.name || selectedCodex._id || 'Codex'}
-					</h2>
-					{#if selectedCodex.version}
-						<span
-							class="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-full"
+			<button class="back-link" onclick={goBack}>← Back to list</button>
+
+			<div class="detail-card">
+				<div class="detail-header">
+					<div class="detail-title-row">
+						<svg
+							class="icon-code"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
 						>
-							v{selectedCodex.version}
-						</span>
-					{/if}
-					<span
-						class="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full"
-					>
-						Python
-					</span>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+							/>
+						</svg>
+						<h2 class="detail-name">
+							{selectedCodex.name || selectedCodex._id || 'Codex'}
+						</h2>
+						{#if selectedCodex.version}
+							<span class="badge badge-green">v{selectedCodex.version}</span>
+						{/if}
+						<span class="badge badge-blue">Python</span>
+					</div>
+
+					<button class="btn-explain" onclick={explainWithAI} title="Ask AI to explain this codex in simple terms">
+						<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+							/>
+						</svg>
+						Explain with AI
+					</button>
 				</div>
+
 				{#if selectedCodex.description}
-					<p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-						{selectedCodex.description}
-					</p>
+					<p class="detail-description">{selectedCodex.description}</p>
 				{/if}
 				{#if formatTimestamp(selectedCodex.created_at)}
-					<p class="text-xs text-gray-500 dark:text-gray-500 mb-4">
-						Created: {formatTimestamp(selectedCodex.created_at)}
-					</p>
+					<p class="detail-meta">Created: {formatTimestamp(selectedCodex.created_at)}</p>
 				{/if}
-				<div class="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[500px]">
-					<pre class="text-sm text-gray-300 font-mono whitespace-pre-wrap break-words">{selectedCodex.code || selectedCodex.source || selectedCodex.code_preview || JSON.stringify(selectedCodex, null, 2)}</pre>
-				</div>
+
+				<!-- Code block with syntax highlighting -->
+				{#if unescapeCode(selectedCodex.code || selectedCodex.source || selectedCodex.code_preview)}
+				{@const rawCode = unescapeCode(selectedCodex.code || selectedCodex.source || selectedCodex.code_preview)}
+					<div class="code-container">
+						<div class="code-toolbar">
+							<span>Python • {rawCode.split('\n').length} lines</span>
+							<button
+								class="btn-copy"
+								onclick={() => navigator.clipboard.writeText(rawCode)}
+							>
+								Copy
+							</button>
+						</div>
+						<div class="code-scroll">
+							<table class="code-table">
+								<tbody>
+									{#each rawCode.split('\n') as line, i}
+										<tr class="code-line">
+											<td class="line-number">{i + 1}</td>
+											<td class="line-content">{@html highlightPython(line)}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				{:else}
+					<div class="code-container">
+						<div class="code-toolbar"><span>No code available</span></div>
+						<pre class="code-fallback">{JSON.stringify(selectedCodex, null, 2)}</pre>
+					</div>
+				{/if}
 			</div>
 		</div>
 
 	<!-- Loading State -->
 	{:else if loading}
-		<div class="flex items-center justify-center py-16">
-			<svg
-				class="animate-spin h-8 w-8 text-gray-400"
-				fill="none"
-				viewBox="0 0 24 24"
-			>
-				<circle
-					class="opacity-25"
-					cx="12"
-					cy="12"
-					r="10"
-					stroke="currentColor"
-					stroke-width="4"
-				></circle>
-				<path
-					class="opacity-75"
-					fill="currentColor"
-					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-				></path>
+		<div class="center-message">
+			<svg class="spinner" fill="none" viewBox="0 0 24 24">
+				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 			</svg>
-			<span class="ml-3 text-gray-500 dark:text-gray-400">Loading codexes…</span>
+			<span>Loading codexes…</span>
 		</div>
 
 	<!-- List View -->
 	{:else}
 		<!-- Search -->
-		<div class="mb-4">
-			<div class="relative max-w-md">
-				<svg
-					class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-					/>
-				</svg>
-				<input
-					type="text"
-					bind:value={searchTerm}
-					placeholder="Search codexes…"
-					class="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-				/>
-			</div>
+		<div class="search-box">
+			<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+			</svg>
+			<input
+				type="text"
+				bind:value={searchTerm}
+				placeholder="Search codexes…"
+				class="search-input"
+			/>
 		</div>
 
-		<!-- Stats -->
-		<div class="mb-4 flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+		<div class="stats">
 			<span>{codexes.length} total codexes</span>
 			{#if searchTerm && filteredCodexes.length !== codexes.length}
-				<span class="text-gray-400 dark:text-gray-500">
-					({filteredCodexes.length} matching)
-				</span>
+				<span class="stats-filtered">({filteredCodexes.length} matching)</span>
 			{/if}
 		</div>
 
 		{#if filteredCodexes.length === 0}
-			<div
-				class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-12 text-center"
-			>
-				<svg
-					class="w-12 h-12 mx-auto text-gray-400 mb-4"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-					/>
+			<div class="empty-state">
+				<svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
 				</svg>
-				<p class="text-gray-500 dark:text-gray-400">
-					{searchTerm ? 'No codexes match your search' : 'No codexes found'}
-				</p>
+				<p>{searchTerm ? 'No codexes match your search' : 'No codexes found'}</p>
 			</div>
 		{:else}
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+			<div class="grid">
 				{#each filteredCodexes as codex (codex._id || codex.name)}
-					<button
-						class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-left hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-200 cursor-pointer w-full"
-						onclick={() => viewCodex(codex)}
-					>
-						<div class="flex items-start justify-between mb-3">
-							<div class="flex items-center gap-2 min-w-0">
-								<svg
-									class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-									/>
+					<button class="card" onclick={() => viewCodex(codex)}>
+						<div class="card-header">
+							<div class="card-title">
+								<svg class="icon-code-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
 								</svg>
-								<h3 class="font-semibold text-gray-900 dark:text-white truncate">
-									{codex.name}
-								</h3>
+								<h3 class="card-name">{codex.name}</h3>
 							</div>
-							<span
-								class="ml-2 flex-shrink-0 px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full"
-							>
-								Python
-							</span>
+							<span class="badge badge-blue">Python</span>
 						</div>
 
 						{#if codex.description}
-							<p
-								class="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2 overflow-hidden"
-							>
-								{codex.description}
-							</p>
+							<p class="card-desc">{codex.description}</p>
 						{/if}
 
 						{#if codex.code_preview}
-							<div class="bg-gray-900 rounded-lg p-2 mb-3 overflow-hidden">
-								<pre class="text-xs text-gray-300 font-mono truncate">{codex.code_preview.split('\n').slice(0, 3).join('\n')}</pre>
+							<div class="card-preview">
+								<pre>{codex.code_preview.split('\n').slice(0, 3).join('\n')}</pre>
 							</div>
 						{/if}
 
-						<div
-							class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-500"
-						>
-							<span>ID: {(codex._id || '').substring(0, 8)}</span>
-							<span class="text-blue-600 dark:text-blue-400">View Code →</span>
+						<div class="card-footer">
+							<span>ID: {(codex._id || '').substring(0, 12)}</span>
+							<span class="view-link">View Code →</span>
 						</div>
 					</button>
 				{/each}
@@ -314,29 +340,302 @@
 
 	<!-- Detail loading overlay -->
 	{#if detailLoading}
-		<div
-			class="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center rounded-lg z-10"
-		>
-			<svg
-				class="animate-spin h-8 w-8 text-gray-400"
-				fill="none"
-				viewBox="0 0 24 24"
-			>
-				<circle
-					class="opacity-25"
-					cx="12"
-					cy="12"
-					r="10"
-					stroke="currentColor"
-					stroke-width="4"
-				></circle>
-				<path
-					class="opacity-75"
-					fill="currentColor"
-					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-				></path>
+		<div class="loading-overlay">
+			<svg class="spinner" fill="none" viewBox="0 0 24 24">
+				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 			</svg>
-			<span class="ml-3 text-gray-500 dark:text-gray-400">Loading details…</span>
+			<span>Loading details…</span>
 		</div>
 	{/if}
 </div>
+
+<style>
+	.codex-root {
+		padding: 24px;
+		max-width: 1100px;
+		margin: 0 auto;
+		position: relative;
+		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	}
+	.header {
+		margin-bottom: 24px;
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 16px;
+	}
+	.title {
+		font-size: 1.5rem;
+		font-weight: 700;
+		color: #111827;
+		margin: 0;
+	}
+	.subtitle {
+		font-size: 0.875rem;
+		color: #6b7280;
+		margin: 4px 0 0;
+	}
+	.btn-refresh {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 12px;
+		font-size: 0.875rem;
+		font-weight: 500;
+		border-radius: 8px;
+		border: 1px solid #d1d5db;
+		background: #fff;
+		color: #374151;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+	.btn-refresh:hover { background: #f9fafb; }
+	.btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+	.icon { width: 16px; height: 16px; }
+	.icon-sm { width: 18px; height: 18px; }
+
+	.error-banner {
+		margin-bottom: 16px;
+		padding: 12px 16px;
+		background: #fef2f2;
+		border: 1px solid #fecaca;
+		color: #b91c1c;
+		border-radius: 8px;
+		font-size: 0.875rem;
+	}
+
+	/* Detail view */
+	.back-link {
+		color: #4f46e5;
+		font-size: 0.875rem;
+		background: none;
+		border: none;
+		cursor: pointer;
+		margin-bottom: 16px;
+		padding: 0;
+	}
+	.back-link:hover { text-decoration: underline; }
+
+	.detail-card {
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-radius: 12px;
+		overflow: hidden;
+	}
+	.detail-header {
+		padding: 20px 24px;
+		border-bottom: 1px solid #e5e7eb;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	.detail-title-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.icon-code { width: 24px; height: 24px; color: #2563eb; flex-shrink: 0; }
+	.detail-name { font-size: 1.25rem; font-weight: 600; color: #111827; margin: 0; }
+	.badge {
+		display: inline-block;
+		padding: 2px 8px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		border-radius: 9999px;
+	}
+	.badge-green { background: #dcfce7; color: #166534; }
+	.badge-blue { background: #dbeafe; color: #1e40af; }
+
+	.btn-explain {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 14px;
+		font-size: 0.875rem;
+		font-weight: 500;
+		border-radius: 8px;
+		border: none;
+		background: linear-gradient(135deg, #6366f1, #8b5cf6);
+		color: #fff;
+		cursor: pointer;
+		transition: opacity 0.15s, transform 0.1s;
+		box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+	}
+	.btn-explain:hover { opacity: 0.9; transform: translateY(-1px); }
+	.btn-explain:active { transform: translateY(0); }
+
+	.detail-description {
+		padding: 12px 24px 0;
+		font-size: 0.875rem;
+		color: #4b5563;
+		margin: 0;
+	}
+	.detail-meta {
+		padding: 8px 24px 0;
+		font-size: 0.75rem;
+		color: #9ca3af;
+		margin: 0;
+	}
+
+	/* Code block */
+	.code-container {
+		margin: 16px 24px 24px;
+		border-radius: 10px;
+		overflow: hidden;
+		border: 1px solid #374151;
+		background: #1e1e2e;
+	}
+	.code-toolbar {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 8px 16px;
+		background: #2d2d3d;
+		border-bottom: 1px solid #374151;
+		font-size: 0.75rem;
+		color: #9ca3af;
+	}
+	.btn-copy {
+		padding: 3px 10px;
+		font-size: 0.75rem;
+		border-radius: 4px;
+		border: 1px solid #4b5563;
+		background: #374151;
+		color: #d1d5db;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+	.btn-copy:hover { background: #4b5563; }
+	.code-scroll {
+		overflow-x: auto;
+		max-height: 600px;
+		overflow-y: auto;
+	}
+	.code-table {
+		border-collapse: collapse;
+		width: 100%;
+		font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', monospace;
+		font-size: 0.8125rem;
+		line-height: 1.6;
+	}
+	.code-line:hover { background: rgba(255, 255, 255, 0.03); }
+	.line-number {
+		padding: 0 14px;
+		text-align: right;
+		color: #4b5563;
+		user-select: none;
+		white-space: nowrap;
+		vertical-align: top;
+		border-right: 1px solid #374151;
+		width: 1%;
+	}
+	.line-content {
+		padding: 0 16px;
+		white-space: pre;
+		color: #e2e8f0;
+	}
+	.code-fallback {
+		padding: 16px;
+		margin: 0;
+		color: #a0aec0;
+		font-size: 0.8125rem;
+		font-family: 'JetBrains Mono', monospace;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
+	/* Syntax highlighting */
+	:global(.hl-keyword) { color: #c678dd; font-weight: 500; }
+	:global(.hl-string) { color: #98c379; }
+	:global(.hl-comment) { color: #5c6370; font-style: italic; }
+	:global(.hl-number) { color: #d19a66; }
+	:global(.hl-builtin) { color: #61afef; }
+	:global(.hl-decorator) { color: #e5c07b; }
+	:global(.hl-funcname) { color: #61afef; font-weight: 500; }
+
+	/* List view */
+	.search-box { position: relative; max-width: 400px; margin-bottom: 16px; }
+	.search-icon {
+		position: absolute;
+		left: 12px;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 20px;
+		height: 20px;
+		color: #9ca3af;
+	}
+	.search-input {
+		width: 100%;
+		padding: 8px 12px 8px 40px;
+		border: 1px solid #d1d5db;
+		border-radius: 8px;
+		font-size: 0.875rem;
+		outline: none;
+		transition: border-color 0.15s;
+	}
+	.search-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
+	.stats { margin-bottom: 16px; font-size: 0.875rem; color: #6b7280; }
+	.stats-filtered { color: #9ca3af; margin-left: 8px; }
+
+	.empty-state {
+		text-align: center;
+		padding: 48px 16px;
+		background: #f9fafb;
+		border: 1px solid #e5e7eb;
+		border-radius: 12px;
+		color: #6b7280;
+	}
+	.empty-icon { width: 48px; height: 48px; margin: 0 auto 16px; color: #9ca3af; }
+
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+		gap: 16px;
+	}
+	.card {
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-radius: 12px;
+		padding: 16px;
+		text-align: left;
+		cursor: pointer;
+		transition: box-shadow 0.2s, border-color 0.2s;
+		width: 100%;
+	}
+	.card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-color: #a5b4fc; }
+	.card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+	.card-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+	.icon-code-sm { width: 20px; height: 20px; color: #2563eb; flex-shrink: 0; }
+	.card-name { font-weight: 600; color: #111827; margin: 0; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.card-desc { font-size: 0.8125rem; color: #6b7280; margin: 0 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+	.card-preview {
+		background: #1e1e2e;
+		border-radius: 6px;
+		padding: 8px 10px;
+		margin-bottom: 10px;
+		overflow: hidden;
+	}
+	.card-preview pre { margin: 0; font-size: 0.7rem; color: #a0aec0; font-family: 'JetBrains Mono', monospace; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+	.card-footer { display: flex; justify-content: space-between; font-size: 0.75rem; color: #9ca3af; }
+	.view-link { color: #4f46e5; }
+
+	.center-message { display: flex; align-items: center; justify-content: center; padding: 48px 0; gap: 12px; color: #6b7280; }
+	.spinner { width: 32px; height: 32px; animation: spin 1s linear infinite; }
+	@keyframes spin { to { transform: rotate(360deg); } }
+
+	.loading-overlay {
+		position: absolute;
+		inset: 0;
+		background: rgba(255, 255, 255, 0.85);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 12px;
+		z-index: 10;
+		gap: 12px;
+		color: #6b7280;
+	}
+</style>
