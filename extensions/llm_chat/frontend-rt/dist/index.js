@@ -2687,7 +2687,7 @@ function Va(e, t) {
   const k = "https://geister-api.realmsgos.dev/";
   let h = `${k}api/ask`, S = `${k}suggestions`, G = `${k}api/personas/assistants`, C = "", W = "", de, je, J = /* @__PURE__ */ F(!1);
   ba(async () => {
-    C = t.ctx.config?.canisterId || "", de = t.ctx.principal?.subscribe?.((b) => {
+    C = t.ctx.config?.canisterId || globalThis.__CANISTER_IDS?.realm_backend || "", de = t.ctx.principal?.subscribe?.((b) => {
       W = b || "";
     }), je = t.ctx.isAuthenticated?.subscribe?.((b) => {
       m(J, b, !0);

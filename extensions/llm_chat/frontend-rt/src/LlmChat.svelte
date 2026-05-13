@@ -45,7 +45,10 @@
 	let isAuthenticated = $state(false);
 
 	onMount(async () => {
-		REALM_CANISTER_ID = ctx.config?.canisterId || '';
+		REALM_CANISTER_ID =
+			ctx.config?.canisterId ||
+			(globalThis as any).__CANISTER_IDS?.realm_backend ||
+			'';
 		unsubPrincipal = ctx.principal?.subscribe?.((v: string) => {
 			userPrincipal = v || '';
 		});
