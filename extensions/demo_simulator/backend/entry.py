@@ -145,18 +145,29 @@ def extension_sync_call(method_name: str, args: dict):
 
 
 def initialize(args):
-    """Called by the canister on every start/upgrade.
+    """Called by the canister on every start/upgrade and after extension install.
 
     Creates the TaskSchedule if needed and auto-enables it when
-    TEST_MODE + TEST_MODE_DEMO_DATA are both True.  Also restarts
-    the TaskManager so that IC timers are registered for the schedule
-    (timers are only set during canister init or explicit restart).
+    TEST_MODE + TEST_MODE_DEMO_DATA are both True — but only for a
+    *newly created* schedule.  If the schedule already exists (e.g.
+    extension re-install or upgrade), its disabled state is preserved
+    so that a user who manually stopped the simulator doesn't have it
+    re-enabled behind their back.
+
+    Also restarts the TaskManager so that IC timers are registered
+    for the schedule (timers are only set during canister
+    init/post_upgrade/update context).
     """
+    from ggg import TaskSchedule
+
+    already_existed = TaskSchedule[SCHEDULE_NAME] is not None
     schedule = get_or_create_schedule()
 
-    if is_demo_mode_active():
+    if not already_existed and is_demo_mode_active():
         schedule.disabled = False
-        logger.info("Demo simulator auto-activated (TEST_MODE + TEST_MODE_DEMO_DATA = true)")
+        logger.info("Demo simulator auto-activated (new schedule + TEST_MODE + TEST_MODE_DEMO_DATA)")
+    elif already_existed:
+        logger.info(f"Demo simulator schedule already exists (disabled={schedule.disabled}), preserving state")
     else:
         logger.info("Demo simulator initialized (schedule disabled — demo mode flags not set)")
 
@@ -164,7 +175,7 @@ def initialize(args):
 
     return json.dumps({
         "success": True,
-        "auto_activated": is_demo_mode_active(),
+        "auto_activated": not already_existed and is_demo_mode_active(),
         "running": not schedule.disabled,
     })
 
@@ -234,7 +245,12 @@ def get_status(args):
 
 
 def toggle(args):
-    """Enable or disable the simulator schedule."""
+    """Enable or disable the simulator schedule.
+
+    When enabling, restarts the TaskManager so that an IC timer is
+    registered for the schedule.  Without this, the schedule flag
+    says "enabled" but no timer actually fires ``run_batch()``.
+    """
     from ggg import TaskSchedule
 
     if isinstance(args, str):
@@ -247,6 +263,9 @@ def toggle(args):
 
     schedule = get_or_create_schedule()
     schedule.disabled = not enabled
+
+    if enabled:
+        _restart_task_manager()
 
     action = "started" if enabled else "stopped"
     logger.info(f"Demo simulator {action}")
