@@ -54,6 +54,13 @@
 	let taskLogs: any[] = $state([]);
 	let detailLoading = $state(false);
 
+	let expandedExecution: string | null = $state(null);
+	let executionLogs: Record<string, string> = $state({});
+	let executionLogsLoading: Record<string, boolean> = $state({});
+	let showCodeModal = $state(false);
+	let codeModalContent: { name: string; code: string; description: string } | null = $state(null);
+	let activeDetailTab: 'overview' | 'steps' | 'executions' = $state('overview');
+
 	let stats = $derived({
 		total: tasks.length,
 		running: tasks.filter((t) => t.status?.toLowerCase() === 'running').length,
@@ -145,6 +152,37 @@
 		selectedTask = null;
 		taskDetail = null;
 		taskLogs = [];
+		activeDetailTab = 'overview';
+		expandedExecution = null;
+		executionLogs = {};
+	}
+
+	async function loadExecutionLogs(executionId: string, loggerName: string) {
+		if (expandedExecution === executionId) {
+			expandedExecution = null;
+			return;
+		}
+		expandedExecution = executionId;
+		if (executionLogs[executionId]) return;
+		executionLogsLoading[executionId] = true;
+		try {
+			const res = await callSync('get_execution_logs', { logger_name: loggerName, limit: 200 });
+			executionLogs[executionId] = res?.logs || res?.data?.logs || 'No logs available';
+		} catch (e: any) {
+			executionLogs[executionId] = 'Error loading logs: ' + (e?.message || String(e));
+		} finally {
+			delete executionLogsLoading[executionId];
+		}
+	}
+
+	function openCodeModal(codex: { name: string; code: string; description: string }) {
+		codeModalContent = codex;
+		showCodeModal = true;
+	}
+
+	function closeCodeModal() {
+		showCodeModal = false;
+		codeModalContent = null;
 	}
 
 	async function toggleSchedule(scheduleId: string, disabled: boolean) {
@@ -276,6 +314,29 @@
 {/if}
 
 <div class="p-6 max-w-7xl mx-auto">
+	<!-- Code Modal -->
+	{#if showCodeModal && codeModalContent}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+			<div class="absolute inset-0 bg-black/50 backdrop-blur-sm" role="button" tabindex="-1" aria-label="Close modal" onclick={closeCodeModal} onkeydown={(e) => { if (e.key === 'Escape') closeCodeModal(); }}></div>
+			<div class="relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+				<div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+					<div>
+						<h3 class="text-lg font-semibold text-gray-900 dark:text-white">{codeModalContent.name}</h3>
+						{#if codeModalContent.description}
+							<p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{codeModalContent.description}</p>
+						{/if}
+					</div>
+					<button onclick={closeCodeModal} aria-label="Close" class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+					</button>
+				</div>
+				<div class="flex-1 overflow-auto p-6">
+					<pre class="text-sm font-mono bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap">{codeModalContent.code || 'No code available'}</pre>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Detail View -->
 	{#if selectedTask}
 		<div class="mb-4">
@@ -293,12 +354,13 @@
 				<svg class="animate-spin h-8 w-8 text-blue-600" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
 			</div>
 		{:else if taskDetail}
-			<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+			<!-- Task Header -->
+			<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
 				<div class="p-6 border-b border-gray-100 dark:border-gray-700">
 					<div class="flex items-start justify-between gap-4">
 						<div>
 							<h2 class="text-xl font-bold text-gray-900 dark:text-white">{taskDetail.name || selectedTask}</h2>
-							<p class="text-xs text-gray-400 mt-1 font-mono">{selectedTask}</p>
+							<p class="text-xs text-gray-400 mt-1 font-mono">ID: {selectedTask}</p>
 						</div>
 						{#if taskDetail.status}
 							<span class="px-2.5 py-1 rounded-full text-xs font-medium {getStatusColor(taskDetail.status)}">
@@ -308,63 +370,7 @@
 					</div>
 				</div>
 
-				<div class="p-6 space-y-4">
-					{#if taskDetail.metadata}
-						{@const desc = getDescription(taskDetail.metadata)}
-						{#if desc}
-							<p class="text-sm text-gray-600 dark:text-gray-400">{desc}</p>
-						{/if}
-					{/if}
-
-					<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-						<div>
-							<span class="block text-gray-500 dark:text-gray-400">Created</span>
-							<span class="font-medium text-gray-900 dark:text-white">{formatTimestamp(taskDetail.created_at)}</span>
-						</div>
-						<div>
-							<span class="block text-gray-500 dark:text-gray-400">Updated</span>
-							<span class="font-medium text-gray-900 dark:text-white">{formatTimestamp(taskDetail.updated_at)}</span>
-						</div>
-						<div>
-							<span class="block text-gray-500 dark:text-gray-400">Executions</span>
-							<span class="font-medium text-gray-900 dark:text-white">{taskDetail.executions_count ?? '-'}</span>
-						</div>
-						<div>
-							<span class="block text-gray-500 dark:text-gray-400">Progress</span>
-							<span class="font-medium text-gray-900 dark:text-white">
-								{taskDetail.step_to_execute ?? 0} / {taskDetail.total_steps ?? 0}
-							</span>
-						</div>
-					</div>
-
-					{#if taskDetail.schedules?.length > 0}
-						<div>
-							<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Schedules</h3>
-							<div class="space-y-2">
-								{#each taskDetail.schedules as sched}
-									<div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded-lg px-4 py-2 text-sm">
-										<div class="flex items-center gap-2">
-											<span class={sched.disabled ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-300'}>
-												{formatInterval(sched.repeat_every)}
-											</span>
-											{#if sched.disabled}
-												<span class="px-1.5 py-0.5 rounded text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">Paused</span>
-											{/if}
-										</div>
-										<button
-											onclick={() => toggleSchedule(sched._id, sched.disabled)}
-											class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-										>
-											{sched.disabled ? 'Resume' : 'Pause'}
-										</button>
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/if}
-				</div>
-
-				<div class="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 flex gap-3">
+				<div class="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 flex gap-3">
 					<button
 						onclick={() => runTaskNow(selectedTask)}
 						disabled={runningTasks[selectedTask]}
@@ -393,24 +399,284 @@
 				</div>
 			</div>
 
-			<!-- Execution Logs -->
-			{#if taskLogs.length > 0}
-				<div class="mt-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-					<div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-						<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Execution History</h3>
-					</div>
-					<div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-						{#each taskLogs as log}
-							<div class="px-6 py-3 flex items-start gap-3 text-sm">
-								<span class="text-xs text-gray-400 font-mono whitespace-nowrap mt-0.5">
-									{log.timestamp || log.time || ''}
-								</span>
-								<span class="text-gray-700 dark:text-gray-300 break-words">
-									{log.message || log.output || JSON.stringify(log)}
+			<!-- Tabs -->
+			<div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+				<nav class="flex gap-6" aria-label="Tabs">
+					<button
+						onclick={() => activeDetailTab = 'overview'}
+						class="pb-3 text-sm font-medium border-b-2 transition-colors
+							{activeDetailTab === 'overview'
+								? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+								: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'}"
+					>
+						Overview
+					</button>
+					<button
+						onclick={() => activeDetailTab = 'steps'}
+						class="pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5
+							{activeDetailTab === 'steps'
+								? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+								: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'}"
+					>
+						Steps
+						{#if taskDetail.steps?.length}
+							<span class="px-1.5 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{taskDetail.steps.length}</span>
+						{/if}
+					</button>
+					<button
+						onclick={() => activeDetailTab = 'executions'}
+						class="pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5
+							{activeDetailTab === 'executions'
+								? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+								: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'}"
+					>
+						Executions
+						{#if taskDetail.executions_count}
+							<span class="px-1.5 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{taskDetail.executions_count}</span>
+						{/if}
+					</button>
+				</nav>
+			</div>
+
+			<!-- Tab: Overview -->
+			{#if activeDetailTab === 'overview'}
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+					<div class="p-6 space-y-4">
+						{#if taskDetail.metadata}
+							{@const desc = getDescription(taskDetail.metadata)}
+							{#if desc}
+								<p class="text-sm text-gray-600 dark:text-gray-400">{desc}</p>
+							{/if}
+						{/if}
+
+						<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+							<div>
+								<span class="block text-gray-500 dark:text-gray-400">Created</span>
+								<span class="font-medium text-gray-900 dark:text-white">{formatTimestamp(taskDetail.created_at)}</span>
+							</div>
+							<div>
+								<span class="block text-gray-500 dark:text-gray-400">Updated</span>
+								<span class="font-medium text-gray-900 dark:text-white">{formatTimestamp(taskDetail.updated_at)}</span>
+							</div>
+							<div>
+								<span class="block text-gray-500 dark:text-gray-400">Executions</span>
+								<span class="font-medium text-gray-900 dark:text-white">{taskDetail.executions_count ?? '-'}</span>
+							</div>
+							<div>
+								<span class="block text-gray-500 dark:text-gray-400">Progress</span>
+								<span class="font-medium text-gray-900 dark:text-white">
+									{taskDetail.step_to_execute ?? 0} / {taskDetail.total_steps ?? 0}
 								</span>
 							</div>
-						{/each}
+						</div>
+
+						{#if taskDetail.total_steps > 0}
+							<div>
+								<div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+									<span>Step Progress</span>
+									<span>{Math.round(((taskDetail.step_to_execute ?? 0) / taskDetail.total_steps) * 100)}%</span>
+								</div>
+								<div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+									<div class="bg-blue-600 h-2 rounded-full transition-all" style="width: {((taskDetail.step_to_execute ?? 0) / taskDetail.total_steps) * 100}%"></div>
+								</div>
+							</div>
+						{/if}
+
+						{#if taskDetail.schedules?.length > 0}
+							<div>
+								<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Schedules</h3>
+								<div class="space-y-2">
+									{#each taskDetail.schedules as sched}
+										<div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded-lg px-4 py-2 text-sm">
+											<div class="flex items-center gap-2">
+												<span class={sched.disabled ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-300'}>
+													{formatInterval(sched.repeat_every)}
+												</span>
+												{#if sched.disabled}
+													<span class="px-1.5 py-0.5 rounded text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">Paused</span>
+												{/if}
+												{#if sched.last_run_at}
+													<span class="text-xs text-gray-400">Last: {formatRelativeTime(sched.last_run_at)}</span>
+												{/if}
+											</div>
+											<button
+												onclick={() => toggleSchedule(sched._id, sched.disabled)}
+												class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+											>
+												{sched.disabled ? 'Resume' : 'Pause'}
+											</button>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</div>
+				</div>
+
+			<!-- Tab: Steps -->
+			{:else if activeDetailTab === 'steps'}
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+					{#if !taskDetail.steps?.length}
+						<div class="p-12 text-center">
+							<svg class="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+							<p class="text-gray-500 dark:text-gray-400">No steps defined for this task</p>
+						</div>
+					{:else}
+						<div class="divide-y divide-gray-100 dark:divide-gray-700">
+							{#each taskDetail.steps as step, idx}
+								<div class="p-4">
+									<div class="flex items-start justify-between gap-3">
+										<div class="flex items-start gap-3">
+											<div class="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold
+												{step.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
+												 step.status === 'running' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
+												 step.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400' :
+												 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}">
+												{#if step.status === 'completed'}
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+												{:else if step.status === 'running'}
+													<svg class="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+												{:else if step.status === 'failed'}
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+												{:else}
+													{idx + 1}
+												{/if}
+											</div>
+											<div>
+												<div class="flex items-center gap-2">
+													<span class="text-sm font-medium text-gray-900 dark:text-white">Step {idx + 1}</span>
+													<span class="px-1.5 py-0.5 rounded text-xs font-medium {getStatusColor(step.status || 'pending')}">
+														{step.status || 'pending'}
+													</span>
+													{#if step.is_async}
+														<span class="px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">async</span>
+													{/if}
+												</div>
+												{#if step.codex}
+													<div class="mt-1.5 flex items-center gap-2">
+														<svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+														<span class="text-xs text-gray-500 dark:text-gray-400 font-mono">{step.codex.name}</span>
+														{#if step.codex.description}
+															<span class="text-xs text-gray-400 dark:text-gray-500">— {step.codex.description}</span>
+														{/if}
+													</div>
+												{/if}
+												{#if step.run_next_after}
+													<p class="text-xs text-gray-400 mt-1">Delay before next: {step.run_next_after}s</p>
+												{/if}
+											</div>
+										</div>
+										{#if step.codex?.code}
+											<button
+												onclick={() => openCodeModal(step.codex)}
+												class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-700 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+											>
+												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+												View Code
+											</button>
+										{/if}
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+			<!-- Tab: Executions -->
+			{:else if activeDetailTab === 'executions'}
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+					{#if !taskDetail.executions?.length}
+						<div class="p-12 text-center">
+							<svg class="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+							<p class="text-gray-500 dark:text-gray-400">No executions recorded yet</p>
+						</div>
+					{:else}
+						<div class="divide-y divide-gray-100 dark:divide-gray-700">
+							{#each taskDetail.executions as exec}
+								<div>
+									<button
+										onclick={() => loadExecutionLogs(exec._id, exec.logger_name)}
+										class="w-full px-5 py-4 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+									>
+										<div class="flex-shrink-0">
+											{#if exec.status === 'completed'}
+												<div class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+													<svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+												</div>
+											{:else if exec.status === 'running'}
+												<div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+													<svg class="animate-spin w-4 h-4 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+												</div>
+											{:else if exec.status === 'failed'}
+												<div class="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+													<svg class="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+												</div>
+											{:else}
+												<div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+													<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+												</div>
+											{/if}
+										</div>
+										<div class="flex-1 min-w-0">
+											<div class="flex items-center gap-2">
+												<span class="text-sm font-medium text-gray-900 dark:text-white truncate">{exec.name || `Execution #${exec._id}`}</span>
+												<span class="px-1.5 py-0.5 rounded text-xs font-medium {getStatusColor(exec.status)}">
+													{exec.status}
+												</span>
+											</div>
+											<div class="flex items-center gap-3 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+												<span>{formatTimestamp(exec.created_at)}</span>
+												{#if exec.result}
+													<span class="truncate max-w-xs">{exec.result.substring(0, 80)}{exec.result.length > 80 ? '...' : ''}</span>
+												{/if}
+											</div>
+										</div>
+										<div class="flex-shrink-0">
+											<svg class="w-4 h-4 text-gray-400 transition-transform {expandedExecution === exec._id ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+										</div>
+									</button>
+
+									{#if expandedExecution === exec._id}
+										<div class="px-5 pb-4 pl-16">
+											{#if exec.result}
+												<div class="mb-3">
+													<span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Result</span>
+													<p class="mt-1 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded-lg p-3 font-mono whitespace-pre-wrap break-words">{exec.result}</p>
+												</div>
+											{/if}
+											<div>
+												<span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Logs</span>
+												{#if executionLogsLoading[exec._id]}
+													<div class="mt-2 flex items-center gap-2 text-sm text-gray-500">
+														<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+														Loading logs...
+													</div>
+												{:else if executionLogs[exec._id]}
+													<pre class="mt-2 text-xs font-mono bg-gray-900 text-gray-100 rounded-lg p-3 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">{executionLogs[exec._id]}</pre>
+												{:else}
+													<p class="mt-2 text-sm text-gray-400">No logs available for this execution</p>
+												{/if}
+											</div>
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+
+						{#if taskDetail.exec_has_more}
+							<div class="px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-center">
+								<button
+									onclick={async () => {
+										detailLoading = true;
+										await viewTaskDetails(selectedTask);
+									}}
+									class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+								>
+									Load more executions...
+								</button>
+							</div>
+						{/if}
+					{/if}
 				</div>
 			{/if}
 		{/if}
