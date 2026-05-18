@@ -183,16 +183,15 @@ def initialize(args):
 def _restart_task_manager():
     """Re-initialize the TaskManager so IC timers are set for our schedule."""
     try:
-        from ggg import Call, Task, TaskSchedule, TaskStep
+        from ggg import Task
         from core.task_manager import TaskManager
 
-        list(Task.instances())
-        list(Call.instances())
-        list(TaskStep.instances())
-        list(TaskSchedule.instances())
+        # Relationships resolve via persisted reverse indexes (ic-python-db >= 0.9)
+        # — no need to eagerly load all child entity types.
+        all_tasks = Task.load_some(1, Task.max_id()) if Task.max_id() > 0 else []
 
         manager = TaskManager()
-        for t in Task.instances():
+        for t in all_tasks:
             if t.status and t.status != "completed":
                 t.status = "pending"
                 t.step_to_execute = 0
