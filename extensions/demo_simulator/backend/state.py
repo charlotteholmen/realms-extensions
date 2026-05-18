@@ -100,8 +100,8 @@ def get_or_create_schedule():
     )
 
     call = Call(is_async=False, codex=codex)
-    step = TaskStep(call=call, status="pending", run_next_after=0)
-    task = Task(name=TASK_NAME, steps=[step])
+    task = Task(name=TASK_NAME)
+    step = TaskStep(call=call, status="pending", run_next_after=0, task=task)
 
     schedule = TaskSchedule(
         name=SCHEDULE_NAME,
