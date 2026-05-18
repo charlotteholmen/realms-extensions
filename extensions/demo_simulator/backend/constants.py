@@ -6,8 +6,8 @@ Name banks, city coordinates, and other static data used by the generators.
 
 TASK_NAME = "demo_simulator_task"
 SCHEDULE_NAME = "demo_simulator_schedule"
-DEFAULT_INTERVAL_SECONDS = 60
-DEFAULT_BATCH_SIZE = 3
+DEFAULT_INTERVAL_SECONDS = 30
+DEFAULT_BATCH_SIZE = 5
 MAX_ENTITIES_TOTAL = None  # None = unlimited
 
 FIRST_NAMES = [
