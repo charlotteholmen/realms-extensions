@@ -86,12 +86,21 @@ def is_demo_mode_active():
 
 
 def get_or_create_schedule():
-    """Get the demo simulator schedule, creating it if missing."""
+    """Get the demo simulator schedule, creating it if missing.
+
+    Idempotent: if a previous init failed midway (Task created but no Schedule),
+    detects the orphaned state, cleans up, and retries.
+    """
     from ggg import Call, Codex, Task, TaskSchedule, TaskStep
 
     schedule = TaskSchedule[SCHEDULE_NAME]
     if schedule:
         return schedule
+
+    # Detect partial state from a previous failed init
+    orphan_task = Task[TASK_NAME]
+    if orphan_task:
+        orphan_task.delete()
 
     codex = Codex(
         name="demo_simulator_batch",
@@ -101,9 +110,9 @@ def get_or_create_schedule():
 
     call = Call(is_async=False, codex=codex)
     task = Task(name=TASK_NAME)
-    step = TaskStep(call=call, status="pending", run_next_after=0, task=task)
+    TaskStep(call=call, status="pending", run_next_after=0, task=task)
 
-    schedule = TaskSchedule(
+    return TaskSchedule(
         name=SCHEDULE_NAME,
         task=task,
         repeat_every=DEFAULT_INTERVAL_SECONDS,
@@ -111,4 +120,3 @@ def get_or_create_schedule():
         last_run_at=0,
         disabled=True,
     )
-    return schedule

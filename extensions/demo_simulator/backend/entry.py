@@ -154,11 +154,12 @@ def initialize(args):
     so that a user who manually stopped the simulator doesn't have it
     re-enabled behind their back.
 
-    Also restarts the TaskManager so that IC timers are registered
-    for the schedule (timers are only set during canister
-    init/post_upgrade/update context).
+    Calls TaskManager().run() to (re-)register IC timers for all
+    scheduled tasks. This handles both fresh installs and upgrades
+    (IC timers are lost on upgrade; TaskManager resets and reschedules).
     """
     from ggg import TaskSchedule
+    from core.task_manager import TaskManager
 
     already_existed = TaskSchedule[SCHEDULE_NAME] is not None
     schedule = get_or_create_schedule()
@@ -171,38 +172,17 @@ def initialize(args):
     else:
         logger.info("Demo simulator initialized (schedule disabled — demo mode flags not set)")
 
-    _restart_task_manager()
+    try:
+        TaskManager().run()
+        logger.info("TaskManager started — schedules registered")
+    except Exception as e:
+        logger.error(f"Failed to start TaskManager: {e}\n{traceback.format_exc()}")
 
     return json.dumps({
         "success": True,
         "auto_activated": not already_existed and is_demo_mode_active(),
         "running": not schedule.disabled,
     })
-
-
-def _restart_task_manager():
-    """Re-initialize the TaskManager so IC timers are set for our schedule."""
-    try:
-        from ggg import Task
-        from core.task_manager import TaskManager
-
-        # Relationships resolve via persisted reverse indexes (ic-python-db >= 0.9)
-        # — no need to eagerly load all child entity types.
-        all_tasks = Task.load_some(1, Task.max_id()) if Task.max_id() > 0 else []
-
-        manager = TaskManager()
-        for t in all_tasks:
-            if t.status and t.status != "completed":
-                t.status = "pending"
-                t.step_to_execute = 0
-                for step in t.steps:
-                    step.status = "pending"
-                    step.timer_id = None
-            manager.add_task(t)
-        manager.run()
-        logger.info("TaskManager restarted — demo_simulator schedule registered")
-    except Exception as e:
-        logger.error(f"Failed to restart TaskManager: {e}\n{traceback.format_exc()}")
 
 
 def get_status(args):
