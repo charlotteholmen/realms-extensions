@@ -3,6 +3,23 @@
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
 
+	let isAuthenticated = $state(false);
+	let principal = $state('');
+
+	$effect(() => {
+		const unsub = ctx.isAuthenticated?.subscribe?.((v: any) => {
+			isAuthenticated = !!v;
+		});
+		return () => unsub?.();
+	});
+
+	$effect(() => {
+		const unsub = ctx.principal?.subscribe?.((v: any) => {
+			principal = v || '';
+		});
+		return () => unsub?.();
+	});
+
 	let summary: any = $state(null);
 	let citizenship: any = $state(null);
 	let notifications: any[] = $state([]);
@@ -77,7 +94,7 @@
 		loading = true;
 		error = '';
 		try {
-			const args = { user_id: ctx.principal || '' };
+			const args = { user_id: principal };
 			const [sum, cit] = await Promise.all([
 				ctx.callSync('get_dashboard_summary', args).catch(() => null),
 				ctx.callSync('get_citizenship_status', args).catch(() => null),
@@ -94,7 +111,7 @@
 	async function loadNotifications() {
 		notificationsLoading = true;
 		try {
-			const args = { user_id: ctx.principal || '' };
+			const args = { user_id: principal };
 			const notif = await callOtherExt('notifications', 'get_notifications', args).catch(() => ({ data: [] }));
 			const n = notif?.data ?? notif?.notifications ?? notif;
 			notifications = Array.isArray(n) ? n : [];
@@ -109,7 +126,7 @@
 		invoiceLoading = true;
 		invoiceError = '';
 		try {
-			const result = await ctx.callSync('get_invoice_information', { user_id: ctx.principal || '' });
+			const result = await ctx.callSync('get_invoice_information', { user_id: principal });
 			if (result?.success) {
 				invoiceData = result.data;
 			} else {
@@ -126,7 +143,7 @@
 		accountsLoading = true;
 		accountsError = '';
 		try {
-			const result = await ctx.callSync('list_payment_accounts', { user_id: ctx.principal || '' });
+			const result = await ctx.callSync('list_payment_accounts', { user_id: principal });
 			if (result?.success && result?.data) {
 				paymentAccounts = result.data;
 			} else {
@@ -140,7 +157,7 @@
 	}
 
 	$effect(() => {
-		if (!ctx.isAuthenticated) {
+		if (!isAuthenticated || !principal) {
 			loading = false;
 			notificationsLoading = false;
 			invoiceLoading = false;
@@ -283,7 +300,7 @@
 		addingAccount = true;
 		try {
 			const result = await ctx.callSync('add_payment_account', {
-				user_id: ctx.principal || '',
+				user_id: principal,
 				address: newAccountAddress,
 				label: newAccountLabel,
 				network: newAccountNetwork,
@@ -305,7 +322,7 @@
 	async function removePaymentAccount(accountId: string) {
 		try {
 			const result = await ctx.callSync('remove_payment_account', {
-				user_id: ctx.principal || '',
+				user_id: principal,
 				account_id: accountId,
 			});
 			if (result?.success) await loadPaymentAccounts();
@@ -319,7 +336,7 @@
 </script>
 
 <div class="w-full max-w-5xl mx-auto px-4 py-6 font-sans space-y-8">
-	{#if !ctx.isAuthenticated}
+	{#if !isAuthenticated}
 		<!-- Unauthenticated -->
 		<div class="flex flex-col items-center justify-center py-20 px-6">
 			<div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-10 max-w-md w-full text-center space-y-5">
