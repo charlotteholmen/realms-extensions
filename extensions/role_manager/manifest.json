@@ -1,0 +1,16 @@
+{
+  "name": "role_manager",
+  "version": "1.0.0",
+  "description": "Admin interface for assigning roles and permissions to users, backed by codex-driven governance hooks",
+  "author": "Smart Social Contracts",
+  "permissions": [],
+  "profiles": [
+    "admin",
+    "user_manager"
+  ],
+  "categories": [
+    "administration"
+  ],
+  "icon": "shield_person",
+  "show_in_sidebar": true
+}

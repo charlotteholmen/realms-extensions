@@ -101,6 +101,80 @@ def _check_threshold(proposal: Proposal) -> bool:
     return (yes / decisive) >= threshold
 
 
+def _get_governance_params(proposal: Proposal) -> dict:
+    """Get governance parameters (quorum, threshold, notice) from codex policy.
+
+    The codex hook `get_governance_params` receives the proposal_type and
+    requested_permissions from the proposal metadata and returns realm-specific
+    governance rigor requirements.
+
+    Returns: {"quorum": <percent>, "threshold": <0-1>, "notice_hours": <int>}
+    """
+    defaults = {"quorum": 20, "threshold": 0.6, "notice_hours": 48}
+
+    metadata = _load_metadata(proposal)
+    proposal_type = metadata.get("proposal_type", "code_execution")
+    requested_permissions = metadata.get("requested_permissions", [])
+
+    try:
+        from ggg import Codex
+
+        _HOOK_NAMES = ("role_management_hook", "governance_policy_hook")
+        for codex in Codex.instances():
+            if codex.name in _HOOK_NAMES and codex.code:
+                import ggg as _ggg
+                ns = {"ic": ic, "ggg": _ggg, "__builtins__": __builtins__}
+                exec(compile(codex.code, f"{codex.name}.py", "exec"), ns)
+                if "get_governance_params" in ns:
+                    result = ns["get_governance_params"](proposal_type, requested_permissions)
+                    if isinstance(result, dict):
+                        return {**defaults, **result}
+    except Exception as e:
+        logger.warning(f"Could not load governance params from codex: {e}")
+
+    return defaults
+
+
+def _check_threshold_and_quorum(proposal: Proposal) -> bool:
+    """Check if both threshold and quorum are met for auto-approval.
+
+    Unlike _check_threshold alone, this enforces that enough members
+    have participated before auto-approving a proposal.
+    """
+    if not _check_threshold(proposal):
+        return False
+
+    # Quorum enforcement: ensure enough members voted
+    governance = _get_governance_params(proposal)
+    quorum_percent = governance.get("quorum", 20)
+
+    active_members = len(list(User.instances()))
+    if active_members <= 0:
+        return False
+
+    total_voters = int(proposal.total_voters or 0)
+    actual_participation = (total_voters / active_members) * 100
+
+    if actual_participation < quorum_percent:
+        logger.info(
+            f"Proposal {proposal.proposal_id}: threshold met but quorum not met "
+            f"({actual_participation:.1f}% < {quorum_percent}% required, "
+            f"{total_voters}/{active_members} members voted)"
+        )
+        return False
+
+    return True
+
+
+def _get_min_threshold(proposal: Proposal) -> float:
+    """Get the minimum threshold floor from codex governance policy.
+
+    Prevents proposers from setting arbitrarily low thresholds.
+    """
+    governance = _get_governance_params(proposal)
+    return governance.get("threshold", 0.6)
+
+
 def _http_download(url: str, max_bytes: int = 2_000_000, cycles: int = 30_000_000_000):
     """Generator: download a URL via IC HTTP outcall. Yields a _ServiceCall.
 
@@ -550,6 +624,9 @@ def submit_proposal(args: str) -> str:
             if args_dict.get("codex_name"):
                 metadata["codex_name"] = args_dict["codex_name"]
 
+        # Apply minimum threshold floor from governance policy
+        requested_threshold = args_dict.get("required_threshold", 0.6)
+
         proposal = Proposal(
             proposal_id=proposal_id,
             title=args_dict["title"],
@@ -563,9 +640,18 @@ def submit_proposal(args: str) -> str:
             votes_no=0.0,
             votes_abstain=0.0,
             total_voters=0.0,
-            required_threshold=args_dict.get("required_threshold", 0.6),
+            required_threshold=requested_threshold,
             metadata=json.dumps(metadata),
         )
+
+        # Enforce minimum threshold floor (codex-defined)
+        min_threshold = _get_min_threshold(proposal)
+        if proposal.required_threshold < min_threshold:
+            proposal.required_threshold = min_threshold
+            logger.info(
+                f"Proposal {proposal_id}: threshold raised from {requested_threshold} "
+                f"to minimum {min_threshold} (governance policy)"
+            )
 
         codex_count = len(codices) if codices else 1
         logger.info(f"Proposal {proposal_id} submitted by {proposer_id} ({codex_count} codex(es))")
@@ -683,12 +769,12 @@ def cast_vote(args: str) -> str:
         elif vote_choice == "abstain":
             proposal.votes_abstain = (proposal.votes_abstain or 0.0) + 1.0
 
-        # Check threshold for auto-approval
+        # Check threshold AND quorum for auto-approval
         auto_approved = False
-        if _check_threshold(proposal):
+        if _check_threshold_and_quorum(proposal):
             proposal.status = "accepted"
             auto_approved = True
-            logger.info(f"Proposal {proposal_id} auto-approved (threshold met)")
+            logger.info(f"Proposal {proposal_id} auto-approved (threshold and quorum met)")
             _schedule_execution(proposal_id)
 
         return json.dumps({
