@@ -14,10 +14,11 @@
     "update_land_nft_token"
   ],
   "profiles": [
+    "member",
     "admin"
   ],
   "categories": [
-    "public_services"
+    "land_territory"
   ],
   "icon": "map_pin",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/land_registry",

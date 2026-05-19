@@ -4,13 +4,13 @@
   "description": "Install, update and uninstall extensions and codex packages from connected file registries",
   "author": "Realms Team",
   "categories": [
-    "other"
+    "developer"
   ],
   "permissions": [
     "admin"
   ],
   "profiles": [
-    "admin"
+    "developer"
   ],
   "icon": "layers",
   "show_in_sidebar": true,

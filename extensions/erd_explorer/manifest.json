@@ -9,11 +9,10 @@
     "get_entity_data"
   ],
   "profiles": [
-    "member",
-    "admin"
+    "developer"
   ],
   "categories": [
-    "other"
+    "developer"
   ],
   "icon": "table",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/erd_explorer",

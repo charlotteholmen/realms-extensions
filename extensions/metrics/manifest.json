@@ -9,8 +9,11 @@
     "admin"
   ],
   "categories": [
-    "oversight"
+    "finances"
   ],
+  "sidebar_label": {
+    "en": "Financials"
+  },
   "icon": "analytics",
   "doc_url": null,
   "show_in_sidebar": true

@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "View and browse Codex automation scripts",
   "author": "Realms Team",
-  "categories": ["other"],
+  "categories": ["developer"],
   "permissions": ["admin"],
-  "profiles": ["admin"],
+  "profiles": ["member", "admin", "developer"],
   "path": "codex_viewer",
   "show_in_sidebar": true
 }

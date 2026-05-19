@@ -15,8 +15,11 @@
     "admin"
   ],
   "categories": [
-    "public_services"
+    "profile"
   ],
+  "sidebar_label": {
+    "en": "Passport Link"
+  },
   "icon": "id_card",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/passport_verification",
   "show_in_sidebar": true,
