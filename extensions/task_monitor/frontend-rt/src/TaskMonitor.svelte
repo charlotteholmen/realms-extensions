@@ -60,6 +60,7 @@
 	let showCodeModal = $state(false);
 	let codeModalContent: { name: string; code: string; description: string } | null = $state(null);
 	let activeDetailTab: 'overview' | 'steps' | 'executions' = $state('overview');
+	let viewMode: 'grid' | 'list' = $state('grid');
 
 	let stats = $derived({
 		total: tasks.length,
@@ -283,6 +284,10 @@
 		return Math.round((task.step_to_execute / task.total_steps) * 100);
 	}
 
+	function isTaskRunning(task: { status?: string }): boolean {
+		return task?.status?.toLowerCase() === 'running';
+	}
+
 	$effect(() => {
 		loadTasks();
 		const interval = setInterval(loadTasks, 10000);
@@ -371,23 +376,31 @@
 				</div>
 
 				<div class="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 flex gap-3">
-					<button
-						onclick={() => runTaskNow(selectedTask)}
-						disabled={runningTasks[selectedTask]}
-						class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
-					>
-						{#if runningTasks[selectedTask]}
+					{#if isTaskRunning(taskDetail)}
+						<div class="px-4 py-2 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-medium rounded-lg flex items-center gap-2">
 							<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
-							Starting...
-						{:else}
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
-							Run Now
-						{/if}
-					</button>
+							Running...
+						</div>
+					{:else}
+						<button
+							onclick={() => runTaskNow(selectedTask)}
+							disabled={runningTasks[selectedTask]}
+							class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+						>
+							{#if runningTasks[selectedTask]}
+								<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+								Starting...
+							{:else}
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+								Run Now
+							{/if}
+						</button>
+					{/if}
 					<button
 						onclick={() => deleteTask(selectedTask)}
-						disabled={deletingTasks[selectedTask]}
-						class="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+						disabled={deletingTasks[selectedTask] || isTaskRunning(taskDetail)}
+						class="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg flex items-center gap-2"
+						title={isTaskRunning(taskDetail) ? 'Cannot delete a running task' : ''}
 					>
 						{#if deletingTasks[selectedTask]}
 							<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
@@ -451,12 +464,12 @@
 
 						<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
 							<div>
-								<span class="block text-gray-500 dark:text-gray-400">Created</span>
+								<span class="block text-gray-500 dark:text-gray-400">Started At</span>
 								<span class="font-medium text-gray-900 dark:text-white">{formatTimestamp(taskDetail.created_at)}</span>
 							</div>
 							<div>
-								<span class="block text-gray-500 dark:text-gray-400">Updated</span>
-								<span class="font-medium text-gray-900 dark:text-white">{formatTimestamp(taskDetail.updated_at)}</span>
+								<span class="block text-gray-500 dark:text-gray-400">Stopped At</span>
+								<span class="font-medium text-gray-900 dark:text-white">{isTaskRunning(taskDetail) ? '-' : formatTimestamp(taskDetail.updated_at)}</span>
 							</div>
 							<div>
 								<span class="block text-gray-500 dark:text-gray-400">Executions</span>
@@ -685,13 +698,31 @@
 	{:else}
 		<div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
 			<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Task Monitor</h1>
-			<button
-				onclick={loadTasks}
-				class="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-			>
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-				Refresh
-			</button>
+			<div class="flex items-center gap-2">
+				<div class="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
+					<button
+						onclick={() => viewMode = 'grid'}
+						class="px-2.5 py-1.5 transition-colors {viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}"
+						aria-label="Grid view"
+					>
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+					</button>
+					<button
+						onclick={() => viewMode = 'list'}
+						class="px-2.5 py-1.5 transition-colors {viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}"
+						aria-label="List view"
+					>
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+					</button>
+				</div>
+				<button
+					onclick={loadTasks}
+					class="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+					Refresh
+				</button>
+			</div>
 		</div>
 
 		{#if error}
@@ -756,11 +787,11 @@
 					<p class="text-gray-500 dark:text-gray-400">{searchTerm || statusFilter ? 'No matching tasks' : 'No tasks found'}</p>
 				</div>
 			{:else}
+				{#if viewMode === 'grid'}
 				<!-- Task Cards Grid -->
 				<div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
 					{#each filteredTasks as task (task._id)}
 						<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow duration-200 flex flex-col">
-							<!-- Card Header -->
 							<div class="p-4 border-b border-gray-100 dark:border-gray-700">
 								<div class="flex justify-between items-start gap-2">
 									<div class="flex-1 min-w-0">
@@ -768,7 +799,7 @@
 										<p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">ID: {task._id.substring(0, 12)}</p>
 									</div>
 									<div class="flex items-center gap-2">
-										{#if task.status?.toLowerCase() === 'running'}
+										{#if isTaskRunning(task)}
 											<span class="relative flex h-2.5 w-2.5">
 												<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
 												<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
@@ -781,7 +812,6 @@
 								</div>
 							</div>
 
-							<!-- Card Body -->
 							<div class="p-4 space-y-3 flex-1">
 								{#if getDescription(task.metadata)}
 									<p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{getDescription(task.metadata)}</p>
@@ -795,32 +825,23 @@
 											<span class={schedule.disabled ? 'line-through text-gray-400' : ''}>
 												{formatInterval(schedule.repeat_every)}
 											</span>
-											{#if schedule.disabled}
-												<span class="px-1.5 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Paused</span>
-											{/if}
 										</div>
 										{#if schedule.last_run_at}
-											<div class="flex items-center gap-1.5 text-gray-500 dark:text-gray-500">
-												<span>Last: {formatRelativeTime(schedule.last_run_at)}</span>
-											</div>
+											<span class="text-xs text-gray-500">Last: {formatRelativeTime(schedule.last_run_at)}</span>
 										{/if}
 									{:else}
-										<div class="flex items-center gap-1.5 text-gray-500 dark:text-gray-500">
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-											<span>One-time task</span>
-										</div>
+										<span class="text-xs text-gray-500">One-time task</span>
 									{/if}
 									<button
 										onclick={() => viewTaskDetails(task._id)}
-										class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline"
+										class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline text-xs"
 									>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-									{task.executions_count ?? 0} runs
+										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+										{task.executions_count ?? 0} runs
 									</button>
 								</div>
 							</div>
 
-							<!-- Card Footer -->
 							<div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 rounded-b-xl flex gap-2">
 								<button
 									onclick={() => viewTaskDetails(task._id)}
@@ -829,18 +850,20 @@
 									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
 									View
 								</button>
-								<button
-									onclick={() => runTaskNow(task._id)}
-									disabled={runningTasks[task._id]}
-									class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors"
-								>
-									{#if runningTasks[task._id]}
-										<svg class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
-									{:else}
-										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
-									{/if}
-									Run
-								</button>
+								{#if !isTaskRunning(task)}
+									<button
+										onclick={() => runTaskNow(task._id)}
+										disabled={runningTasks[task._id]}
+										class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors"
+									>
+										{#if runningTasks[task._id]}
+											<svg class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+										{:else}
+											<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+										{/if}
+										Run
+									</button>
+								{/if}
 								{#if task.schedules?.length > 0}
 									{@const schedule = task.schedules[0]}
 									<button
@@ -855,8 +878,9 @@
 								{/if}
 								<button
 									onclick={() => deleteTask(task._id)}
-									disabled={deletingTasks[task._id]}
-									class="px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 disabled:opacity-50 transition-colors"
+									disabled={deletingTasks[task._id] || isTaskRunning(task)}
+									class="px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+									title={isTaskRunning(task) ? 'Cannot delete a running task' : ''}
 								>
 									{#if deletingTasks[task._id]}
 										<svg class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
@@ -868,6 +892,76 @@
 						</div>
 					{/each}
 				</div>
+
+				{:else}
+				<!-- Task List View -->
+				<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">
+					{#each filteredTasks as task (task._id)}
+						<div class="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+							<div class="flex-shrink-0 flex items-center gap-2">
+								{#if isTaskRunning(task)}
+									<span class="relative flex h-2.5 w-2.5">
+										<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+										<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+									</span>
+								{/if}
+								<span class="px-2 py-0.5 rounded-full text-xs font-medium {getStatusColor(task.status)}">
+									{task.status || 'Unknown'}
+								</span>
+							</div>
+							<div class="flex-1 min-w-0">
+								<h3 class="text-sm font-medium text-gray-900 dark:text-white truncate">{task.name}</h3>
+								<div class="flex items-center gap-3 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+									{#if task.schedules?.length > 0}
+										<span>{formatInterval(task.schedules[0].repeat_every)}</span>
+										{#if task.schedules[0].last_run_at}
+											<span>Last: {formatRelativeTime(task.schedules[0].last_run_at)}</span>
+										{/if}
+									{/if}
+									<span>{task.executions_count ?? 0} runs</span>
+								</div>
+							</div>
+							<div class="flex items-center gap-2 flex-shrink-0">
+								<button
+									onclick={() => viewTaskDetails(task._id)}
+									class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+								>
+									View
+								</button>
+								{#if !isTaskRunning(task)}
+									<button
+										onclick={() => runTaskNow(task._id)}
+										disabled={runningTasks[task._id]}
+										class="px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors"
+									>
+										Run
+									</button>
+								{/if}
+								{#if task.schedules?.length > 0}
+									{@const schedule = task.schedules[0]}
+									<button
+										onclick={() => toggleSchedule(schedule._id, schedule.disabled)}
+										class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors
+											{schedule.disabled
+												? 'text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+												: 'text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-900/30'}"
+									>
+										{schedule.disabled ? 'Resume' : 'Pause'}
+									</button>
+								{/if}
+								<button
+									onclick={() => deleteTask(task._id)}
+									disabled={deletingTasks[task._id] || isTaskRunning(task)}
+									class="px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+									title={isTaskRunning(task) ? 'Cannot delete a running task' : ''}
+								>
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+								</button>
+							</div>
+						</div>
+					{/each}
+				</div>
+				{/if}
 
 				<!-- Pagination -->
 				<div class="flex items-center justify-between mt-6">
