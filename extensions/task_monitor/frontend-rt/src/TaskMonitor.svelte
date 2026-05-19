@@ -158,6 +158,28 @@
 		executionLogs = {};
 	}
 
+	function parseEmbeddedLogs(result: string): string {
+		if (!result) return '';
+		try {
+			const parsed = JSON.parse(result.replace(/'/g, '"').replace(/None/g, 'null').replace(/True/g, 'true').replace(/False/g, 'false'));
+			if (parsed?.logs && Array.isArray(parsed.logs)) {
+				return parsed.logs.map((log: any) => {
+					const level = log.level || 'INFO';
+					const msg = log.message || '';
+					return `[${level}] ${msg}`;
+				}).join('\n');
+			}
+		} catch {}
+		const logsMatch = result.match(/'logs':\s*\[(.+?)\]/s);
+		if (logsMatch) {
+			const entries = [...logsMatch[1].matchAll(/'message':\s*'([^']*?)'/g)];
+			if (entries.length > 0) {
+				return entries.map(m => m[1]).join('\n');
+			}
+		}
+		return '';
+	}
+
 	async function loadExecutionLogs(executionId: string, loggerName: string) {
 		if (expandedExecution === executionId) {
 			expandedExecution = null;
@@ -168,9 +190,18 @@
 		executionLogsLoading[executionId] = true;
 		try {
 			const res = await callSync('get_execution_logs', { logger_name: loggerName, limit: 200 });
-			executionLogs[executionId] = res?.logs || res?.data?.logs || 'No logs available';
+			const logs = res?.logs || res?.data?.logs || '';
+			if (logs && logs !== 'No logs available') {
+				executionLogs[executionId] = logs;
+			} else {
+				const exec = taskDetail?.executions?.find((e: any) => e._id === executionId);
+				const embedded = exec?.result ? parseEmbeddedLogs(exec.result) : '';
+				executionLogs[executionId] = embedded || 'No logs available (log buffer rotated)';
+			}
 		} catch (e: any) {
-			executionLogs[executionId] = 'Error loading logs: ' + (e?.message || String(e));
+			const exec = taskDetail?.executions?.find((e: any) => e._id === executionId);
+			const embedded = exec?.result ? parseEmbeddedLogs(exec.result) : '';
+			executionLogs[executionId] = embedded || 'Error loading logs: ' + (e?.message || String(e));
 		} finally {
 			delete executionLogsLoading[executionId];
 		}
@@ -199,6 +230,8 @@
 		}
 	}
 
+	let stoppingTasks: Record<string, boolean> = $state({});
+
 	async function runTaskNow(taskId: string) {
 		runningTasks[taskId] = true;
 		try {
@@ -210,6 +243,20 @@
 			showToast(e?.message || 'Error running task', 'error');
 		} finally {
 			delete runningTasks[taskId];
+		}
+	}
+
+	async function stopTask(taskId: string) {
+		stoppingTasks[taskId] = true;
+		try {
+			const data = await callSync('stop_task', { task_id: taskId });
+			showToast(data?.message || 'Task stopped', 'success');
+			await loadTasks();
+			if (selectedTask === taskId) await viewTaskDetails(taskId);
+		} catch (e: any) {
+			showToast(e?.message || 'Error stopping task', 'error');
+		} finally {
+			delete stoppingTasks[taskId];
 		}
 	}
 
@@ -377,10 +424,19 @@
 
 				<div class="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 flex gap-3">
 					{#if isTaskRunning(taskDetail)}
-						<div class="px-4 py-2 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-medium rounded-lg flex items-center gap-2">
-							<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
-							Running...
-						</div>
+						<button
+							onclick={() => stopTask(selectedTask)}
+							disabled={stoppingTasks[selectedTask]}
+							class="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2"
+						>
+							{#if stoppingTasks[selectedTask]}
+								<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+								Stopping...
+							{:else}
+								<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+								Stop
+							{/if}
+						</button>
 					{:else}
 						<button
 							onclick={() => runTaskNow(selectedTask)}
