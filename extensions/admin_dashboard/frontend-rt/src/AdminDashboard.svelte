@@ -5,7 +5,7 @@
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
 
-	type TabId = 'browse' | 'export' | 'import' | 'invitations';
+	type TabId = 'browse' | 'export' | 'import' | 'invitations' | 'settings';
 
 	interface EntityType {
 		value: string;
@@ -440,9 +440,71 @@
 		if (fileInput) fileInput.value = '';
 	}
 
+	// Realm Settings
+	let settingsLoading = $state(true);
+	let settingsSaving = $state(false);
+	let settingsMessage = $state('');
+	let settingsError = $state('');
+	let realmSettingsName = $state('');
+	let realmSettingsDescription = $state('');
+	let realmSettingsWelcome = $state('');
+	let realmSettingsLogoUrl = $state('');
+	let realmSettingsBackgroundUrl = $state('');
+	let realmSettingsOpenRegistration = $state(false);
+
+	async function loadRealmSettings() {
+		settingsLoading = true;
+		settingsError = '';
+		try {
+			const resp = await ctx.backend.status();
+			if (resp?.success && resp?.data?.status) {
+				const s = resp.data.status;
+				realmSettingsName = s.realm_name || '';
+				realmSettingsDescription = s.realm_description || '';
+				realmSettingsWelcome = s.realm_welcome_message || '';
+				realmSettingsLogoUrl = s.logo_url || '';
+				realmSettingsBackgroundUrl = s.background_image_url || '';
+				realmSettingsOpenRegistration = !!s.open_registration;
+			}
+		} catch (e: any) {
+			settingsError = e?.message || String(e);
+		} finally {
+			settingsLoading = false;
+		}
+	}
+
+	async function saveRealmSettings() {
+		settingsSaving = true;
+		settingsMessage = '';
+		settingsError = '';
+		try {
+			const config = {
+				name: realmSettingsName,
+				description: realmSettingsDescription,
+				welcome_message: realmSettingsWelcome,
+				logo_url: realmSettingsLogoUrl,
+				background_image_url: realmSettingsBackgroundUrl,
+				open_registration: realmSettingsOpenRegistration,
+			};
+			const raw = await ctx.backend.update_realm_config(JSON.stringify(config));
+			const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+			if (result?.success) {
+				settingsMessage = 'Realm settings saved successfully.';
+				addToast('Realm settings updated');
+			} else {
+				settingsError = result?.error || 'Failed to save settings';
+			}
+		} catch (e: any) {
+			settingsError = e?.message || String(e);
+		} finally {
+			settingsSaving = false;
+		}
+	}
+
 	$effect(() => {
 		loadEntityTypes();
 		loadPackagesWidget();
+		loadRealmSettings();
 	});
 
 	const TABS: { id: TabId; label: string }[] = [
@@ -450,6 +512,7 @@
 		{ id: 'export', label: 'Export' },
 		{ id: 'import', label: 'Import' },
 		{ id: 'invitations', label: 'Invitations' },
+		{ id: 'settings', label: 'Realm Settings' },
 	];
 
 	let exportJson = $derived(exportResult ? JSON.stringify(exportResult, null, 2) : '');
@@ -946,6 +1009,89 @@
 							<p class="text-sm font-medium text-red-800">Import failed</p>
 							<p class="text-sm text-red-600 mt-1">{importResult.error}</p>
 						{/if}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+	<!-- ==================== REALM SETTINGS TAB ==================== -->
+	{:else if activeTab === 'settings'}
+		<div class="bg-white shadow-sm rounded-lg p-6">
+			<h2 class="text-lg font-semibold text-gray-900 mb-1">Realm Settings</h2>
+			<p class="text-gray-600 text-sm mb-6">Configure your realm's name, description, branding, and registration settings.</p>
+
+			{#if settingsLoading}
+				<div class="flex items-center justify-center py-10">
+					<div class="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+				</div>
+			{:else}
+				<div class="space-y-5">
+					<div>
+						<label for="rs-name" class="block text-sm font-medium text-gray-700 mb-1">Realm Name</label>
+						<input id="rs-name" type="text" bind:value={realmSettingsName}
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+					</div>
+
+					<div>
+						<label for="rs-desc" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+						<textarea id="rs-desc" bind:value={realmSettingsDescription} rows="2"
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"></textarea>
+					</div>
+
+					<div>
+						<label for="rs-welcome" class="block text-sm font-medium text-gray-700 mb-1">Welcome Message</label>
+						<textarea id="rs-welcome" bind:value={realmSettingsWelcome} rows="3"
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"></textarea>
+					</div>
+
+					<div>
+						<label for="rs-logo" class="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
+						<input id="rs-logo" type="url" bind:value={realmSettingsLogoUrl} placeholder="https://example.com/logo.png"
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+						{#if realmSettingsLogoUrl}
+							<div class="mt-2 flex items-center gap-3">
+								<img src={realmSettingsLogoUrl} alt="Logo preview" class="h-12 w-12 object-contain rounded border border-gray-200 bg-gray-50" />
+								<span class="text-xs text-gray-500">Preview</span>
+							</div>
+						{/if}
+					</div>
+
+					<div>
+						<label for="rs-bg" class="block text-sm font-medium text-gray-700 mb-1">Background Image URL</label>
+						<input id="rs-bg" type="url" bind:value={realmSettingsBackgroundUrl} placeholder="https://example.com/background.png"
+							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+						{#if realmSettingsBackgroundUrl}
+							<div class="mt-2">
+								<img src={realmSettingsBackgroundUrl} alt="Background preview" class="h-24 w-full object-cover rounded border border-gray-200" />
+								<span class="text-xs text-gray-500">Preview</span>
+							</div>
+						{/if}
+					</div>
+
+					<div class="flex items-center gap-3">
+						<label for="rs-open-reg" class="relative inline-flex items-center cursor-pointer">
+							<input id="rs-open-reg" type="checkbox" bind:checked={realmSettingsOpenRegistration} class="sr-only peer" />
+							<div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-focus:ring-2 peer-focus:ring-blue-300 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+						</label>
+						<div>
+							<span class="text-sm font-medium text-gray-700">Open Registration</span>
+							<p class="text-xs text-gray-500">When enabled, anyone can join without an invite code.</p>
+						</div>
+					</div>
+
+					{#if settingsMessage}
+						<div class="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">{settingsMessage}</div>
+					{/if}
+					{#if settingsError}
+						<div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{settingsError}</div>
+					{/if}
+
+					<div class="pt-2">
+						<button
+							onclick={saveRealmSettings}
+							disabled={settingsSaving}
+							class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
+						>{settingsSaving ? 'Saving…' : 'Save Settings'}</button>
 					</div>
 				</div>
 			{/if}
