@@ -394,7 +394,63 @@ def _do_execute_proposal(proposal_id: str):
         return
 
     metadata = _load_metadata(proposal)
+    code_inline = metadata.get("code_inline")
     codices_list = metadata.get("codices")
+
+    # --- Inline code path: no download needed ---
+    if code_inline:
+        proposal.status = "executing"
+        codex_name = metadata.get("codex_name", f"proposal_{proposal_id}_inline")
+        logger.info(f"Executing inline-code proposal {proposal_id}")
+
+        existing_codex = Codex[codex_name]
+        if existing_codex:
+            existing_codex.code = code_inline
+            existing_codex.description = f"Updated by proposal {proposal_id}: {proposal.title}"
+            action = "updated"
+        else:
+            existing_codex = Codex(
+                name=codex_name,
+                description=f"Created by proposal {proposal_id}: {proposal.title}",
+                code=code_inline,
+            )
+            action = "created"
+
+        try:
+            from main import reload_entity_method_overrides
+            reload_entity_method_overrides()
+        except Exception:
+            pass
+
+        try:
+            from ggg import Transfer, Treasury, User, Budget, Fund, LedgerEntry, Realm
+            extra_globals = {
+                "Transfer": Transfer, "Treasury": Treasury, "User": User,
+                "Budget": Budget, "Fund": Fund, "LedgerEntry": LedgerEntry,
+                "Realm": Realm, "Proposal": Proposal, "Vote": Vote,
+            }
+        except ImportError:
+            extra_globals = {}
+        exec_globals = {"ic": ic, "logger": logger, "Codex": Codex, "json": json, **extra_globals}
+
+        try:
+            exec(code_inline, exec_globals)
+            main_fn = exec_globals.get("main")
+            if main_fn and callable(main_fn):
+                result = main_fn()
+                if hasattr(result, '__next__'):
+                    yield from result
+            logger.info(f"Inline code executed successfully for proposal {proposal_id}")
+        except Exception as e:
+            proposal.status = "failed"
+            proposal.metadata = json.dumps({**metadata, "error": f"Code execution failed: {e}"})
+            logger.error(f"Execute: inline code exec failed for {proposal_id}: {e}\n{traceback.format_exc()}")
+            return
+
+        proposal.status = "executed"
+        proposal.metadata = json.dumps({**metadata, "codex_name": codex_name, "codex_action": action})
+        logger.info(f"Proposal {proposal_id} fully executed (inline code)")
+        return
 
     # --- Multi-codex path: delegate to TaskManager ---
     if codices_list and len(codices_list) > 1:
@@ -575,8 +631,8 @@ def submit_proposal(args: str) -> str:
     """Submit a new proposal.
 
     Required: title, description
-    Required (one of): code_url (single codex) OR codices (multi-codex array)
-    Optional: code_checksum (sha256:<hex>), codex_name, required_threshold
+    Required (one of): code_url (single codex) OR codices (multi-codex array) OR code_inline (inline Python)
+    Optional: code_checksum (sha256:<hex>), codex_name, required_threshold, auto_start_voting (bool)
 
     Multi-codex format:
       codices: [{"name": "...", "url": "...", "checksum": "..."}, ...]
@@ -591,8 +647,9 @@ def submit_proposal(args: str) -> str:
         # Validate that we have at least one codex source
         codices = args_dict.get("codices", [])
         code_url = args_dict.get("code_url", "")
-        if not codices and not code_url:
-            return json.dumps({"success": False, "error": "code_url or codices array is required"})
+        code_inline = args_dict.get("code_inline", "")
+        if not codices and not code_url and not code_inline:
+            return json.dumps({"success": False, "error": "code_url, codices array, or code_inline is required"})
 
         # Validate codices entries
         if codices:
@@ -615,9 +672,13 @@ def submit_proposal(args: str) -> str:
 
         # Build metadata
         metadata = {}
-        if codices:
+        if code_inline:
+            metadata["code_inline"] = code_inline
+            display_url = ""
+            codex_name = args_dict.get("codex_name", f"proposal_{proposal_id}_inline")
+            metadata["codex_name"] = codex_name
+        elif codices:
             metadata["codices"] = codices
-            # Use first URL as the primary code_url for display
             display_url = codices[0]["url"]
         else:
             display_url = code_url
@@ -654,7 +715,27 @@ def submit_proposal(args: str) -> str:
             )
 
         codex_count = len(codices) if codices else 1
-        logger.info(f"Proposal {proposal_id} submitted by {proposer_id} ({codex_count} codex(es))")
+        logger.info(f"Proposal {proposal_id} submitted by {proposer_id} ({codex_count} codex(es), inline={'yes' if code_inline else 'no'})")
+
+        # Auto-start voting if requested
+        if args_dict.get("auto_start_voting"):
+            voting_window = 604_800
+            try:
+                from ggg import Realm
+                realm = Realm[1]
+                if realm and realm.calendar:
+                    cal_window = realm.calendar.voting_window
+                    if cal_window:
+                        voting_window = int(cal_window)
+            except Exception:
+                pass
+            now_ns = ic.time()
+            now_s = now_ns // 1_000_000_000
+            deadline_s = now_s + voting_window
+            proposal.status = "voting"
+            proposal.voting_deadline = str(deadline_s)
+            logger.info(f"Auto-started voting for {proposal_id}, deadline in {voting_window}s")
+
         return json.dumps({"success": True, "data": _proposal_to_dict(proposal)})
     except Exception as e:
         logger.error(f"submit_proposal error: {e}\n{traceback.format_exc()}")

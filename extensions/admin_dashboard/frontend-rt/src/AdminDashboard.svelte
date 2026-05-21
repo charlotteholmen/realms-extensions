@@ -1,5 +1,6 @@
 <script lang="ts">
 	import InvitationManager from './InvitationManager.svelte';
+	import ProposalModal from './ProposalModal.svelte';
 
 	let { ctx }: { ctx: any } = $props();
 
@@ -452,6 +453,32 @@
 	let realmSettingsBackgroundUrl = $state('');
 	let realmSettingsOpenRegistration = $state(false);
 
+	// Proposal modal (for access-denied → governance proposal flow)
+	let proposalModalOpen = $state(false);
+	let proposalModalTitle = $state('');
+	let proposalModalDescription = $state('');
+	let proposalModalCode = $state('');
+	let proposalModalOperation = $state('');
+
+	function buildRealmConfigCode(): string {
+		const lines = ['from ggg import Realm', '', 'realm = Realm.load("1")'];
+		if (realmSettingsName) lines.push(`realm.name = ${JSON.stringify(realmSettingsName)}`);
+		if (realmSettingsDescription) lines.push(`realm.description = ${JSON.stringify(realmSettingsDescription)}`);
+		lines.push(`realm.welcome_message = ${JSON.stringify(realmSettingsWelcome)}`);
+		if (realmSettingsLogoUrl) lines.push(`realm.logo_url = ${JSON.stringify(realmSettingsLogoUrl)}`);
+		if (realmSettingsBackgroundUrl) lines.push(`realm.background_image_url = ${JSON.stringify(realmSettingsBackgroundUrl)}`);
+		lines.push(`realm.open_registration = ${realmSettingsOpenRegistration ? 'True' : 'False'}`);
+		return lines.join('\n');
+	}
+
+	function openProposalForSettings(deniedOp: string) {
+		proposalModalTitle = 'Update realm settings';
+		proposalModalDescription = 'This proposal updates the realm configuration (name, description, welcome message, branding, and registration settings) as specified in the code below.';
+		proposalModalCode = buildRealmConfigCode();
+		proposalModalOperation = deniedOp;
+		proposalModalOpen = true;
+	}
+
 	async function loadRealmSettings() {
 		settingsLoading = true;
 		settingsError = '';
@@ -491,11 +518,19 @@
 			if (result?.success) {
 				settingsMessage = 'Realm settings saved successfully.';
 				addToast('Realm settings updated');
+			} else if (result?.denied_operation) {
+				openProposalForSettings(result.denied_operation);
 			} else {
 				settingsError = result?.error || 'Failed to save settings';
 			}
 		} catch (e: any) {
-			settingsError = e?.message || String(e);
+			const msg = e?.message || String(e);
+			if (msg.includes('Access denied') && msg.includes("lacks permission")) {
+				const match = msg.match(/lacks permission '([^']+)'/);
+				openProposalForSettings(match?.[1] || 'realm.configure');
+			} else {
+				settingsError = msg;
+			}
 		} finally {
 			settingsSaving = false;
 		}
@@ -1098,3 +1133,13 @@
 		</div>
 	{/if}
 </div>
+
+<ProposalModal
+	{ctx}
+	open={proposalModalOpen}
+	title={proposalModalTitle}
+	description={proposalModalDescription}
+	codeInline={proposalModalCode}
+	deniedOperation={proposalModalOperation}
+	onclose={() => proposalModalOpen = false}
+/>
