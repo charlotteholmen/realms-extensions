@@ -11,6 +11,9 @@
   "categories": [
     "administration"
   ],
-  "icon": "shield_person",
-  "show_in_sidebar": true
+  "icon": "shield-lock",
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Role Manager"
+  }
 }

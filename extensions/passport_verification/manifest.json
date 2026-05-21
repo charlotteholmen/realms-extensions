@@ -20,7 +20,7 @@
   "sidebar_label": {
     "en": "Passport Link"
   },
-  "icon": "id_card",
+  "icon": "id-badge",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/passport_verification",
   "show_in_sidebar": true,
   "identity_provider": {

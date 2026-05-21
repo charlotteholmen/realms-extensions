@@ -18,7 +18,7 @@
   "sidebar_label": {
     "en": "Zoning"
   },
-  "icon": "map",
+  "icon": "layers-subtract",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/zone_selector",
   "show_in_sidebar": true
 }

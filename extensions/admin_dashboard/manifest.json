@@ -7,7 +7,7 @@
     "administration"
   ],
   "sidebar_label": {
-    "en": "Admin Panel"
+    "en": "Dashboard"
   },
   "permissions": [
     "admin"
@@ -15,5 +15,7 @@
   "profiles": [
     "admin"
   ],
-  "show_in_sidebar": true
+  "show_in_sidebar": true,
+  "icon": "layout-dashboard",
+  "is_default": true
 }

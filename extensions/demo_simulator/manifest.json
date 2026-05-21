@@ -12,6 +12,9 @@
   "profiles": [
     "admin"
   ],
-  "icon": "beaker",
-  "show_in_sidebar": true
+  "icon": "flask",
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Demo Simulator"
+  }
 }

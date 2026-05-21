@@ -27,7 +27,7 @@
   "categories": [
     "finances"
   ],
-  "icon": "wallet",
+  "icon": "safe",
   "doc_url": "https://github.com/smart-social-contracts/realms-extension-vault",
   "show_in_sidebar": true,
   "python_dependencies": [
@@ -35,5 +35,8 @@
     "ic-python-db>=0.7.1",
     "ic-python-logging>=0.3.1"
   ],
-  "entity_method_overrides": []
+  "entity_method_overrides": [],
+  "sidebar_label": {
+    "en": "Vault"
+  }
 }

@@ -35,7 +35,7 @@
   "sidebar_label": {
     "en": "Justice"
   },
-  "icon": "scale",
+  "icon": "gavel",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/justice_litigation",
   "show_in_sidebar": true
 }

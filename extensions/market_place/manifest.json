@@ -3,14 +3,19 @@
   "version": "2.0.0",
   "description": "Extensions marketplace for browsing, purchasing, and publishing extensions",
   "author": "Smart Social Contracts",
-  "permissions": ["icp_transfer"],
+  "permissions": [
+    "icp_transfer"
+  ],
   "profiles": [
     "admin"
   ],
   "categories": [
     "administration"
   ],
-  "icon": "layers",
+  "icon": "building-store",
   "doc_url": "https://github.com/smart-social-contracts/extensions/market_place",
-  "path": "extensions"
+  "path": "extensions",
+  "sidebar_label": {
+    "en": "Marketplace"
+  }
 }

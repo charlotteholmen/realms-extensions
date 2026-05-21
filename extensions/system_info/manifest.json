@@ -19,7 +19,7 @@
   "sidebar_label": {
     "en": "System Status"
   },
-  "icon": "chart_bar_square",
+  "icon": "server",
   "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/system_info",
   "show_in_sidebar": true
 }

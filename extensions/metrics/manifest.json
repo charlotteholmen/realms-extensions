@@ -14,7 +14,7 @@
   "sidebar_label": {
     "en": "Financials"
   },
-  "icon": "analytics",
+  "icon": "chart-bar",
   "doc_url": null,
   "show_in_sidebar": true
 }

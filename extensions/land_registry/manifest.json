@@ -20,7 +20,10 @@
   "categories": [
     "land_territory"
   ],
-  "icon": "map_pin",
+  "icon": "map-2",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/land_registry",
-  "show_in_sidebar": true
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Land Registry"
+  }
 }
