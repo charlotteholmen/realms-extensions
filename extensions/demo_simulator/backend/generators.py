@@ -13,6 +13,7 @@ from .constants import (
     CASE_TITLES,
     CITY_COORDINATES,
     COURT_NAMES,
+    DEPARTMENT_DEFINITIONS,
     EXPENSE_BUDGETS,
     FIRST_NAMES,
     FISCAL_PERIOD_DEFINITIONS,
@@ -21,6 +22,7 @@ from .constants import (
     LAND_TYPES,
     LAST_NAMES,
     LEDGER_TEMPLATES,
+    MESSAGE_TEMPLATES,
     ORG_NAMES,
     PROPOSAL_TITLES,
     REVENUE_BUDGETS,
@@ -552,4 +554,93 @@ def generate_ledger_batch(state_data, count):
         created.append(tx_id)
 
     state_data["total_ledger_entries_created"] = base_idx + count
+    return created
+
+
+def generate_notification_batch(state_data, count):
+    """Generate notification messages for existing demo users."""
+    from ggg import Notification, User
+
+    total_users = state_data.get("total_users_created", 0)
+    if total_users < 1:
+        return []
+
+    base_idx = state_data.get("total_notifications_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 110000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        user_idx = rng.randint(0, total_users - 1)
+        user = User[f"demo_user_{user_idx:04d}"]
+        if not user:
+            continue
+
+        template = rng.choice(MESSAGE_TEMPLATES)
+        Notification(
+            topic=template["topic"],
+            title=template["title"],
+            message=template["message"],
+            sender="Realm System",
+            recipient=f"demo_user_{user_idx:04d}",
+            user=user,
+            read=rng.random() < 0.4,
+            icon="bell",
+            href="/messages",
+            color=rng.choice(["blue", "green", "amber", "red"]),
+        )
+        created.append(f"demo_notif_{idx:04d}")
+
+    state_data["total_notifications_created"] = base_idx + len(created)
+    return created
+
+
+def generate_department_batch(state_data, count):
+    """Generate departments and assign existing demo users to them."""
+    from ggg import Department, User
+
+    total_users = state_data.get("total_users_created", 0)
+    base_idx = state_data.get("total_departments_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 120000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        if idx >= len(DEPARTMENT_DEFINITIONS):
+            break
+
+        defn = DEPARTMENT_DEFINITIONS[idx]
+        existing = Department[defn["name"]]
+        if existing:
+            continue
+
+        dept = Department(
+            name=defn["name"],
+            description=defn["description"],
+        )
+
+        if total_users > 0:
+            head_idx = rng.randint(0, total_users - 1)
+            head = User[f"demo_user_{head_idx:04d}"]
+            if head:
+                try:
+                    dept.head = head
+                except Exception:
+                    pass
+
+            member_count = rng.randint(2, min(8, total_users))
+            member_indices = rng.sample(range(total_users), member_count)
+            for m_idx in member_indices:
+                member = User[f"demo_user_{m_idx:04d}"]
+                if member:
+                    try:
+                        dept.members.add(member)
+                    except Exception:
+                        pass
+
+        created.append(dept.name)
+
+    state_data["total_departments_created"] = base_idx + len(created)
     return created

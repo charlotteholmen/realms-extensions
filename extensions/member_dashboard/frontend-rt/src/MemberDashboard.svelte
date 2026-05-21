@@ -355,7 +355,7 @@
 		<!-- Header / Greeting -->
 		<div>
 			<h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-				{getGreeting()}, <span class="text-gray-500 dark:text-gray-400">{summary?.user_name || 'Member'}</span>
+				{getGreeting()}{#if summary?.user_name && summary.user_name !== principal}, <span class="text-gray-500 dark:text-gray-400">{summary.user_name}</span>{/if}
 			</h1>
 		</div>
 

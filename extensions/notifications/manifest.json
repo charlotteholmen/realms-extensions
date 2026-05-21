@@ -18,8 +18,5 @@
   ],
   "icon": "bell",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/notifications",
-  "show_in_sidebar": true,
-  "sidebar_label": {
-    "en": "Notifications"
-  }
+  "show_in_sidebar": false
 }

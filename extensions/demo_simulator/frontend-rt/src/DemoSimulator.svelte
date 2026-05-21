@@ -7,6 +7,16 @@
 		proposals: number;
 		transfers: number;
 		disputes: number;
+		votes?: number;
+		lands?: number;
+		courts?: number;
+		cases?: number;
+		funds?: number;
+		fiscal_periods?: number;
+		budgets?: number;
+		ledger_entries?: number;
+		messages?: number;
+		departments?: number;
 	}
 
 	interface Status {
@@ -34,11 +44,7 @@
 
 	let totalEntities = $derived(
 		status
-			? status.stats.users +
-				status.stats.organizations +
-				status.stats.proposals +
-				status.stats.transfers +
-				status.stats.disputes
+			? Object.values(status.stats).reduce((sum, v) => sum + (v ?? 0), 0)
 			: 0
 	);
 
@@ -196,6 +202,8 @@
 			<div class="ds-stat"><span class="ds-stat-val" style="color:#059669">{status.stats.lands ?? 0}</span><span class="ds-stat-lbl">Lands</span></div>
 			<div class="ds-stat"><span class="ds-stat-val" style="color:#d97706">{status.stats.courts ?? 0}</span><span class="ds-stat-lbl">Courts</span></div>
 			<div class="ds-stat"><span class="ds-stat-val" style="color:#dc2626">{status.stats.cases ?? 0}</span><span class="ds-stat-lbl">Cases</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#2563eb">{status.stats.messages ?? 0}</span><span class="ds-stat-lbl">Messages</span></div>
+			<div class="ds-stat"><span class="ds-stat-val" style="color:#9333ea">{status.stats.departments ?? 0}</span><span class="ds-stat-lbl">Depts</span></div>
 			<div class="ds-stat"><span class="ds-stat-val" style="color:#374151">{status.batch_number}</span><span class="ds-stat-lbl">Batches</span></div>
 		</div>
 
@@ -327,7 +335,7 @@
 <style>
 	.ds-stats-grid {
 		display: grid;
-		grid-template-columns: repeat(5, 1fr);
+		grid-template-columns: repeat(6, 1fr);
 		gap: 0.375rem;
 	}
 	.ds-stat {

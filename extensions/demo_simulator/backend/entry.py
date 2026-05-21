@@ -15,11 +15,13 @@ from .generators import (
     generate_budget_batch,
     generate_case_batch,
     generate_court_batch,
+    generate_department_batch,
     generate_dispute_batch,
     generate_fiscal_period_batch,
     generate_fund_batch,
     generate_land_batch,
     generate_ledger_batch,
+    generate_notification_batch,
     generate_org_batch,
     generate_proposal_batch,
     generate_transfer_batch,
@@ -68,6 +70,8 @@ def run_batch(args: str = "{}"):
         state_data.get("total_fiscal_periods_created", 0),
         state_data.get("total_budgets_created", 0),
         state_data.get("total_ledger_entries_created", 0),
+        state_data.get("total_notifications_created", 0),
+        state_data.get("total_departments_created", 0),
     ])
 
     if max_entities and total_created >= max_entities:
@@ -77,7 +81,7 @@ def run_batch(args: str = "{}"):
             schedule.disabled = True
         return json.dumps({"status": "paused", "reason": "max_entities_reached", "total": total_created})
 
-    batch_type = batch_number % 13
+    batch_type = batch_number % 15
     results = {}
 
     try:
@@ -107,6 +111,10 @@ def run_batch(args: str = "{}"):
             results["budgets"] = generate_budget_batch(state_data, max(2, batch_size))
         elif batch_type == 12:
             results["ledger_entries"] = generate_ledger_batch(state_data, batch_size * 2)
+        elif batch_type == 13:
+            results["messages"] = generate_notification_batch(state_data, batch_size)
+        elif batch_type == 14:
+            results["departments"] = generate_department_batch(state_data, max(2, batch_size))
     except Exception as e:
         logger.error(f"Demo simulator batch {batch_number} failed: {e}")
         logger.error(traceback.format_exc())
@@ -218,6 +226,8 @@ def get_status(args):
             "fiscal_periods": state_data.get("total_fiscal_periods_created", 0),
             "budgets": state_data.get("total_budgets_created", 0),
             "ledger_entries": state_data.get("total_ledger_entries_created", 0),
+            "messages": state_data.get("total_notifications_created", 0),
+            "departments": state_data.get("total_departments_created", 0),
         },
         "demo_mode_active": is_demo_mode_active(),
     })
@@ -325,6 +335,8 @@ def reset(args):
     state_data["total_fiscal_periods_created"] = 0
     state_data["total_budgets_created"] = 0
     state_data["total_ledger_entries_created"] = 0
+    state_data["total_notifications_created"] = 0
+    state_data["total_departments_created"] = 0
 
     if not keep_seed:
         state_data["seed"] = random_seed()
