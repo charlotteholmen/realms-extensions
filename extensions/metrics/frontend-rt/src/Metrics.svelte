@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { exportCsv } from '../../../_shared/frontend/csv-export';
+
 	let { ctx }: { ctx: Record<string, any> } = $props();
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
@@ -255,55 +257,18 @@
 		loadRecordsPage();
 	}
 
-	function csvEscape(val: any): string {
-		if (val == null) return '';
-		const s = typeof val === 'object' ? JSON.stringify(val) : String(val);
-		if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-			return '"' + s.replace(/"/g, '""') + '"';
-		}
-		return s;
-	}
-
 	async function downloadCsv() {
 		csvBusy = true;
 		csvProgress = 'Starting...';
 		try {
-			const allRows: any[] = [];
-			let page = 0;
-			let totalPages = 1;
-			while (page < totalPages) {
-				csvProgress = `Fetching page ${page + 1}${totalPages > 1 ? ' of ' + totalPages : ''}...`;
-				const raw = await ctx.backend.get_objects_paginated(recEntity, page, PAGE_SIZE, 'desc');
-				const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-				if (parsed?.success && parsed?.data?.objectsListPaginated) {
-					const batch = parsed.data.objectsListPaginated.objects.map((s: string) => JSON.parse(s));
-					allRows.push(...batch);
-					totalPages = Number(parsed.data.objectsListPaginated.pagination?.total_pages ?? 1);
-					if (batch.length < PAGE_SIZE) break;
-				} else {
-					break;
-				}
-				page++;
-			}
-			if (allRows.length === 0) {
-				csvProgress = 'No data to export.';
-				return;
-			}
-			csvProgress = `Building CSV (${allRows.length} records)...`;
-			const cols = Object.keys(allRows[0]).filter(k => !k.startsWith('_'));
-			const header = cols.map(csvEscape).join(',');
-			const rows = allRows.map(r => cols.map(c => csvEscape(r[c])).join(','));
-			const csvContent = header + '\n' + rows.join('\n');
-			const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `${recEntity}_${new Date().toISOString().slice(0, 10)}.csv`;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
-			csvProgress = `Exported ${allRows.length} records.`;
+			const count = await exportCsv({
+				backend: ctx.backend,
+				entity: recEntity,
+				pageSize: PAGE_SIZE,
+				order: 'desc',
+				onProgress: (msg) => { csvProgress = msg; },
+			});
+			if (count === 0) csvProgress = 'No data to export.';
 		} catch (e: any) {
 			csvProgress = 'Error: ' + (e?.message || String(e));
 		} finally {
