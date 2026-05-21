@@ -20,13 +20,33 @@
 		operating: '#93C5FD', general: '#1E40AF', special_revenue: '#2563EB', capital_projects: '#60A5FA',
 	};
 
+	const BATCH_SIZE = 50;
+
 	async function loadPaginated(entity: string, limit = 100, order = 'desc') {
-		const raw = await ctx.backend.get_objects_paginated(entity, 0, limit, order);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.success && parsed?.data?.objectsListPaginated) {
-			return parsed.data.objectsListPaginated.objects.map((s: string) => JSON.parse(s));
+		const allItems: any[] = [];
+		let page = 0;
+		let totalPages = 1;
+
+		while (page < totalPages && allItems.length < limit) {
+			const batchLimit = Math.min(BATCH_SIZE, limit - allItems.length);
+			const raw = await ctx.backend.get_objects_paginated(entity, page, batchLimit, order);
+			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+			if (parsed?.success && parsed?.data?.objectsListPaginated) {
+				const batch = parsed.data.objectsListPaginated.objects.map((s: string) => JSON.parse(s));
+				allItems.push(...batch);
+				const pag = parsed.data.objectsListPaginated.pagination;
+				totalPages = Number(pag?.total_pages ?? 1);
+				if (batch.length < batchLimit) break;
+			} else {
+				const fallback = parsed?.data ?? (Array.isArray(parsed) ? parsed : []);
+				allItems.push(...fallback);
+				break;
+			}
+			page++;
 		}
-		return parsed?.data ?? (Array.isArray(parsed) ? parsed : []);
+
+		return allItems;
 	}
 
 	async function loadData() {
