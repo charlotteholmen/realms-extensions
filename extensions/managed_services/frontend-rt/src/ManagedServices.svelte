@@ -38,7 +38,8 @@
 		error = '';
 		try {
 			// Load extension config
-			const config = await ctx.callSync('get_config');
+			const configResult = await ctx.callSync('get_config');
+			const config = configResult?.data ?? configResult;
 			billingServiceUrl = config?.billing_service_url || '';
 			realmCanisterId = config?.realm_canister_id || '';
 			registryCanisterId = config?.registry_canister_id || '';
@@ -83,7 +84,8 @@
 		transactionsLoading = true;
 		try {
 			const result = await ctx.callAsync('get_transactions', { limit: 20 });
-			transactions = result?.transactions || [];
+			const txData = result?.data ?? result;
+			transactions = txData?.transactions || [];
 		} catch (e: any) {
 			console.warn('Could not fetch transactions:', e.message);
 			transactions = [];
