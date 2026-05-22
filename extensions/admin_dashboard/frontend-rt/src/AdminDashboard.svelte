@@ -452,6 +452,8 @@
 	let realmSettingsLogoUrl = $state('');
 	let realmSettingsBackgroundUrl = $state('');
 	let realmSettingsOpenRegistration = $state(false);
+	let realmSettingsFileRegistryId = $state('');
+	let realmSettingsMarketplaceId = $state('');
 
 	// Proposal modal (for access-denied → governance proposal flow)
 	let proposalModalOpen = $state(false);
@@ -468,6 +470,8 @@
 		if (realmSettingsLogoUrl) lines.push(`realm.logo_url = ${JSON.stringify(realmSettingsLogoUrl)}`);
 		if (realmSettingsBackgroundUrl) lines.push(`realm.background_image_url = ${JSON.stringify(realmSettingsBackgroundUrl)}`);
 		lines.push(`realm.open_registration = ${realmSettingsOpenRegistration ? 'True' : 'False'}`);
+		if (realmSettingsFileRegistryId) lines.push(`realm.file_registry_canister_id = ${JSON.stringify(realmSettingsFileRegistryId)}`);
+		if (realmSettingsMarketplaceId) lines.push(`realm.marketplace_canister_id = ${JSON.stringify(realmSettingsMarketplaceId)}`);
 		return lines.join('\n');
 	}
 
@@ -492,6 +496,8 @@
 				realmSettingsLogoUrl = s.logo_url || '';
 				realmSettingsBackgroundUrl = s.background_image_url || '';
 				realmSettingsOpenRegistration = !!s.open_registration;
+				realmSettingsFileRegistryId = s.file_registry_canister_id || '';
+				realmSettingsMarketplaceId = s.marketplace_canister_id || '';
 			}
 		} catch (e: any) {
 			settingsError = e?.message || String(e);
@@ -505,13 +511,15 @@
 		settingsMessage = '';
 		settingsError = '';
 		try {
-			const config = {
+			const config: Record<string, unknown> = {
 				name: realmSettingsName,
 				description: realmSettingsDescription,
 				welcome_message: realmSettingsWelcome,
 				logo_url: realmSettingsLogoUrl,
 				background_image_url: realmSettingsBackgroundUrl,
 				open_registration: realmSettingsOpenRegistration,
+				file_registry_canister_id: realmSettingsFileRegistryId,
+				marketplace_canister_id: realmSettingsMarketplaceId,
 			};
 			const raw = await ctx.backend.update_realm_config(JSON.stringify(config));
 			const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -535,6 +543,15 @@
 			settingsSaving = false;
 		}
 	}
+
+	function isValidCanisterId(value: string): boolean {
+		if (!value) return true;
+		return /^[a-z0-9]{5}(-[a-z0-9]{5})*-cai$/.test(value);
+	}
+
+	let fileRegistryIdValid = $derived(isValidCanisterId(realmSettingsFileRegistryId));
+	let marketplaceIdValid = $derived(isValidCanisterId(realmSettingsMarketplaceId));
+	let infraValid = $derived(fileRegistryIdValid && marketplaceIdValid);
 
 	$effect(() => {
 		loadEntityTypes();
@@ -1114,6 +1131,49 @@
 						</div>
 					</div>
 
+					<!-- Infrastructure: Registry & Marketplace -->
+					<div class="border-t border-gray-200 pt-5 mt-2">
+						<h3 class="text-base font-semibold text-gray-900 mb-1">Registry & Marketplace</h3>
+						<p class="text-xs text-gray-500 mb-4">
+							Configure where this realm downloads and purchases extensions, codices, and assistants.
+							Changing these requires the <code class="bg-gray-100 px-1 rounded">realm.configure.infrastructure</code> permission.
+						</p>
+
+						<div class="space-y-4">
+							<div>
+								<label for="rs-file-registry" class="block text-sm font-medium text-gray-700 mb-1">File Registry Canister ID</label>
+								<input id="rs-file-registry" type="text" bind:value={realmSettingsFileRegistryId}
+									placeholder="e.g. uq2mu-kaaaa-aaaah-avqcq-cai"
+									class={cn(
+										'w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:border-blue-500',
+										realmSettingsFileRegistryId && !fileRegistryIdValid
+											? 'border-red-300 focus:ring-red-300'
+											: 'border-gray-300 focus:ring-blue-500'
+									)} />
+								{#if realmSettingsFileRegistryId && !fileRegistryIdValid}
+									<p class="mt-1 text-xs text-red-600">Invalid canister ID format. Expected format: xxxxx-xxxxx-...-cai</p>
+								{/if}
+								<p class="mt-1 text-xs text-gray-500">The canister that stores extension, codex, and assistant artifact files.</p>
+							</div>
+
+							<div>
+								<label for="rs-marketplace" class="block text-sm font-medium text-gray-700 mb-1">Marketplace Canister ID</label>
+								<input id="rs-marketplace" type="text" bind:value={realmSettingsMarketplaceId}
+									placeholder="e.g. u4hsn-kaaaa-aaaah-avqda-cai"
+									class={cn(
+										'w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:border-blue-500',
+										realmSettingsMarketplaceId && !marketplaceIdValid
+											? 'border-red-300 focus:ring-red-300'
+											: 'border-gray-300 focus:ring-blue-500'
+									)} />
+								{#if realmSettingsMarketplaceId && !marketplaceIdValid}
+									<p class="mt-1 text-xs text-red-600">Invalid canister ID format. Expected format: xxxxx-xxxxx-...-cai</p>
+								{/if}
+								<p class="mt-1 text-xs text-gray-500">The canister that hosts the marketplace for discovering and purchasing packages.</p>
+							</div>
+						</div>
+					</div>
+
 					{#if settingsMessage}
 						<div class="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">{settingsMessage}</div>
 					{/if}
@@ -1124,7 +1184,7 @@
 					<div class="pt-2">
 						<button
 							onclick={saveRealmSettings}
-							disabled={settingsSaving}
+							disabled={settingsSaving || !infraValid}
 							class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
 						>{settingsSaving ? 'Saving…' : 'Save Settings'}</button>
 					</div>
