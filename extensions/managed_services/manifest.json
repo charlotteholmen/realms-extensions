@@ -1,0 +1,25 @@
+{
+  "name": "managed_services",
+  "version": "0.1.0",
+  "description": "Realm version management, self-upgrade, and credit purchasing for administrators",
+  "author": "Realms Team",
+  "permissions": [],
+  "functions": [
+    "get_config",
+    "get_transactions",
+    "set_config"
+  ],
+  "profiles": [
+    "admin",
+    "operator"
+  ],
+  "categories": [
+    "administration"
+  ],
+  "sidebar_label": {
+    "en": "Managed Services"
+  },
+  "icon": "cloud_upload",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/managed_services",
+  "show_in_sidebar": true
+}
