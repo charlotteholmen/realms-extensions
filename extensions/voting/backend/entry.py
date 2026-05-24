@@ -953,6 +953,22 @@ def fetch_proposal_code(args: str) -> Async[str]:
             proposal = _find_proposal(proposal_id)
             if not proposal:
                 return json.dumps({"success": False, "error": "Proposal not found"})
+
+            metadata = _load_metadata(proposal)
+            code_inline = metadata.get("code_inline")
+            if code_inline:
+                actual_hash = hashlib.sha256(code_inline.encode("utf-8")).hexdigest()
+                return json.dumps({
+                    "success": True,
+                    "data": {
+                        "code": code_inline,
+                        "code_url": None,
+                        "checksum": f"sha256:{actual_hash}",
+                        "checksum_match": True,
+                        "inline": True,
+                    }
+                })
+
             if not proposal.code_url:
                 return json.dumps({"success": False, "error": "Proposal has no code URL"})
             code_url = proposal.code_url

@@ -434,11 +434,31 @@ def propose_role_assignment(args) -> str:
         proposal_id = f"prop_{proposal_num:03d}"
 
         target_nickname = target_user.nickname or target_principal[:8]
+
+        code_inline = (
+            f'from ggg import User, UserProfile\n'
+            f'\n'
+            f'target = User["{target_principal}"]\n'
+            f'profile = UserProfile["{profile_name}"]\n'
+            f'if not target:\n'
+            f'    raise ValueError("User {target_principal} not found")\n'
+            f'if not profile:\n'
+            f'    raise ValueError("Profile {profile_name} not found")\n'
+            f'current = [p.name for p in target.profiles]\n'
+            f'if "{profile_name}" in current:\n'
+            f'    logger.info("Profile already assigned, skipping")\n'
+            f'else:\n'
+            f'    target.profiles.add(profile)\n'
+            f'    logger.info(f"Governance: assigned \'{profile_name}\' to {{target.id}}")\n'
+        )
+
         metadata = json.dumps({
             "proposal_type": "role_assignment",
             "requested_permissions": [Operations.ROLE_ASSIGN],
             "target_principal": target_principal,
             "profile_name": profile_name,
+            "code_inline": code_inline,
+            "codex_name": f"role_assign_{proposal_id}",
         })
 
         proposal = Proposal(
