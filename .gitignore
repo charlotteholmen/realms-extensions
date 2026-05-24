@@ -27,7 +27,6 @@ test-results/
 *.wasm
 .dfx/
 dist/
-!**/frontend-rt/dist/
 build/
 
 # IDE
