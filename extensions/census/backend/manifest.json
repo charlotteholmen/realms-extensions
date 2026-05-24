@@ -1,0 +1,7 @@
+{
+  "name": "census",
+  "version": "1.0.0",
+  "description": "Backend services for census and invitation management",
+  "entry_point": "entry.py",
+  "dependencies": []
+}

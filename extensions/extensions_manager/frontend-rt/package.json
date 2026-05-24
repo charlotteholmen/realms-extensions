@@ -1,6 +1,6 @@
 {
-  "name": "admin_dashboard-frontend-rt",
-  "version": "0.1.0",
+  "name": "extensions_manager-frontend-rt",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {

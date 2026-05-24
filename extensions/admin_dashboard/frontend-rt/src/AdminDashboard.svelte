@@ -1,12 +1,9 @@
 <script lang="ts">
-	import InvitationManager from './InvitationManager.svelte';
-	import ProposalModal from './ProposalModal.svelte';
-
 	let { ctx }: { ctx: any } = $props();
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
 
-	type TabId = 'browse' | 'export' | 'import' | 'invitations' | 'settings';
+	type TabId = 'browse' | 'export' | 'import';
 
 	interface EntityType {
 		value: string;
@@ -76,16 +73,6 @@
 	let fileInput: HTMLInputElement | undefined = $state();
 	let dragOver = $state(false);
 
-	// Packages widget
-	let pkgInstalledCount: number | null = $state(null);
-	let pkgUpdateCount = $state(0);
-	let pkgWidgetLoading = $state(true);
-	let pkgWidgetError = $state('');
-
-	// Extensions / codex counts for sidebar
-	let extensionCount = $state(0);
-	let codexCount = $state(0);
-
 	function addToast(message: string, type: 'success' | 'error' = 'success') {
 		const id = ++toastCounter;
 		toasts = [...toasts, { id, text: message, type }];
@@ -141,79 +128,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	async function loadPackagesWidget() {
-		pkgWidgetLoading = true;
-		pkgWidgetError = '';
-		try {
-			const [extRaw, codexRaw, statusResp] = await Promise.all([
-				ctx.backend.list_runtime_extensions().catch(() => '{}'),
-				ctx.backend.list_codex_packages().catch(() => '{}'),
-				ctx.backend.status().catch(() => null),
-			]);
-
-			const extParsed = typeof extRaw === 'string' ? JSON.parse(extRaw) : extRaw;
-			const codexParsed = typeof codexRaw === 'string' ? JSON.parse(codexRaw) : codexRaw;
-			const installedExt = extParsed?.success ? (extParsed.runtime_extensions ?? []) : [];
-			const installedCodex = codexParsed?.success ? (codexParsed.codex_packages ?? []) : [];
-			const extManifests = extParsed?.success ? (extParsed.all_manifests ?? {}) : {};
-			const codexManifests = codexParsed?.success ? (codexParsed.manifests ?? {}) : {};
-			extensionCount = Object.keys(extManifests).length || installedExt.length;
-			codexCount = Array.isArray(installedCodex) ? installedCodex.length : Object.keys(codexManifests).length;
-			pkgInstalledCount = extensionCount + codexCount;
-
-			const registries = (statusResp?.success && statusResp?.data?.status?.registries) || [];
-			let updates = 0;
-			for (const reg of registries) {
-				try {
-					const base = registryBaseUrl(reg.canister_id);
-					if (!base) continue;
-					const [extResp, codexResp] = await Promise.all([
-						fetch(`${base}/api/extensions`, { headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : []).catch(() => []),
-						fetch(`${base}/api/codices`, { headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : []).catch(() => []),
-					]);
-					for (const e of extResp) {
-						if (!installedExt.includes(e.ext_id)) continue;
-						const installedVersion = extManifests?.[e.ext_id]?.version;
-						if (installedVersion && e.latest && versionGreater(e.latest, installedVersion)) updates++;
-					}
-					for (const c of codexResp) {
-						if (!installedCodex.includes(c.codex_id)) continue;
-						const installedVersion = codexManifests?.[c.codex_id]?.version;
-						if (installedVersion && c.latest && versionGreater(c.latest, installedVersion)) updates++;
-					}
-				} catch { /* unreachable registry */ }
-			}
-			pkgUpdateCount = updates;
-		} catch (e: any) {
-			pkgWidgetError = e?.message ?? String(e);
-		} finally {
-			pkgWidgetLoading = false;
-		}
-	}
-
-	function registryBaseUrl(canisterId: string): string | null {
-		if (typeof window === 'undefined') return null;
-		const host = window.location.host;
-		const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
-		if (isLocal) {
-			const port = host.split(':')[1] ?? '4943';
-			return `http://${canisterId}.localhost:${port}`;
-		}
-		return `https://${canisterId}.icp0.io`;
-	}
-
-	function versionGreater(a: string, b: string): boolean {
-		const pa = (a || '').split('-', 1)[0].split('.').map(n => parseInt(n, 10) || 0);
-		const pb = (b || '').split('-', 1)[0].split('.').map(n => parseInt(n, 10) || 0);
-		const len = Math.max(pa.length, pb.length);
-		for (let i = 0; i < len; i++) {
-			const x = pa[i] ?? 0;
-			const y = pb[i] ?? 0;
-			if (x !== y) return x > y;
-		}
-		return false;
 	}
 
 	// ── Browse ──
@@ -441,130 +355,14 @@
 		if (fileInput) fileInput.value = '';
 	}
 
-	// Realm Settings
-	let settingsLoading = $state(true);
-	let settingsSaving = $state(false);
-	let settingsMessage = $state('');
-	let settingsError = $state('');
-	let realmSettingsName = $state('');
-	let realmSettingsDescription = $state('');
-	let realmSettingsWelcome = $state('');
-	let realmSettingsLogoUrl = $state('');
-	let realmSettingsBackgroundUrl = $state('');
-	let realmSettingsOpenRegistration = $state(false);
-	let realmSettingsFileRegistryId = $state('');
-	let realmSettingsMarketplaceId = $state('');
-
-	// Proposal modal (for access-denied → governance proposal flow)
-	let proposalModalOpen = $state(false);
-	let proposalModalTitle = $state('');
-	let proposalModalDescription = $state('');
-	let proposalModalCode = $state('');
-	let proposalModalOperation = $state('');
-
-	function buildRealmConfigCode(): string {
-		const lines = ['from ggg import Realm', '', 'realm = Realm.load("1")'];
-		if (realmSettingsName) lines.push(`realm.name = ${JSON.stringify(realmSettingsName)}`);
-		if (realmSettingsDescription) lines.push(`realm.description = ${JSON.stringify(realmSettingsDescription)}`);
-		lines.push(`realm.welcome_message = ${JSON.stringify(realmSettingsWelcome)}`);
-		if (realmSettingsLogoUrl) lines.push(`realm.logo_url = ${JSON.stringify(realmSettingsLogoUrl)}`);
-		if (realmSettingsBackgroundUrl) lines.push(`realm.background_image_url = ${JSON.stringify(realmSettingsBackgroundUrl)}`);
-		lines.push(`realm.open_registration = ${realmSettingsOpenRegistration ? 'True' : 'False'}`);
-		if (realmSettingsFileRegistryId) lines.push(`realm.file_registry_canister_id = ${JSON.stringify(realmSettingsFileRegistryId)}`);
-		if (realmSettingsMarketplaceId) lines.push(`realm.marketplace_canister_id = ${JSON.stringify(realmSettingsMarketplaceId)}`);
-		return lines.join('\n');
-	}
-
-	function openProposalForSettings(deniedOp: string) {
-		proposalModalTitle = 'Update realm settings';
-		proposalModalDescription = 'This proposal updates the realm configuration (name, description, welcome message, branding, and registration settings) as specified in the code below.';
-		proposalModalCode = buildRealmConfigCode();
-		proposalModalOperation = deniedOp;
-		proposalModalOpen = true;
-	}
-
-	async function loadRealmSettings() {
-		settingsLoading = true;
-		settingsError = '';
-		try {
-			const resp = await ctx.backend.status();
-			if (resp?.success && resp?.data?.status) {
-				const s = resp.data.status;
-				realmSettingsName = s.realm_name || '';
-				realmSettingsDescription = s.realm_description || '';
-				realmSettingsWelcome = s.realm_welcome_message || '';
-				realmSettingsLogoUrl = s.logo_url || '';
-				realmSettingsBackgroundUrl = s.background_image_url || '';
-				realmSettingsOpenRegistration = !!s.open_registration;
-				realmSettingsFileRegistryId = s.file_registry_canister_id || '';
-				realmSettingsMarketplaceId = s.marketplace_canister_id || '';
-			}
-		} catch (e: any) {
-			settingsError = e?.message || String(e);
-		} finally {
-			settingsLoading = false;
-		}
-	}
-
-	async function saveRealmSettings() {
-		settingsSaving = true;
-		settingsMessage = '';
-		settingsError = '';
-		try {
-			const config: Record<string, unknown> = {
-				name: realmSettingsName,
-				description: realmSettingsDescription,
-				welcome_message: realmSettingsWelcome,
-				logo_url: realmSettingsLogoUrl,
-				background_image_url: realmSettingsBackgroundUrl,
-				open_registration: realmSettingsOpenRegistration,
-				file_registry_canister_id: realmSettingsFileRegistryId,
-				marketplace_canister_id: realmSettingsMarketplaceId,
-			};
-			const raw = await ctx.backend.update_realm_config(JSON.stringify(config));
-			const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
-			if (result?.success) {
-				settingsMessage = 'Realm settings saved successfully.';
-				addToast('Realm settings updated');
-			} else if (result?.denied_operation) {
-				openProposalForSettings(result.denied_operation);
-			} else {
-				settingsError = result?.error || 'Failed to save settings';
-			}
-		} catch (e: any) {
-			const msg = e?.message || String(e);
-			if (msg.includes('Access denied') && msg.includes("lacks permission")) {
-				const match = msg.match(/lacks permission '([^']+)'/);
-				openProposalForSettings(match?.[1] || 'realm.configure');
-			} else {
-				settingsError = msg;
-			}
-		} finally {
-			settingsSaving = false;
-		}
-	}
-
-	function isValidCanisterId(value: string): boolean {
-		if (!value) return true;
-		return /^[a-z0-9]{5}(-[a-z0-9]{5})*-cai$/.test(value);
-	}
-
-	let fileRegistryIdValid = $derived(isValidCanisterId(realmSettingsFileRegistryId));
-	let marketplaceIdValid = $derived(isValidCanisterId(realmSettingsMarketplaceId));
-	let infraValid = $derived(fileRegistryIdValid && marketplaceIdValid);
-
 	$effect(() => {
 		loadEntityTypes();
-		loadPackagesWidget();
-		loadRealmSettings();
 	});
 
 	const TABS: { id: TabId; label: string }[] = [
 		{ id: 'browse', label: 'Browse' },
 		{ id: 'export', label: 'Export' },
 		{ id: 'import', label: 'Import' },
-		{ id: 'invitations', label: 'Invitations' },
-		{ id: 'settings', label: 'Realm Settings' },
 	];
 
 	let exportJson = $derived(exportResult ? JSON.stringify(exportResult, null, 2) : '');
@@ -615,10 +413,10 @@
 	<div class="flex justify-between items-center mb-6">
 		<div>
 			<h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-			<p class="text-gray-600 mt-1">Manage realm entities</p>
+			<p class="text-gray-600 mt-1">Browse, export, and import realm entities</p>
 		</div>
 		<button
-			onclick={() => { loadEntityTypes(); loadPackagesWidget(); }}
+			onclick={() => loadEntityTypes()}
 			disabled={loading}
 			class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
 			title="Refresh"
@@ -633,59 +431,6 @@
 		<div class="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
 			{error}
 			<button onclick={() => error = ''} class="ml-2 text-red-600 hover:text-red-800 font-bold">&times;</button>
-		</div>
-	{/if}
-
-	<!-- Packages widget -->
-	<button
-		onclick={() => ctx.navigate?.('/extensions/package_manager')}
-		class="block w-full mb-4 bg-white shadow-sm rounded-lg p-4 border border-gray-200 hover:border-blue-400 hover:shadow transition-all text-left cursor-pointer"
-	>
-		<div class="flex items-center justify-between gap-4">
-			<div class="flex items-center gap-3">
-				<div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xl">📦</div>
-				<div>
-					<div class="text-sm font-medium text-gray-700">Packages</div>
-					{#if pkgWidgetLoading}
-						<div class="text-xs text-gray-400">Loading…</div>
-					{:else if pkgWidgetError}
-						<div class="text-xs text-red-500">{pkgWidgetError}</div>
-					{:else}
-						<div class="text-xs text-gray-500">
-							{pkgInstalledCount ?? 0} installed
-							{#if pkgUpdateCount > 0}
-								<span class="mx-1">·</span>
-								<span class="text-yellow-600 font-medium">{pkgUpdateCount} update{pkgUpdateCount === 1 ? '' : 's'} available</span>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			</div>
-			<span class="text-blue-600 text-sm font-medium">Manage →</span>
-		</div>
-	</button>
-
-	<!-- Overview stats -->
-	{#if !loading}
-		<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Entity Types</div>
-				<div class="text-2xl font-bold text-gray-900 mt-1">{entityTypes.length}</div>
-			</div>
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Extensions</div>
-				<div class="text-2xl font-bold text-gray-900 mt-1">{extensionCount}</div>
-			</div>
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Codexes</div>
-				<div class="text-2xl font-bold text-gray-900 mt-1">{codexCount}</div>
-			</div>
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Updates</div>
-				<div class={cn('text-2xl font-bold mt-1', pkgUpdateCount > 0 ? 'text-yellow-600' : 'text-gray-900')}>
-					{pkgWidgetLoading ? '…' : pkgUpdateCount}
-				</div>
-			</div>
 		</div>
 	{/if}
 
@@ -910,9 +655,6 @@
 		</div>
 
 	<!-- ==================== IMPORT TAB ==================== -->
-	{:else if activeTab === 'invitations'}
-		<InvitationManager {ctx} />
-
 	{:else if activeTab === 'import'}
 		<div class="bg-white shadow-sm rounded-lg p-6">
 			<h2 class="text-lg font-semibold text-gray-900 mb-4">Import Entities</h2>
@@ -1065,141 +807,5 @@
 				</div>
 			{/if}
 		</div>
-
-	<!-- ==================== REALM SETTINGS TAB ==================== -->
-	{:else if activeTab === 'settings'}
-		<div class="bg-white shadow-sm rounded-lg p-6">
-			<h2 class="text-lg font-semibold text-gray-900 mb-1">Realm Settings</h2>
-			<p class="text-gray-600 text-sm mb-6">Configure your realm's name, description, branding, and registration settings.</p>
-
-			{#if settingsLoading}
-				<div class="flex items-center justify-center py-10">
-					<div class="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-				</div>
-			{:else}
-				<div class="space-y-5">
-					<div>
-						<label for="rs-name" class="block text-sm font-medium text-gray-700 mb-1">Realm Name</label>
-						<input id="rs-name" type="text" bind:value={realmSettingsName}
-							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-					</div>
-
-					<div>
-						<label for="rs-desc" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-						<textarea id="rs-desc" bind:value={realmSettingsDescription} rows="2"
-							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"></textarea>
-					</div>
-
-					<div>
-						<label for="rs-welcome" class="block text-sm font-medium text-gray-700 mb-1">Welcome Message</label>
-						<textarea id="rs-welcome" bind:value={realmSettingsWelcome} rows="3"
-							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"></textarea>
-					</div>
-
-					<div>
-						<label for="rs-logo" class="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
-						<input id="rs-logo" type="url" bind:value={realmSettingsLogoUrl} placeholder="https://example.com/logo.png"
-							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-						{#if realmSettingsLogoUrl}
-							<div class="mt-2 flex items-center gap-3">
-								<img src={realmSettingsLogoUrl} alt="Logo preview" class="h-12 w-12 object-contain rounded border border-gray-200 bg-gray-50" />
-								<span class="text-xs text-gray-500">Preview</span>
-							</div>
-						{/if}
-					</div>
-
-					<div>
-						<label for="rs-bg" class="block text-sm font-medium text-gray-700 mb-1">Background Image URL</label>
-						<input id="rs-bg" type="url" bind:value={realmSettingsBackgroundUrl} placeholder="https://example.com/background.png"
-							class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-						{#if realmSettingsBackgroundUrl}
-							<div class="mt-2">
-								<img src={realmSettingsBackgroundUrl} alt="Background preview" class="h-24 w-full object-cover rounded border border-gray-200" />
-								<span class="text-xs text-gray-500">Preview</span>
-							</div>
-						{/if}
-					</div>
-
-					<div class="flex items-center gap-3">
-						<label for="rs-open-reg" class="relative inline-flex items-center cursor-pointer">
-							<input id="rs-open-reg" type="checkbox" bind:checked={realmSettingsOpenRegistration} class="sr-only peer" />
-							<div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-focus:ring-2 peer-focus:ring-blue-300 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-						</label>
-						<div>
-							<span class="text-sm font-medium text-gray-700">Open Registration</span>
-							<p class="text-xs text-gray-500">When enabled, anyone can join without an invite code.</p>
-						</div>
-					</div>
-
-					<!-- Infrastructure: Registry & Marketplace -->
-					<div class="border-t border-gray-200 pt-5 mt-2">
-						<h3 class="text-base font-semibold text-gray-900 mb-1">Registry & Marketplace</h3>
-						<p class="text-xs text-gray-500 mb-4">
-							Configure where this realm downloads and purchases extensions, codices, and assistants.
-							Changing these requires the <code class="bg-gray-100 px-1 rounded">realm.configure.infrastructure</code> permission.
-						</p>
-
-						<div class="space-y-4">
-							<div>
-								<label for="rs-file-registry" class="block text-sm font-medium text-gray-700 mb-1">File Registry Canister ID</label>
-								<input id="rs-file-registry" type="text" bind:value={realmSettingsFileRegistryId}
-									placeholder="e.g. uq2mu-kaaaa-aaaah-avqcq-cai"
-									class={cn(
-										'w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:border-blue-500',
-										realmSettingsFileRegistryId && !fileRegistryIdValid
-											? 'border-red-300 focus:ring-red-300'
-											: 'border-gray-300 focus:ring-blue-500'
-									)} />
-								{#if realmSettingsFileRegistryId && !fileRegistryIdValid}
-									<p class="mt-1 text-xs text-red-600">Invalid canister ID format. Expected format: xxxxx-xxxxx-...-cai</p>
-								{/if}
-								<p class="mt-1 text-xs text-gray-500">The canister that stores extension, codex, and assistant artifact files.</p>
-							</div>
-
-							<div>
-								<label for="rs-marketplace" class="block text-sm font-medium text-gray-700 mb-1">Marketplace Canister ID</label>
-								<input id="rs-marketplace" type="text" bind:value={realmSettingsMarketplaceId}
-									placeholder="e.g. u4hsn-kaaaa-aaaah-avqda-cai"
-									class={cn(
-										'w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:border-blue-500',
-										realmSettingsMarketplaceId && !marketplaceIdValid
-											? 'border-red-300 focus:ring-red-300'
-											: 'border-gray-300 focus:ring-blue-500'
-									)} />
-								{#if realmSettingsMarketplaceId && !marketplaceIdValid}
-									<p class="mt-1 text-xs text-red-600">Invalid canister ID format. Expected format: xxxxx-xxxxx-...-cai</p>
-								{/if}
-								<p class="mt-1 text-xs text-gray-500">The canister that hosts the marketplace for discovering and purchasing packages.</p>
-							</div>
-						</div>
-					</div>
-
-					{#if settingsMessage}
-						<div class="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">{settingsMessage}</div>
-					{/if}
-					{#if settingsError}
-						<div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{settingsError}</div>
-					{/if}
-
-					<div class="pt-2">
-						<button
-							onclick={saveRealmSettings}
-							disabled={settingsSaving || !infraValid}
-							class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
-						>{settingsSaving ? 'Saving…' : 'Save Settings'}</button>
-					</div>
-				</div>
-			{/if}
-		</div>
 	{/if}
 </div>
-
-<ProposalModal
-	{ctx}
-	open={proposalModalOpen}
-	title={proposalModalTitle}
-	description={proposalModalDescription}
-	codeInline={proposalModalCode}
-	deniedOperation={proposalModalOperation}
-	onclose={() => proposalModalOpen = false}
-/>

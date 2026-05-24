@@ -1,13 +1,11 @@
 """
 Admin Dashboard Backend Extension Entry Point
 
-Provides a web UI for administrative operations: entity export/import,
-registration code management, and data exploration.
+Provides a web UI for administrative operations: entity browsing,
+export/import, and data exploration.
 
-Note: The Basilisk shell provides equivalent CLI access to entity
-export/import via ``%db`` commands (types, list, show, search,
-export, import, delete). This extension is a user-friendly wrapper
-for the same underlying ic_python_db primitives.
+Note: Invitation management has moved to the `census` extension.
+Realm settings have moved to the `realm_settings` extension.
 """
 
 import base64
@@ -19,15 +17,6 @@ from typing import Any, Dict, List
 
 from ic_python_db import Database, Entity
 from ic_python_logging import get_logger
-
-from ggg.system.registration_code import (
-    RegistrationCode,
-    consume_registration_code as _consume,
-    create_registration_code as _create,
-    list_registration_codes as _list_codes,
-    revoke_registration_code as _revoke,
-    validate_registration_code as _validate,
-)
 
 logger = get_logger("extensions.admin_dashboard")
 
@@ -50,19 +39,12 @@ def get_entity_types(args=None):
 
 
 def extension_sync_call(method_name: str, args: dict):
-    """
-    Synchronous extension API calls for admin operations
-    """
+    """Synchronous extension API calls for admin operations."""
     methods = {
         "import_data": (import_data, True),
         "export_data": (export_data, True),
         "delete_entity": (delete_entity, True),
-        "generate_registration_url": (generate_registration_url, True),
-        "validate_registration_code": (validate_registration_code, True),
-        "get_registration_codes": (get_registration_codes, True),
         "get_entity_types": (get_entity_types, False),
-        "consume_registration_code": (consume_registration_code, True),
-        "revoke_registration_code": (revoke_registration_code, True),
     }
 
     if method_name not in methods:
@@ -269,149 +251,4 @@ def delete_entity(args):
         }
     except Exception as e:
         logger.error(f"Error deleting entity: {e}\n{traceback.format_exc()}")
-        return {"success": False, "error": str(e)}
-
-
-def generate_registration_url(args: dict):
-    """Generate a registration URL for a user.
-
-    Delegates to ggg.system.registration_code; kept for extension API compat.
-    """
-    try:
-        if isinstance(args, str):
-            args = json.loads(args)
-
-        user_id = args.get("user_id")
-        if not user_id:
-            return {"success": False, "error": "user_id is required"}
-
-        from datetime import datetime
-
-        reg_code = _create(
-            code_hash=args.get("code_hash", ""),
-            profile=args.get("profile", "member"),
-            max_uses=args.get("max_uses", 1),
-            expires_in_hours=args.get("expires_in_hours", 24),
-            created_by=args.get("created_by", "admin"),
-            user_id=user_id,
-            frontend_url=args.get("frontend_url", "https://localhost:3000"),
-            email=args.get("email", ""),
-        )
-
-        code_hash = args.get("code_hash")
-        if code_hash:
-            return {
-                "success": True,
-                "data": {
-                    "code_hash": code_hash[:8],
-                    "expires_at": datetime.fromtimestamp(reg_code.expires_at).isoformat(),
-                    "profile": args.get("profile", "member"),
-                },
-            }
-
-        return {
-            "success": True,
-            "data": {
-                "code": reg_code.code,
-                "code_hash": reg_code.code_hash,
-                "registration_url": reg_code.registration_url,
-                "expires_at": datetime.fromtimestamp(reg_code.expires_at).isoformat(),
-                "user_id": reg_code.user_id,
-                "profile": args.get("profile", "member"),
-            },
-        }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def validate_registration_code(args: dict):
-    """Validate a registration code. Delegates to ggg.
-
-    Accepts plaintext ``code`` or pre-hashed ``code_hash``.  When plaintext
-    is provided it is SHA-256 hashed before calling the core function.
-    """
-    try:
-        if isinstance(args, str):
-            args = json.loads(args)
-
-        code_hash = args.get("code_hash", "")
-        if not code_hash:
-            import hashlib
-            plaintext = args.get("code", "")
-            if not plaintext:
-                return {"success": False, "error": "code or code_hash is required"}
-            code_hash = hashlib.sha256(plaintext.encode()).hexdigest()
-
-        return _validate(code_hash)
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def consume_registration_code(args: dict):
-    """Consume a registration code. Delegates to ggg.
-
-    Accepts plaintext ``code`` or pre-hashed ``code_hash``.
-    """
-    try:
-        if isinstance(args, str):
-            args = json.loads(args)
-
-        code_hash = args.get("code_hash", "")
-        if not code_hash:
-            import hashlib
-            plaintext = args.get("code", "")
-            if not plaintext:
-                return {"success": False, "error": "code or code_hash is required"}
-            code_hash = hashlib.sha256(plaintext.encode()).hexdigest()
-
-        return _consume(code_hash, args.get("principal", ""))
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def revoke_registration_code(args: dict):
-    """Revoke a registration code. Delegates to ggg."""
-    try:
-        if isinstance(args, str):
-            args = json.loads(args)
-        return _revoke(code=args.get("code"), code_hash=args.get("code_hash"))
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def get_registration_codes(args: dict):
-    """List registration codes. Delegates to ggg."""
-    try:
-        if isinstance(args, str):
-            args = json.loads(args)
-
-        user_id = args.get("user_id")
-        include_used = args.get("include_used", False)
-
-        if user_id:
-            from datetime import datetime
-            codes = RegistrationCode.find_by_user_id(user_id)
-            if not include_used:
-                codes = [c for c in codes if c.used == 0]
-            return {
-                "success": True,
-                "data": [
-                    {
-                        "code_hash": c.code_hash[:8],
-                        "user_id": c.user_id,
-                        "email": c.email,
-                        "profile": c.profile,
-                        "expires_at": datetime.fromtimestamp(c.expires_at).isoformat(),
-                        "uses_count": c.uses_count,
-                        "max_uses": c.max_uses,
-                        "revoked": c.revoked == 1,
-                        "is_valid": c.is_valid(),
-                        "created_by": c.created_by,
-                    }
-                    for c in codes
-                ],
-            }
-
-        return {"success": True, "data": _list_codes(include_used=include_used)}
-    except Exception as e:
         return {"success": False, "error": str(e)}

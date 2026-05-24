@@ -1,0 +1,7 @@
+{
+  "name": "extensions_manager",
+  "version": "1.0.0",
+  "description": "Backend services for extensions overview",
+  "entry_point": "entry.py",
+  "dependencies": []
+}
