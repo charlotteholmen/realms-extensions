@@ -172,8 +172,8 @@
 					{#each Object.entries(extensionManifests) as [id, manifest]}
 						<div class="px-6 py-3 flex items-center justify-between">
 							<div class="flex items-center gap-3 min-w-0">
-								<div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-sm shrink-0">
-									{manifest.icon ? `ti-${manifest.icon}` : '📦'}
+								<div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-sm font-bold shrink-0">
+									{(manifest.name || id).charAt(0).toUpperCase()}
 								</div>
 								<div class="min-w-0">
 									<div class="text-sm font-medium text-gray-900 truncate">{manifest.name || id}</div>
