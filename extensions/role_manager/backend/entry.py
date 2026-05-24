@@ -313,7 +313,10 @@ def revoke_profile(args) -> str:
 
 
 def grant_permission(args) -> str:
-    """Attach a fine-grained Permission entity to a user."""
+    """Attach a fine-grained Permission entity to a user.
+
+    Enforces that the caller holds the permission they are granting.
+    """
     try:
         args_dict = _parse_args(args)
         caller = _get_caller_user()
@@ -323,6 +326,9 @@ def grant_permission(args) -> str:
         permission_name = args_dict.get("permission_name")
         if not target_principal or not permission_name:
             return json.dumps({"success": False, "error": "target_principal and permission_name are required"})
+
+        if not _is_allowed(caller, Operations.ALL) and not _is_allowed(caller, permission_name):
+            return json.dumps({"success": False, "error": f"Cannot grant '{permission_name}' — you don't hold this permission"})
 
         target_user = User[target_principal]
         if not target_user:
@@ -591,11 +597,15 @@ OPERATIONS_CATALOG = {
 
 
 def get_all_operations(args) -> str:
-    """Return the full catalog of operations with descriptions and categories."""
+    """Return the full catalog of operations with descriptions and categories,
+    plus the caller's own effective operations for UI permission gating."""
     try:
         _parse_args(args)
         caller = _get_caller_user()
         _require_operation(caller, Operations.PERMISSION_VIEW)
+
+        caller_ops = _get_user_effective_operations(caller)
+        caller_has_all = Operations.ALL in caller_ops
 
         operations = []
         for op_name, meta in OPERATIONS_CATALOG.items():
@@ -603,9 +613,20 @@ def get_all_operations(args) -> str:
                 "name": op_name,
                 "category": meta["category"],
                 "description": meta["description"],
+                "caller_can_grant": caller_has_all or op_name in caller_ops,
             })
 
-        return json.dumps({"success": True, "data": {"operations": operations}})
+        return json.dumps({
+            "success": True,
+            "data": {
+                "operations": operations,
+                "caller_operations": caller_ops,
+                "caller_can_assign_roles": caller_has_all or Operations.ROLE_ASSIGN in caller_ops,
+                "caller_can_revoke_roles": caller_has_all or Operations.ROLE_REVOKE in caller_ops,
+                "caller_can_grant_permissions": caller_has_all or Operations.PERMISSION_GRANT in caller_ops,
+                "caller_can_revoke_permissions": caller_has_all or Operations.PERMISSION_REVOKE in caller_ops,
+            },
+        })
     except PermissionError as e:
         return json.dumps({"success": False, "error": str(e)})
     except Exception as e:
@@ -614,7 +635,11 @@ def get_all_operations(args) -> str:
 
 
 def batch_grant_permissions(args) -> str:
-    """Grant multiple permissions to a user at once."""
+    """Grant multiple permissions to a user at once.
+
+    Enforces that the caller can only grant permissions they themselves hold
+    (or all permissions if they have the 'all' operation).
+    """
     try:
         args_dict = _parse_args(args)
         caller = _get_caller_user()
@@ -628,6 +653,16 @@ def batch_grant_permissions(args) -> str:
         target_user = User[target_principal]
         if not target_user:
             return json.dumps({"success": False, "error": f"User {target_principal} not found"})
+
+        caller_ops = set(_get_user_effective_operations(caller))
+        caller_has_all = Operations.ALL in caller_ops
+        if not caller_has_all:
+            forbidden = [p for p in permission_names if p not in caller_ops]
+            if forbidden:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Cannot grant permissions you don't hold: {', '.join(forbidden)}",
+                })
 
         existing = set()
         try:
@@ -733,7 +768,7 @@ EXTENSION_FUNCTIONS = {
     "grant_permission": grant_permission,
     "revoke_permission": revoke_permission,
     "propose_role_assignment": propose_role_assignment,
-    "get_all_operations": get_all_operations,
+    "get_all_operations": get_all_operations,  # also returns caller capabilities
     "batch_grant_permissions": batch_grant_permissions,
     "batch_revoke_permissions": batch_revoke_permissions,
 }

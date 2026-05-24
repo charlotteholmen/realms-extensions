@@ -45,6 +45,13 @@
 	let pendingGrants: Set<string> = $state(new Set());
 	let pendingRevokes: Set<string> = $state(new Set());
 
+	let callerCanAssign = $state(false);
+	let callerCanRevoke = $state(false);
+	let callerCanGrantPerms = $state(false);
+	let callerCanRevokePerms = $state(false);
+	let callerGrantableOps: Set<string> = $state(new Set());
+	let showHelp = $state(false);
+
 	let filteredUsers = $derived(
 		searchQuery.trim()
 			? users.filter(
@@ -115,6 +122,15 @@
 			const res = await callSync('get_all_operations');
 			if (res?.success) {
 				allOperations = res.data?.operations ?? [];
+				callerCanAssign = res.data?.caller_can_assign_roles ?? false;
+				callerCanRevoke = res.data?.caller_can_revoke_roles ?? false;
+				callerCanGrantPerms = res.data?.caller_can_grant_permissions ?? false;
+				callerCanRevokePerms = res.data?.caller_can_revoke_permissions ?? false;
+				callerGrantableOps = new Set(
+					(res.data?.operations ?? [])
+						.filter((op: any) => op.caller_can_grant)
+						.map((op: any) => op.name)
+				);
 			}
 		} catch (e: any) {
 			console.error('Failed to load operations:', e);
@@ -195,7 +211,16 @@
 		}
 	}
 
+	function canToggle(opName: string): boolean {
+		const fromProfile = !userDirectPerms.includes(opName) && userPermissions.includes(opName);
+		if (fromProfile) return false;
+		const isCurrentlyGranted = userDirectPerms.includes(opName);
+		if (isCurrentlyGranted) return callerCanRevokePerms;
+		return callerCanGrantPerms && callerGrantableOps.has(opName);
+	}
+
 	function togglePermission(opName: string) {
+		if (!canToggle(opName)) return;
 		const isCurrentlyGranted = userDirectPerms.includes(opName);
 
 		if (isCurrentlyGranted) {
@@ -277,6 +302,26 @@
 		pendingRevokes = new Set();
 	}
 
+	async function handleRevokePermission(permissionName: string) {
+		if (!selectedUser) return;
+		error = '';
+		successMsg = '';
+		try {
+			const res = await callSync('revoke_permission', {
+				target_principal: selectedUser.principal,
+				permission_name: permissionName,
+			});
+			if (res?.success) {
+				successMsg = res.data?.message || 'Permission revoked';
+				await viewUser({ ...selectedUser!, profiles: selectedUser!.profiles });
+			} else {
+				error = res?.error || 'Failed to revoke permission';
+			}
+		} catch (e: any) {
+			error = e?.message || String(e);
+		}
+	}
+
 	async function handlePropose() {
 		if (!selectedUser || !assignProfileName) return;
 		assignLoading = true;
@@ -334,9 +379,36 @@
 <div class="w-full px-6 pt-8 max-w-none">
 	<!-- Header -->
 	<div class="mb-6">
-		<h1 class="text-3xl font-bold text-gray-900 mb-1">Role Manager</h1>
+		<div class="flex items-center gap-2">
+			<h1 class="text-3xl font-bold text-gray-900 mb-1">Role Manager</h1>
+			<button
+				onclick={() => showHelp = !showHelp}
+				class="mt-0.5 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+				title="How permissions work"
+			>
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+			</button>
+		</div>
 		<p class="text-gray-500 text-sm">Assign and manage user roles and permissions.</p>
 	</div>
+
+	{#if showHelp}
+		<div class="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+			<div class="flex items-start justify-between">
+				<div>
+					<h3 class="font-semibold mb-2">How permissions work</h3>
+					<ul class="space-y-1.5 text-blue-700">
+						<li><strong>Assign Role</strong> requires the <code class="bg-blue-100 px-1 rounded">role.assign</code> permission. Use <em>Propose</em> if you lack it.</li>
+						<li><strong>Revoke Role</strong> requires <code class="bg-blue-100 px-1 rounded">role.revoke</code>.</li>
+						<li><strong>Manage Permissions</strong> requires <code class="bg-blue-100 px-1 rounded">permission.grant</code> to grant and <code class="bg-blue-100 px-1 rounded">permission.revoke</code> to revoke.</li>
+						<li><strong>You can only grant permissions you hold yourself.</strong> Permissions you don't hold are shown but cannot be toggled.</li>
+						<li>Permissions inherited <em>via a profile</em> cannot be individually revoked — remove the profile instead.</li>
+					</ul>
+				</div>
+				<button onclick={() => showHelp = false} class="text-blue-400 hover:text-blue-600 ml-3 flex-shrink-0">&times;</button>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Banners -->
 	{#if error}
@@ -378,8 +450,10 @@
 							Assign Role
 						</button>
 						<button
-							onclick={() => { view = 'permission'; permFilter = ''; pendingGrants = new Set(); pendingRevokes = new Set(); }}
-							class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
+							onclick={() => { if (callerCanGrantPerms || callerCanRevokePerms) { view = 'permission'; permFilter = ''; pendingGrants = new Set(); pendingRevokes = new Set(); } }}
+							disabled={!callerCanGrantPerms && !callerCanRevokePerms}
+							class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+							title={!callerCanGrantPerms && !callerCanRevokePerms ? 'Requires permission.grant or permission.revoke' : 'Manage fine-grained permissions'}
 						>
 							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
 							Manage Permissions
@@ -396,13 +470,15 @@
 						{#each selectedUser.profiles as profile}
 							<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold {profileColor(profile)}">
 								{profile}
-								<button
-									onclick={() => handleRevoke(profile)}
-									class="ml-0.5 opacity-60 hover:opacity-100"
-									title="Revoke profile"
-								>
-									<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-								</button>
+								{#if callerCanRevoke}
+									<button
+										onclick={() => handleRevoke(profile)}
+										class="ml-0.5 opacity-60 hover:opacity-100"
+										title="Revoke profile"
+									>
+										<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+									</button>
+								{/if}
 							</span>
 						{/each}
 					</div>
@@ -415,13 +491,15 @@
 						{#each userDirectPerms as perm}
 							<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
 								{perm}
-								<button
-									onclick={() => handleRevokePermission(perm)}
-									class="ml-0.5 opacity-60 hover:opacity-100"
-									title="Revoke permission"
-								>
-									<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-								</button>
+								{#if callerCanRevokePerms}
+									<button
+										onclick={() => handleRevokePermission(perm)}
+										class="ml-0.5 opacity-60 hover:opacity-100"
+										title="Revoke permission"
+									>
+										<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+									</button>
+								{/if}
 							</span>
 						{/each}
 					</div>
@@ -485,16 +563,23 @@
 			{/if}
 
 			<div class="flex gap-3">
-				<button
-					onclick={handleAssign}
-					disabled={assignLoading || !assignProfileName}
-					class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-				>
-					{#if assignLoading}
-						<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+				<div class="relative group">
+					<button
+						onclick={handleAssign}
+						disabled={assignLoading || !assignProfileName || !callerCanAssign}
+						class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+					>
+						{#if assignLoading}
+							<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+						{/if}
+						Assign Directly
+					</button>
+					{#if !callerCanAssign}
+						<div class="absolute bottom-full left-0 mb-1.5 w-56 px-3 py-2 text-xs bg-gray-800 text-white rounded-lg shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
+							You need the <strong>role.assign</strong> permission. Use "Propose" to request via governance vote instead.
+						</div>
 					{/if}
-					Assign Directly
-				</button>
+				</div>
 				<button
 					onclick={handlePropose}
 					disabled={assignLoading || !assignProfileName}
@@ -514,8 +599,22 @@
 
 		<div class="rounded-lg border border-gray-200 bg-white">
 			<div class="px-5 py-4 border-b border-gray-200">
-				<h2 class="text-xl font-semibold text-gray-900 mb-1">Manage Permissions</h2>
+				<div class="flex items-center gap-2 mb-1">
+					<h2 class="text-xl font-semibold text-gray-900">Manage Permissions</h2>
+					<span class="text-xs px-2 py-0.5 rounded-full font-medium {callerCanGrantPerms ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">
+						{callerCanGrantPerms ? 'Can grant' : 'View only'}
+					</span>
+				</div>
 				<p class="text-sm text-gray-500">Manage fine-grained permissions for <strong>{selectedUser.nickname || truncatePrincipal(selectedUser.principal)}</strong></p>
+				{#if !callerCanGrantPerms && !callerCanRevokePerms}
+					<p class="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+						You don't have <code>permission.grant</code> or <code>permission.revoke</code>. You can view permissions but cannot modify them.
+					</p>
+				{:else}
+					<p class="mt-2 text-xs text-gray-500">
+						Greyed-out permissions are ones you don't hold yourself and cannot grant to others.
+					</p>
+				{/if}
 			</div>
 
 			<!-- Filter + Actions Bar -->
@@ -564,19 +663,25 @@
 							{@const state = permState(op.name)}
 							{@const checked = isChecked(op.name)}
 							{@const fromProfile = !userDirectPerms.includes(op.name) && userPermissions.includes(op.name)}
+							{@const canGrant = callerGrantableOps.has(op.name)}
+							{@const togglable = canToggle(op.name)}
 							<label
-								class="flex items-start gap-3 px-5 py-2.5 hover:bg-gray-50 cursor-pointer transition-colors {state === 'pending-grant' ? 'bg-green-50' : state === 'pending-revoke' ? 'bg-red-50' : ''}"
+								class="flex items-start gap-3 px-5 py-2.5 transition-colors
+									{state === 'pending-grant' ? 'bg-green-50' : state === 'pending-revoke' ? 'bg-red-50' : ''}
+									{togglable ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-default'}
+									{!togglable && !fromProfile ? 'opacity-50' : ''}"
+								title={fromProfile ? 'Inherited via profile — remove the profile to revoke' : !canGrant && !userDirectPerms.includes(op.name) ? 'You don\'t hold this permission and cannot grant it' : !callerCanGrantPerms && !userDirectPerms.includes(op.name) ? 'You lack the permission.grant permission' : ''}
 							>
 								<input
 									type="checkbox"
 									checked={checked || fromProfile}
-									disabled={fromProfile}
-									onchange={() => { if (!fromProfile) togglePermission(op.name); }}
-									class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 {fromProfile ? 'opacity-50' : ''}"
+									disabled={!togglable}
+									onchange={() => togglePermission(op.name)}
+									class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 {!togglable ? 'opacity-50' : ''}"
 								/>
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center gap-2">
-										<code class="text-sm font-medium text-gray-900">{op.name}</code>
+										<code class="text-sm font-medium {togglable || fromProfile ? 'text-gray-900' : 'text-gray-400'}">{op.name}</code>
 										{#if state === 'pending-grant'}
 											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">WILL GRANT</span>
 										{:else if state === 'pending-revoke'}
@@ -585,9 +690,11 @@
 											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">GRANTED</span>
 										{:else if fromProfile}
 											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500">VIA PROFILE</span>
+										{:else if !canGrant}
+											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-400">NOT HELD</span>
 										{/if}
 									</div>
-									<p class="text-xs text-gray-500 mt-0.5">{op.description}</p>
+									<p class="text-xs {togglable || fromProfile ? 'text-gray-500' : 'text-gray-400'} mt-0.5">{op.description}</p>
 								</div>
 							</label>
 						{/each}
