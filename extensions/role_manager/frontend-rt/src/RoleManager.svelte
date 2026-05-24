@@ -17,8 +17,15 @@
 		allowed_to: string[];
 	}
 
+	interface OperationDef {
+		name: string;
+		category: string;
+		description: string;
+	}
+
 	let users: UserEntry[] = $state([]);
 	let profiles: ProfileDef[] = $state([]);
+	let allOperations: OperationDef[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
 	let successMsg = $state('');
@@ -33,8 +40,10 @@
 	let assignProfileName = $state('');
 	let assignLoading = $state(false);
 
-	let permissionName = $state('');
-	let permissionLoading = $state(false);
+	let permFilter = $state('');
+	let permLoading = $state(false);
+	let pendingGrants: Set<string> = $state(new Set());
+	let pendingRevokes: Set<string> = $state(new Set());
 
 	let filteredUsers = $derived(
 		searchQuery.trim()
@@ -46,6 +55,27 @@
 				)
 			: users,
 	);
+
+	let filteredOperations = $derived(() => {
+		const q = permFilter.trim().toLowerCase();
+		const ops = q
+			? allOperations.filter(
+					(op) =>
+						op.name.toLowerCase().includes(q) ||
+						op.category.toLowerCase().includes(q) ||
+						op.description.toLowerCase().includes(q),
+				)
+			: allOperations;
+
+		const groups: Record<string, OperationDef[]> = {};
+		for (const op of ops) {
+			if (!groups[op.category]) groups[op.category] = [];
+			groups[op.category].push(op);
+		}
+		return groups;
+	});
+
+	let hasPendingChanges = $derived(pendingGrants.size > 0 || pendingRevokes.size > 0);
 
 	async function callSync(fn: string, args: Record<string, any> = {}) {
 		const raw = await ctx.callSync(fn, args);
@@ -77,6 +107,17 @@
 			}
 		} catch (e: any) {
 			console.error('Failed to load profiles:', e);
+		}
+	}
+
+	async function loadOperations() {
+		try {
+			const res = await callSync('get_all_operations');
+			if (res?.success) {
+				allOperations = res.data?.operations ?? [];
+			}
+		} catch (e: any) {
+			console.error('Failed to load operations:', e);
 		}
 	}
 
@@ -154,49 +195,86 @@
 		}
 	}
 
-	async function handleGrantPermission() {
-		if (!selectedUser || !permissionName.trim()) return;
-		permissionLoading = true;
-		error = '';
-		successMsg = '';
-		try {
-			const res = await callSync('grant_permission', {
-				target_principal: selectedUser.principal,
-				permission_name: permissionName.trim(),
-			});
-			if (res?.success) {
-				successMsg = res.data?.message || 'Permission granted';
-				permissionName = '';
-				view = 'detail';
-				await viewUser(selectedUser);
+	function togglePermission(opName: string) {
+		const isCurrentlyGranted = userDirectPerms.includes(opName);
+
+		if (isCurrentlyGranted) {
+			if (pendingRevokes.has(opName)) {
+				pendingRevokes = new Set([...pendingRevokes].filter(n => n !== opName));
 			} else {
-				error = res?.error || 'Failed to grant permission';
+				pendingRevokes = new Set([...pendingRevokes, opName]);
+				pendingGrants = new Set([...pendingGrants].filter(n => n !== opName));
 			}
-		} catch (e: any) {
-			error = e?.message || String(e);
-		} finally {
-			permissionLoading = false;
+		} else {
+			if (pendingGrants.has(opName)) {
+				pendingGrants = new Set([...pendingGrants].filter(n => n !== opName));
+			} else {
+				pendingGrants = new Set([...pendingGrants, opName]);
+				pendingRevokes = new Set([...pendingRevokes].filter(n => n !== opName));
+			}
 		}
 	}
 
-	async function handleRevokePermission(pName: string) {
+	function isChecked(opName: string): boolean {
+		const isGranted = userDirectPerms.includes(opName);
+		if (pendingGrants.has(opName)) return true;
+		if (pendingRevokes.has(opName)) return false;
+		return isGranted;
+	}
+
+	function permState(opName: string): 'granted' | 'pending-grant' | 'pending-revoke' | 'none' {
+		if (pendingGrants.has(opName)) return 'pending-grant';
+		if (pendingRevokes.has(opName)) return 'pending-revoke';
+		if (userDirectPerms.includes(opName)) return 'granted';
+		return 'none';
+	}
+
+	async function applyPermissionChanges() {
 		if (!selectedUser) return;
+		permLoading = true;
 		error = '';
 		successMsg = '';
+		const toGrant = [...pendingGrants];
+		const toRevoke = [...pendingRevokes];
+
 		try {
-			const res = await callSync('revoke_permission', {
-				target_principal: selectedUser.principal,
-				permission_name: pName,
-			});
-			if (res?.success) {
-				successMsg = res.data?.message || 'Permission revoked';
-				await viewUser(selectedUser);
-			} else {
-				error = res?.error || 'Failed to revoke permission';
+			if (toGrant.length > 0) {
+				const res = await callSync('batch_grant_permissions', {
+					target_principal: selectedUser.principal,
+					permission_names: toGrant,
+				});
+				if (!res?.success) {
+					error = res?.error || 'Failed to grant permissions';
+					permLoading = false;
+					return;
+				}
 			}
+			if (toRevoke.length > 0) {
+				const res = await callSync('batch_revoke_permissions', {
+					target_principal: selectedUser.principal,
+					permission_names: toRevoke,
+				});
+				if (!res?.success) {
+					error = res?.error || 'Failed to revoke permissions';
+					permLoading = false;
+					return;
+				}
+			}
+
+			successMsg = `${toGrant.length} granted, ${toRevoke.length} revoked`;
+			pendingGrants = new Set();
+			pendingRevokes = new Set();
+			await viewUser(selectedUser);
 		} catch (e: any) {
 			error = e?.message || String(e);
+		} finally {
+			permLoading = false;
 		}
+	}
+
+	function discardPermissionChanges() {
+		pendingGrants = new Set();
+		pendingRevokes = new Set();
 	}
 
 	async function handlePropose() {
@@ -249,6 +327,7 @@
 	onMount(() => {
 		loadUsers();
 		loadProfiles();
+		loadOperations();
 	});
 </script>
 
@@ -299,11 +378,11 @@
 							Assign Role
 						</button>
 						<button
-							onclick={() => { view = 'permission'; permissionName = ''; }}
+							onclick={() => { view = 'permission'; permFilter = ''; pendingGrants = new Set(); pendingRevokes = new Set(); }}
 							class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
 						>
 							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-							Grant Permission
+							Manage Permissions
 						</button>
 					</div>
 				</div>
@@ -426,39 +505,124 @@
 			</div>
 		</div>
 
-	<!-- Grant Permission Dialog -->
+	<!-- Manage Permissions View -->
 	{:else if view === 'permission' && selectedUser}
-		<button onclick={() => { view = 'detail'; }} class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1">
+		<button onclick={() => { view = 'detail'; discardPermissionChanges(); }} class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1">
 			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
 			Back to user detail
 		</button>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6 max-w-lg">
-			<h2 class="text-xl font-semibold text-gray-900 mb-1">Grant Permission</h2>
-			<p class="text-sm text-gray-500 mb-4">Grant a fine-grained permission to <strong>{selectedUser.nickname || truncatePrincipal(selectedUser.principal)}</strong></p>
-
-			<div class="mb-4">
-				<label for="perm-input" class="block text-sm font-medium text-gray-700 mb-1">Permission name</label>
-				<input
-					id="perm-input"
-					type="text"
-					bind:value={permissionName}
-					placeholder="e.g. role.assign, transfer.create"
-					class="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-				/>
-				<p class="text-xs text-gray-400 mt-1">Enter an operation name (e.g. role.assign, permission.view)</p>
+		<div class="rounded-lg border border-gray-200 bg-white">
+			<div class="px-5 py-4 border-b border-gray-200">
+				<h2 class="text-xl font-semibold text-gray-900 mb-1">Manage Permissions</h2>
+				<p class="text-sm text-gray-500">Manage fine-grained permissions for <strong>{selectedUser.nickname || truncatePrincipal(selectedUser.principal)}</strong></p>
 			</div>
 
-			<button
-				onclick={handleGrantPermission}
-				disabled={permissionLoading || !permissionName.trim()}
-				class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-			>
-				{#if permissionLoading}
-					<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+			<!-- Filter + Actions Bar -->
+			<div class="px-5 py-3 border-b border-gray-200 flex items-center gap-3 flex-wrap">
+				<div class="flex-1 min-w-[200px]">
+					<input
+						type="text"
+						bind:value={permFilter}
+						placeholder="Filter permissions by name, category, or description..."
+						class="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+					/>
+				</div>
+				{#if hasPendingChanges}
+					<div class="flex items-center gap-2">
+						<span class="text-xs text-gray-500">
+							{#if pendingGrants.size > 0}<span class="text-green-600 font-medium">+{pendingGrants.size}</span>{/if}
+							{#if pendingGrants.size > 0 && pendingRevokes.size > 0}&nbsp;/&nbsp;{/if}
+							{#if pendingRevokes.size > 0}<span class="text-red-600 font-medium">-{pendingRevokes.size}</span>{/if}
+						</span>
+						<button
+							onclick={discardPermissionChanges}
+							class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
+						>Discard</button>
+						<button
+							onclick={applyPermissionChanges}
+							disabled={permLoading}
+							class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-gray-900 text-white font-medium hover:bg-black disabled:opacity-40"
+						>
+							{#if permLoading}
+								<div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+							{/if}
+							Apply Changes
+						</button>
+					</div>
 				{/if}
-				Grant Permission
-			</button>
+			</div>
+
+			<!-- Permission List -->
+			<div class="max-h-[480px] overflow-y-auto">
+				{#each Object.entries(filteredOperations()) as [category, ops]}
+					<div class="border-b border-gray-100 last:border-b-0">
+						<div class="px-5 py-2 bg-gray-50 sticky top-0 z-10">
+							<h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">{category}</h3>
+						</div>
+						{#each ops as op}
+							{@const state = permState(op.name)}
+							{@const checked = isChecked(op.name)}
+							{@const fromProfile = !userDirectPerms.includes(op.name) && userPermissions.includes(op.name)}
+							<label
+								class="flex items-start gap-3 px-5 py-2.5 hover:bg-gray-50 cursor-pointer transition-colors {state === 'pending-grant' ? 'bg-green-50' : state === 'pending-revoke' ? 'bg-red-50' : ''}"
+							>
+								<input
+									type="checkbox"
+									checked={checked || fromProfile}
+									disabled={fromProfile}
+									onchange={() => { if (!fromProfile) togglePermission(op.name); }}
+									class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 {fromProfile ? 'opacity-50' : ''}"
+								/>
+								<div class="flex-1 min-w-0">
+									<div class="flex items-center gap-2">
+										<code class="text-sm font-medium text-gray-900">{op.name}</code>
+										{#if state === 'pending-grant'}
+											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">WILL GRANT</span>
+										{:else if state === 'pending-revoke'}
+											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">WILL REVOKE</span>
+										{:else if state === 'granted'}
+											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">GRANTED</span>
+										{:else if fromProfile}
+											<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500">VIA PROFILE</span>
+										{/if}
+									</div>
+									<p class="text-xs text-gray-500 mt-0.5">{op.description}</p>
+								</div>
+							</label>
+						{/each}
+					</div>
+				{:else}
+					<div class="text-center py-8 text-sm text-gray-400">
+						{permFilter ? 'No permissions match your filter' : 'Loading permissions...'}
+					</div>
+				{/each}
+			</div>
+
+			<!-- Sticky bottom bar when changes pending -->
+			{#if hasPendingChanges}
+				<div class="px-5 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+					<span class="text-sm text-gray-600">
+						{pendingGrants.size + pendingRevokes.size} pending change{pendingGrants.size + pendingRevokes.size !== 1 ? 's' : ''}
+					</span>
+					<div class="flex gap-2">
+						<button
+							onclick={discardPermissionChanges}
+							class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+						>Discard</button>
+						<button
+							onclick={applyPermissionChanges}
+							disabled={permLoading}
+							class="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm rounded-lg bg-gray-900 text-white font-medium hover:bg-black disabled:opacity-40"
+						>
+							{#if permLoading}
+								<div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+							{/if}
+							Apply Changes
+						</button>
+					</div>
+				</div>
+			{/if}
 		</div>
 
 	<!-- Users List View (default) -->

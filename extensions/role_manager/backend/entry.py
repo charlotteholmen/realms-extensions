@@ -475,6 +475,231 @@ def propose_role_assignment(args) -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 
+OPERATIONS_CATALOG = {
+    "all": {"category": "Super", "description": "Grants every operation in the system"},
+
+    "user.add": {"category": "User Management", "description": "Register new users in the realm"},
+    "user.edit": {"category": "User Management", "description": "Edit user profile information"},
+    "user.delete": {"category": "User Management", "description": "Remove a user from the realm"},
+    "user.update_status": {"category": "User Management", "description": "Change a user's active/suspended status"},
+
+    "organization.add": {"category": "Organizations", "description": "Create a new organization"},
+    "organization.edit": {"category": "Organizations", "description": "Edit organization details"},
+    "organization.delete": {"category": "Organizations", "description": "Delete an organization"},
+
+    "transfer.create": {"category": "Finance", "description": "Create token transfers between accounts"},
+    "transfer.delete": {"category": "Finance", "description": "Revert or cancel a pending transfer"},
+    "invoice.refresh": {"category": "Finance", "description": "Recalculate and refresh invoice balances"},
+    "nft.mint": {"category": "Finance", "description": "Mint new NFT tokens (e.g. land parcels)"},
+    "license.issue": {"category": "Finance", "description": "Issue a license to a user or organization"},
+    "license.revoke": {"category": "Finance", "description": "Revoke an issued license"},
+
+    "task.create": {"category": "Tasks", "description": "Create background tasks"},
+    "task.edit": {"category": "Tasks", "description": "Edit task parameters"},
+    "task.delete": {"category": "Tasks", "description": "Delete a task"},
+    "task.run": {"category": "Tasks", "description": "Manually trigger a task to run"},
+    "task.schedule": {"category": "Tasks", "description": "Schedule a task for periodic execution"},
+    "task.cancel": {"category": "Tasks", "description": "Cancel a running or scheduled task"},
+
+    "realm.admin": {"category": "Realm Administration", "description": "Full realm administrative access"},
+    "realm.upgrade": {"category": "Realm Administration", "description": "Upgrade the realm canister to a new version"},
+    "realm.configure": {"category": "Realm Administration", "description": "Change realm configuration settings"},
+    "realm.configure.codex": {"category": "Realm Administration", "description": "Configure the governance codex"},
+    "realm.configure.infrastructure": {"category": "Realm Administration", "description": "Configure infrastructure settings (registries, etc.)"},
+    "realm.register": {"category": "Realm Administration", "description": "Register the realm with the registry"},
+    "quarter.register": {"category": "Realm Administration", "description": "Register a new quarter (sub-realm)"},
+    "quarter.deregister": {"category": "Realm Administration", "description": "Remove a quarter from the realm"},
+    "quarter.configure": {"category": "Realm Administration", "description": "Configure quarter settings"},
+    "quarter.secede": {"category": "Realm Administration", "description": "Allow a quarter to secede from the realm"},
+    "quarter.join_federation": {"category": "Realm Administration", "description": "Join a federation of realms"},
+    "shell.execute": {"category": "Realm Administration", "description": "Execute shell commands on the canister (developer)"},
+
+    "mandate.create": {"category": "Governance", "description": "Create governance mandates"},
+    "mandate.assign_executor": {"category": "Governance", "description": "Assign an executor to a mandate"},
+    "proposal.create": {"category": "Governance", "description": "Submit new governance proposals"},
+    "proposal.vote": {"category": "Governance", "description": "Vote on governance proposals"},
+    "contract.create_under_mandate": {"category": "Governance", "description": "Create contracts under an active mandate"},
+    "scope.authorize": {"category": "Governance", "description": "Authorize governance scopes"},
+    "governance.update": {"category": "Governance", "description": "Update governance rules and parameters"},
+    "permission.view": {"category": "Governance", "description": "View user permissions and access details"},
+    "permission.revoke": {"category": "Governance", "description": "Revoke permissions from users"},
+
+    "role.assign": {"category": "Roles & Permissions", "description": "Assign profiles/roles to users"},
+    "role.revoke": {"category": "Roles & Permissions", "description": "Revoke profiles/roles from users"},
+    "permission.grant": {"category": "Roles & Permissions", "description": "Grant fine-grained permissions to users"},
+
+    "dispute.create": {"category": "Justice", "description": "File a new dispute or complaint"},
+    "dispute.view": {"category": "Justice", "description": "View disputes you are party to"},
+    "dispute.accept": {"category": "Justice", "description": "Accept a dispute for adjudication"},
+    "dispute.reject": {"category": "Justice", "description": "Reject a dispute filing"},
+    "dispute.assign": {"category": "Justice", "description": "Assign a dispute to a judge"},
+    "dispute.view_all": {"category": "Justice", "description": "View all disputes in the realm"},
+    "evidence.evaluate": {"category": "Justice", "description": "Evaluate submitted evidence"},
+    "resolution.draft": {"category": "Justice", "description": "Draft a dispute resolution"},
+    "resolution.issue": {"category": "Justice", "description": "Issue an official resolution"},
+    "resolution.link_contract": {"category": "Justice", "description": "Link a contract to a resolution"},
+    "resolution.modify_terms": {"category": "Justice", "description": "Modify terms of a resolution"},
+    "resolution.finalize": {"category": "Justice", "description": "Finalize and close a resolution"},
+    "appeal.allow": {"category": "Justice", "description": "Allow an appeal to a resolution"},
+
+    "trade.execute": {"category": "Enforcement", "description": "Execute trades as part of enforcement"},
+    "fine.apply": {"category": "Enforcement", "description": "Apply fines to users"},
+    "access.revoke": {"category": "Enforcement", "description": "Revoke a user's access as enforcement"},
+    "contract.terminate": {"category": "Enforcement", "description": "Terminate a contract as enforcement"},
+    "resource.reassign": {"category": "Enforcement", "description": "Reassign resources between users"},
+    "instrument.lock": {"category": "Enforcement", "description": "Lock financial instruments"},
+    "notification.send": {"category": "Enforcement", "description": "Send enforcement notifications"},
+    "resolution.query": {"category": "Enforcement", "description": "Query past resolutions"},
+    "enforcement.escalate": {"category": "Enforcement", "description": "Escalate an enforcement action"},
+    "enforcement.record": {"category": "Enforcement", "description": "Record enforcement actions"},
+
+    "extension.call": {"category": "Extensions", "description": "Call extension functions (generic)"},
+    "extension.sync_call": {"category": "Extensions", "description": "Make synchronous extension calls"},
+    "extension.async_call": {"category": "Extensions", "description": "Make asynchronous extension calls"},
+    "extension.install": {"category": "Extensions", "description": "Install new extensions into the realm"},
+    "extension.uninstall": {"category": "Extensions", "description": "Uninstall extensions from the realm"},
+
+    "codex.install": {"category": "Codex", "description": "Install governance codex packages"},
+    "codex.uninstall": {"category": "Codex", "description": "Uninstall governance codex packages"},
+
+    "self.join": {"category": "Self-service", "description": "Join the realm as a new member"},
+    "self.update_public_profile": {"category": "Self-service", "description": "Update your own public profile"},
+    "self.update_private_data": {"category": "Self-service", "description": "Update your own private data"},
+    "self.change_quarter": {"category": "Self-service", "description": "Move to a different quarter"},
+    "self.invoice_refresh": {"category": "Self-service", "description": "Refresh your own invoices"},
+}
+
+
+def get_all_operations(args) -> str:
+    """Return the full catalog of operations with descriptions and categories."""
+    try:
+        _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_VIEW)
+
+        operations = []
+        for op_name, meta in OPERATIONS_CATALOG.items():
+            operations.append({
+                "name": op_name,
+                "category": meta["category"],
+                "description": meta["description"],
+            })
+
+        return json.dumps({"success": True, "data": {"operations": operations}})
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"get_all_operations error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def batch_grant_permissions(args) -> str:
+    """Grant multiple permissions to a user at once."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_GRANT)
+
+        target_principal = args_dict.get("target_principal")
+        permission_names = args_dict.get("permission_names", [])
+        if not target_principal or not permission_names:
+            return json.dumps({"success": False, "error": "target_principal and permission_names are required"})
+
+        target_user = User[target_principal]
+        if not target_user:
+            return json.dumps({"success": False, "error": f"User {target_principal} not found"})
+
+        existing = set()
+        try:
+            for perm in target_user.permissions:
+                if perm.name:
+                    existing.add(perm.name)
+        except Exception:
+            pass
+
+        granted = []
+        skipped = []
+        for pname in permission_names:
+            if pname in existing:
+                skipped.append(pname)
+                continue
+            perm = Permission(name=pname)
+            target_user.permissions.add(perm)
+            granted.append(pname)
+            existing.add(pname)
+
+        caller_principal = _get_caller_principal()
+        if granted:
+            logger.info(f"Permissions {granted} granted to {target_principal} by {caller_principal}")
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "granted": granted,
+                "skipped": skipped,
+                "message": f"{len(granted)} permission(s) granted, {len(skipped)} already existed",
+            },
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"batch_grant_permissions error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def batch_revoke_permissions(args) -> str:
+    """Revoke multiple permissions from a user at once."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_REVOKE)
+
+        target_principal = args_dict.get("target_principal")
+        permission_names = args_dict.get("permission_names", [])
+        if not target_principal or not permission_names:
+            return json.dumps({"success": False, "error": "target_principal and permission_names are required"})
+
+        target_user = User[target_principal]
+        if not target_user:
+            return json.dumps({"success": False, "error": f"User {target_principal} not found"})
+
+        perm_map = {}
+        try:
+            for perm in target_user.permissions:
+                if perm.name:
+                    perm_map[perm.name] = perm
+        except Exception:
+            pass
+
+        revoked = []
+        not_found = []
+        for pname in permission_names:
+            if pname in perm_map:
+                target_user.permissions.remove(perm_map[pname])
+                perm_map[pname].delete()
+                revoked.append(pname)
+            else:
+                not_found.append(pname)
+
+        caller_principal = _get_caller_principal()
+        if revoked:
+            logger.info(f"Permissions {revoked} revoked from {target_principal} by {caller_principal}")
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "revoked": revoked,
+                "not_found": not_found,
+                "message": f"{len(revoked)} permission(s) revoked",
+            },
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"batch_revoke_permissions error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
 # ---------------------------------------------------------------------------
 # Extension API registry
 # ---------------------------------------------------------------------------
@@ -488,6 +713,9 @@ EXTENSION_FUNCTIONS = {
     "grant_permission": grant_permission,
     "revoke_permission": revoke_permission,
     "propose_role_assignment": propose_role_assignment,
+    "get_all_operations": get_all_operations,
+    "batch_grant_permissions": batch_grant_permissions,
+    "batch_revoke_permissions": batch_revoke_permissions,
 }
 
 
