@@ -1,7 +1,7 @@
 {
   "name": "access_manager",
   "version": "1.0.0",
-  "description": "Manage departments, roles, and extension access with scoped delegation",
+  "description": "Manage departments and membership",
   "author": "Smart Social Contracts",
   "permissions": [],
   "profiles": [
@@ -11,9 +11,9 @@
   "categories": [
     "administration"
   ],
-  "icon": "shield-lock",
+  "icon": "building",
   "show_in_sidebar": true,
   "sidebar_label": {
-    "en": "Access Manager"
+    "en": "Departments"
   }
 }

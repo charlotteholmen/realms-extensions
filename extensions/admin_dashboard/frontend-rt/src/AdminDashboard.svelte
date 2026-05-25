@@ -412,8 +412,8 @@
 	<!-- Header -->
 	<div class="flex justify-between items-center mb-6">
 		<div>
-			<h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-			<p class="text-gray-600 mt-1">Browse, export, and import realm entities</p>
+			<h1 class="text-3xl font-bold text-gray-900">Data Explorer</h1>
+			<p class="text-gray-600 mt-1">Browse, export, and import entities</p>
 		</div>
 		<button
 			onclick={() => loadEntityTypes()}

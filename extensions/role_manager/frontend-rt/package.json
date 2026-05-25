@@ -6,6 +6,9 @@
   "scripts": {
     "build": "vite build"
   },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "svelte": "^5.19.0",

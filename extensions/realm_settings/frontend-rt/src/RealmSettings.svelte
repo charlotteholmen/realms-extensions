@@ -153,7 +153,7 @@
 <div class="w-full px-4 max-w-none">
 	<div class="flex justify-between items-center mb-6">
 		<div>
-			<h1 class="text-3xl font-bold text-gray-900">Realm Settings</h1>
+			<h1 class="text-3xl font-bold text-gray-900">Settings</h1>
 			<p class="text-gray-600 mt-1">Configure your realm's name, description, branding, and registration settings.</p>
 		</div>
 	</div>

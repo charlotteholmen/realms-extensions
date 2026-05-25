@@ -991,20 +991,6 @@ EXTENSION_FUNCTIONS = {
     "revoke_department_permission": revoke_department_permission,
     "batch_grant_department_permissions": batch_grant_department_permissions,
     "batch_revoke_department_permissions": batch_revoke_department_permissions,
-    # Extension access
-    "list_extensions": list_extensions,
-    "grant_extension_to_user": grant_extension_to_user,
-    "revoke_extension_from_user": revoke_extension_from_user,
-    "grant_extension_to_department": grant_extension_to_department,
-    "revoke_extension_from_department": revoke_extension_from_department,
-    "grant_extension_to_profile": grant_extension_to_profile,
-    "revoke_extension_from_profile": revoke_extension_from_profile,
-    # Users & profiles
-    "list_users": list_users,
-    "get_user_access_summary": get_user_access_summary,
-    "assign_profile": assign_profile,
-    "revoke_profile": revoke_profile,
-    "get_available_profiles": get_available_profiles,
 }
 
 

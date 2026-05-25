@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import InvitationManager from './InvitationManager.svelte';
 
 	let { ctx }: { ctx: any } = $props();
 
+	type Tab = 'people' | 'profiles' | 'invitations';
 	type View = 'users' | 'detail' | 'assign' | 'permission' | 'profiles';
+
+	let activeTab: Tab = $state('people');
 
 	interface UserEntry {
 		principal: string;
@@ -492,7 +496,7 @@
 	<!-- Header -->
 	<div class="mb-6">
 		<div class="flex items-center gap-2">
-			<h1 class="text-3xl font-bold text-gray-900 mb-1">Role Manager</h1>
+			<h1 class="text-3xl font-bold text-gray-900 mb-1">Users</h1>
 			<button
 				onclick={() => showHelp = !showHelp}
 				class="mt-0.5 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -501,8 +505,26 @@
 				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
 			</button>
 		</div>
-		<p class="text-gray-500 text-sm">Assign and manage user roles and permissions.</p>
+		<p class="text-gray-500 text-sm">People, profiles, permissions, and invitations.</p>
 	</div>
+
+	<!-- Tabs -->
+	<div class="border-b border-gray-200 mb-6">
+		<nav class="flex gap-6">
+			{#each [['people', 'People'], ['profiles', 'Profiles'], ['invitations', 'Invitations']] as [id, label]}
+				<button
+					onclick={() => { activeTab = id as Tab; if (id === 'people') { view = 'users'; } else if (id === 'profiles') { view = 'profiles'; loadProfilesWithPermissions(); } }}
+					class="pb-3 text-sm font-medium border-b-2 transition-colors {activeTab === id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+				>
+					{label}
+				</button>
+			{/each}
+		</nav>
+	</div>
+
+	{#if activeTab === 'invitations'}
+		<InvitationManager {ctx} />
+	{:else}
 
 	{#if showHelp}
 		<div class="mb-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
@@ -846,10 +868,6 @@
 
 	<!-- Profiles View -->
 	{:else if view === 'profiles'}
-		<button onclick={() => { view = 'users'; selectedProfile = null; }} class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1">
-			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-			Back to users
-		</button>
 
 		<div class="flex gap-5">
 			<!-- Profile list sidebar -->
@@ -1021,13 +1039,6 @@
 					/>
 				</div>
 			<button
-				onclick={() => { view = 'profiles'; loadProfilesWithPermissions(); }}
-				class="ml-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
-			>
-				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-				Manage Profiles
-			</button>
-			<button
 				onclick={loadUsers}
 				disabled={loading}
 				class="ml-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
@@ -1089,5 +1100,7 @@
 				{#if searchQuery}&nbsp;(filtered){/if}
 			</div>
 		</div>
+	{/if}
+
 	{/if}
 </div>

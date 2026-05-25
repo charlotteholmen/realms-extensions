@@ -1,13 +1,9 @@
 """
-Role Manager Extension Backend Entry Point
+Users Extension Backend Entry Point
 
-Provides an admin API for assigning/revoking roles (profiles) and permissions
-to users, backed by codex-driven governance hooks that allow each realm to
+Provides an admin API for managing people, profiles, permissions, and
+invitations, backed by codex-driven governance hooks that allow each realm to
 define its own policy (admin-only, vote-required, direct democracy, etc.).
-
-Flow:
-  caller → permission check (Operations.ROLE_ASSIGN) → prehook (codex policy)
-  → mutation → posthook (codex notifications/logging)
 """
 
 import json
@@ -16,6 +12,14 @@ from typing import Any, Dict
 
 from ggg import Permission, Proposal, User, UserProfile
 from ggg.system.user_profile import Operations, Profiles, OPERATIONS_SEPARATOR
+from ggg.system.registration_code import (
+    RegistrationCode,
+    consume_registration_code as _consume,
+    create_registration_code as _create,
+    list_registration_codes as _list_codes,
+    revoke_registration_code as _revoke,
+    validate_registration_code as _validate,
+)
 from basilisk import ic
 from ic_python_logging import get_logger
 
@@ -1028,6 +1032,135 @@ def batch_revoke_profile_permissions(args) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Invitation / Registration Code management (merged from census)
+# ---------------------------------------------------------------------------
+
+def get_user_count(args=None) -> str:
+    from ic_python_db import Database
+    db = Database.get_instance()
+    try:
+        user_cls = db._entity_types.get("User")
+        if not user_cls:
+            return json.dumps({"success": True, "data": {"user_count": 0}})
+        count = len(user_cls.instances())
+        return json.dumps({"success": True, "data": {"user_count": count}})
+    except Exception as e:
+        logger.error(f"Error counting users: {e}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def generate_registration_url(args) -> str:
+    try:
+        args_dict = _parse_args(args)
+        user_id = args_dict.get("user_id", "admin")
+        from datetime import datetime
+        reg_code = _create(
+            code_hash=args_dict.get("code_hash", ""),
+            profile=args_dict.get("profile", "member"),
+            max_uses=args_dict.get("max_uses", 1),
+            expires_in_hours=args_dict.get("expires_in_hours", 24),
+            created_by=args_dict.get("created_by", "admin"),
+            user_id=user_id,
+            frontend_url=args_dict.get("frontend_url", "https://localhost:3000"),
+            email=args_dict.get("email", ""),
+        )
+        code_hash = args_dict.get("code_hash")
+        if code_hash:
+            return json.dumps({
+                "success": True,
+                "data": {
+                    "code_hash": code_hash[:8],
+                    "expires_at": datetime.fromtimestamp(reg_code.expires_at).isoformat(),
+                    "profile": args_dict.get("profile", "member"),
+                },
+            })
+        return json.dumps({
+            "success": True,
+            "data": {
+                "code": reg_code.code,
+                "code_hash": reg_code.code_hash,
+                "registration_url": reg_code.registration_url,
+                "expires_at": datetime.fromtimestamp(reg_code.expires_at).isoformat(),
+                "user_id": reg_code.user_id,
+                "profile": args_dict.get("profile", "member"),
+            },
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def validate_registration_code(args) -> str:
+    try:
+        args_dict = _parse_args(args)
+        code_hash = args_dict.get("code_hash", "")
+        if not code_hash:
+            import hashlib
+            plaintext = args_dict.get("code", "")
+            if not plaintext:
+                return json.dumps({"success": False, "error": "code or code_hash is required"})
+            code_hash = hashlib.sha256(plaintext.encode()).hexdigest()
+        return json.dumps(_validate(code_hash))
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def consume_registration_code(args) -> str:
+    try:
+        args_dict = _parse_args(args)
+        code_hash = args_dict.get("code_hash", "")
+        if not code_hash:
+            import hashlib
+            plaintext = args_dict.get("code", "")
+            if not plaintext:
+                return json.dumps({"success": False, "error": "code or code_hash is required"})
+            code_hash = hashlib.sha256(plaintext.encode()).hexdigest()
+        return json.dumps(_consume(code_hash, args_dict.get("principal", "")))
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def revoke_registration_code(args) -> str:
+    try:
+        args_dict = _parse_args(args)
+        return json.dumps(_revoke(code=args_dict.get("code"), code_hash=args_dict.get("code_hash")))
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def get_registration_codes(args) -> str:
+    try:
+        args_dict = _parse_args(args)
+        user_id = args_dict.get("user_id")
+        include_used = args_dict.get("include_used", False)
+        if user_id:
+            from datetime import datetime
+            codes = RegistrationCode.find_by_user_id(user_id)
+            if not include_used:
+                codes = [c for c in codes if c.used == 0]
+            return json.dumps({
+                "success": True,
+                "data": [
+                    {
+                        "code_hash": c.code_hash[:8],
+                        "user_id": c.user_id,
+                        "email": c.email,
+                        "profile": c.profile,
+                        "expires_at": datetime.fromtimestamp(c.expires_at).isoformat(),
+                        "uses_count": c.uses_count,
+                        "max_uses": c.max_uses,
+                        "revoked": c.revoked == 1,
+                        "is_valid": c.is_valid(),
+                        "created_by": c.created_by,
+                    }
+                    for c in codes
+                ],
+            })
+        return json.dumps({"success": True, "data": _list_codes(include_used=include_used)})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+# ---------------------------------------------------------------------------
 # Extension API registry
 # ---------------------------------------------------------------------------
 
@@ -1049,6 +1182,13 @@ EXTENSION_FUNCTIONS = {
     "revoke_profile_permission": revoke_profile_permission,
     "batch_grant_profile_permissions": batch_grant_profile_permissions,
     "batch_revoke_profile_permissions": batch_revoke_profile_permissions,
+    # Invitations (merged from census)
+    "get_user_count": get_user_count,
+    "generate_registration_url": generate_registration_url,
+    "validate_registration_code": validate_registration_code,
+    "consume_registration_code": consume_registration_code,
+    "revoke_registration_code": revoke_registration_code,
+    "get_registration_codes": get_registration_codes,
 }
 
 

@@ -1,13 +1,13 @@
 {
   "name": "realm_settings",
   "version": "1.0.0",
-  "description": "Configure realm name, description, branding, and registration settings",
+  "description": "Realm configuration and branding",
   "author": "Realms Team",
   "categories": [
     "administration"
   ],
   "sidebar_label": {
-    "en": "Realm Settings"
+    "en": "Settings"
   },
   "permissions": [
     "admin"

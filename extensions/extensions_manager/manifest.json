@@ -1,13 +1,13 @@
 {
   "name": "extensions_manager",
   "version": "1.0.0",
-  "description": "View installed extensions and codex packages with update status",
+  "description": "Manage extensions, codexes, assistants, and access control",
   "author": "Realms Team",
   "categories": [
     "administration"
   ],
   "sidebar_label": {
-    "en": "Extensions"
+    "en": "Packages"
   },
   "permissions": [
     "admin"
