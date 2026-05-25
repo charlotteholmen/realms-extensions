@@ -19,6 +19,5 @@
   "icon": "file-code",
   "sidebar_label": {
     "en": "Codices"
-  },
-  "is_default": true
+  }
 }

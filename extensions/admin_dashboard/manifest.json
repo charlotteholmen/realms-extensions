@@ -16,6 +16,5 @@
     "admin"
   ],
   "show_in_sidebar": true,
-  "icon": "search",
-  "is_default": true
+  "icon": "search"
 }
