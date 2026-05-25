@@ -15,10 +15,10 @@
     "admin"
   ],
   "categories": [
-    "profile"
+    "public_services"
   ],
   "sidebar_label": {
-    "en": "Passport Link"
+    "en": "Passport Verification"
   },
   "icon": "id-badge",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/passport_verification",

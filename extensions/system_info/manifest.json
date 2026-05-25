@@ -14,10 +14,10 @@
     "developer"
   ],
   "categories": [
-    "developer"
+    "other"
   ],
   "sidebar_label": {
-    "en": "System Status"
+    "en": "System Info"
   },
   "icon": "server",
   "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/system_info",

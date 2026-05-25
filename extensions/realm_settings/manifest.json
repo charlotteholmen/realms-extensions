@@ -15,6 +15,6 @@
   "profiles": [
     "admin"
   ],
-  "show_in_sidebar": true,
+  "show_in_sidebar": false,
   "icon": "settings"
 }

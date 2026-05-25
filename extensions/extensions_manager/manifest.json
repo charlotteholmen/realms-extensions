@@ -4,10 +4,10 @@
   "description": "Manage extensions, codexes, assistants, and access control",
   "author": "Realms Team",
   "categories": [
-    "administration"
+    "settings"
   ],
   "sidebar_label": {
-    "en": "Packages"
+    "en": "Menus"
   },
   "permissions": [
     "admin"

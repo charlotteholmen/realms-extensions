@@ -16,7 +16,7 @@
     "land_territory"
   ],
   "sidebar_label": {
-    "en": "Zoning"
+    "en": "Zones"
   },
   "icon": "layers-subtract",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/zone_selector",

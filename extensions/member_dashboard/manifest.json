@@ -9,10 +9,10 @@
     "admin"
   ],
   "categories": [
-    "profile"
+    "public_services"
   ],
   "sidebar_label": {
-    "en": "My Membership"
+    "en": "My Dashboard"
   },
   "icon": "layout-dashboard",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/member_dashboard",

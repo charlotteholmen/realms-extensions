@@ -18,7 +18,7 @@
     "admin"
   ],
   "categories": [
-    "land_territory"
+    "public_services"
   ],
   "icon": "map-2",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/land_registry",

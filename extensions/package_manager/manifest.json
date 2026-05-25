@@ -4,7 +4,7 @@
   "description": "Install, update and uninstall extensions and codex packages from connected file registries",
   "author": "Realms Team",
   "categories": [
-    "developer"
+    "settings"
   ],
   "permissions": [
     "admin"
