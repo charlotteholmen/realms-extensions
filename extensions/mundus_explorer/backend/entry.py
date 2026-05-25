@@ -8,7 +8,7 @@ registered in the same mundus (federation of realms).
 import json
 import traceback
 
-from basilisk import Async, Principal, ic
+from basilisk import ic
 from ic_python_logging import get_logger
 
 logger = get_logger("extensions.mundus_explorer")
@@ -23,26 +23,83 @@ def _err(e):
     return json.dumps({"success": False, "error": str(e)})
 
 
-def get_mundus_realms(args: str) -> Async[str]:
+def get_mundus_realms(args: str) -> str:
     """Get all realms registered in the same mundus registry.
 
-    Looks up Registry entities stored locally (populated during realm
-    registration) and queries each registry canister's list_realms method.
-
-    Returns a list of realm records with name, URL, user count, etc.
+    Returns local registry info and realm metadata. The inter-canister
+    call to the registry's list_realms is handled via the async variant
+    (get_mundus_realms_async) when needed.
     """
     try:
         from ggg import Registry, Realm
-        from _cdk import Service, service_query, text
 
-        class RegistryQuery(Service):
-            @service_query
-            def list_realms(self) -> text:
-                ...
+        registries = list(Registry.instances())
+        this_canister = ic.id().to_str()
+
+        # Get local realm info
+        local_realm = None
+        try:
+            realms = list(Realm.instances())
+            if realms:
+                r = realms[0]
+                local_realm = {
+                    "name": r.name,
+                    "status": r.status,
+                    "network": r.network,
+                }
+        except Exception:
+            pass
+
+        if not registries:
+            return _ok({
+                "realms": [],
+                "registry_count": 0,
+                "this_canister": this_canister,
+                "local_realm": local_realm,
+                "registries": [],
+                "message": "No registry configured. Register this realm with a registry to see sibling realms.",
+            })
+
+        registry_info = []
+        for reg in registries:
+            registry_info.append({
+                "name": reg.name,
+                "principal_id": reg.principal_id,
+            })
+
+        return _ok({
+            "realms": [],
+            "registry_count": len(registries),
+            "this_canister": this_canister,
+            "local_realm": local_realm,
+            "registries": registry_info,
+            "message": "Registry found. Use fetch_realms to load sibling realms.",
+        })
+
+    except Exception as e:
+        return _err(e)
+
+
+def fetch_realms_from_registry(args: str) -> str:
+    """Fetch realms from registry via inter-canister call (async).
+
+    This is called as an async extension call by the frontend
+    after the initial sync call returns registry info.
+    """
+    from basilisk import Async, Principal
+    from _cdk import Service, service_query, text
+
+    class RegistryQuery(Service):
+        @service_query
+        def list_realms(self) -> text:
+            ...
+
+    try:
+        from ggg import Registry
 
         registries = list(Registry.instances())
         if not registries:
-            return _ok({"realms": [], "registry_count": 0, "message": "No registry configured"})
+            return _ok({"realms": [], "message": "No registry configured"})
 
         this_canister = ic.id().to_str()
         all_realms = []
@@ -55,7 +112,6 @@ def get_mundus_realms(args: str) -> Async[str]:
                 svc = RegistryQuery(Principal.from_str(reg.principal_id))
                 raw_result = yield svc.list_realms()
 
-                # list_realms returns vec<RealmRecord> which basilisk decodes
                 if hasattr(raw_result, "Ok"):
                     realms_list = raw_result.Ok
                 else:
@@ -85,25 +141,9 @@ def get_mundus_realms(args: str) -> Async[str]:
                 errors.append(f"Registry {reg.principal_id}: {str(e)}")
                 logger.error(f"Error querying registry {reg.principal_id}: {e}")
 
-        # Get local realm info for context
-        local_realm = None
-        try:
-            realms = list(Realm.instances())
-            if realms:
-                r = realms[0]
-                local_realm = {
-                    "name": r.name,
-                    "status": r.status,
-                    "network": r.network,
-                }
-        except Exception:
-            pass
-
         return _ok({
             "realms": all_realms,
-            "registry_count": len(registries),
             "this_canister": this_canister,
-            "local_realm": local_realm,
             "errors": errors if errors else None,
         })
 
