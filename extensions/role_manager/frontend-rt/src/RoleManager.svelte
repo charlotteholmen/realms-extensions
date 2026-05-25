@@ -3,7 +3,7 @@
 
 	let { ctx }: { ctx: any } = $props();
 
-	type View = 'users' | 'detail' | 'assign' | 'permission';
+	type View = 'users' | 'detail' | 'assign' | 'permission' | 'profiles';
 
 	interface UserEntry {
 		principal: string;
@@ -51,6 +51,14 @@
 	let callerCanRevokePerms = $state(false);
 	let callerGrantableOps: Set<string> = $state(new Set());
 	let showHelp = $state(false);
+
+	let profilesList: any[] = $state([]);
+	let profilesLoading = $state(false);
+	let selectedProfile: any | null = $state(null);
+	let profilePermFilter = $state('');
+	let profilePendingGrants: Set<string> = $state(new Set());
+	let profilePendingRevokes: Set<string> = $state(new Set());
+	let profilePermApplying = $state(false);
 
 	let filteredUsers = $derived(
 		searchQuery.trim()
@@ -319,6 +327,110 @@
 			}
 		} catch (e: any) {
 			error = e?.message || String(e);
+		}
+	}
+
+	async function loadProfilesWithPermissions() {
+		profilesLoading = true;
+		try {
+			const res = await callSync('list_profiles_with_permissions');
+			if (res?.success) {
+				profilesList = res.data?.profiles ?? [];
+			}
+		} catch (e: any) {
+			error = e?.message || String(e);
+		} finally {
+			profilesLoading = false;
+		}
+	}
+
+	function selectProfile(profile: any) {
+		selectedProfile = profile;
+		profilePermFilter = '';
+		profilePendingGrants = new Set();
+		profilePendingRevokes = new Set();
+	}
+
+	function toggleProfilePerm(opName: string) {
+		if (!selectedProfile) return;
+		const current = selectedProfile.extra_permissions ?? [];
+		const isGranted = current.includes(opName);
+		if (isGranted) {
+			if (profilePendingRevokes.has(opName)) {
+				profilePendingRevokes = new Set([...profilePendingRevokes].filter(n => n !== opName));
+			} else {
+				profilePendingRevokes = new Set([...profilePendingRevokes, opName]);
+				profilePendingGrants = new Set([...profilePendingGrants].filter(n => n !== opName));
+			}
+		} else {
+			if (profilePendingGrants.has(opName)) {
+				profilePendingGrants = new Set([...profilePendingGrants].filter(n => n !== opName));
+			} else {
+				profilePendingGrants = new Set([...profilePendingGrants, opName]);
+				profilePendingRevokes = new Set([...profilePendingRevokes].filter(n => n !== opName));
+			}
+		}
+	}
+
+	function isProfilePermChecked(opName: string): boolean {
+		if (!selectedProfile) return false;
+		const current = selectedProfile.extra_permissions ?? [];
+		if (profilePendingGrants.has(opName)) return true;
+		if (profilePendingRevokes.has(opName)) return false;
+		return current.includes(opName);
+	}
+
+	function profilePermState(opName: string): string {
+		if (!selectedProfile) return 'none';
+		if (profilePendingGrants.has(opName)) return 'pending-grant';
+		if (profilePendingRevokes.has(opName)) return 'pending-revoke';
+		const current = selectedProfile.extra_permissions ?? [];
+		if (current.includes(opName)) return 'granted';
+		const builtIn = selectedProfile.allowed_to ?? [];
+		if (builtIn.includes(opName)) return 'built-in';
+		return 'none';
+	}
+
+	async function applyProfilePermChanges() {
+		if (!selectedProfile) return;
+		profilePermApplying = true;
+		error = '';
+		successMsg = '';
+		try {
+			const toGrant = [...profilePendingGrants];
+			const toRevoke = [...profilePendingRevokes];
+			if (toGrant.length > 0) {
+				const res = await callSync('batch_grant_profile_permissions', {
+					profile_name: selectedProfile.name,
+					permission_names: toGrant,
+				});
+				if (!res?.success) {
+					error = res?.error || 'Failed to grant';
+					profilePermApplying = false;
+					return;
+				}
+			}
+			if (toRevoke.length > 0) {
+				const res = await callSync('batch_revoke_profile_permissions', {
+					profile_name: selectedProfile.name,
+					permission_names: toRevoke,
+				});
+				if (!res?.success) {
+					error = res?.error || 'Failed to revoke';
+					profilePermApplying = false;
+					return;
+				}
+			}
+			successMsg = `${toGrant.length} granted, ${toRevoke.length} revoked on profile "${selectedProfile.name}"`;
+			profilePendingGrants = new Set();
+			profilePendingRevokes = new Set();
+			await loadProfilesWithPermissions();
+			const updated = profilesList.find(p => p.name === selectedProfile?.name);
+			if (updated) selectedProfile = updated;
+		} catch (e: any) {
+			error = e?.message || String(e);
+		} finally {
+			profilePermApplying = false;
 		}
 	}
 
@@ -732,6 +844,169 @@
 			{/if}
 		</div>
 
+	<!-- Profiles View -->
+	{:else if view === 'profiles'}
+		<button onclick={() => { view = 'users'; selectedProfile = null; }} class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1">
+			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+			Back to users
+		</button>
+
+		<div class="flex gap-5">
+			<!-- Profile list sidebar -->
+			<div class="w-56 flex-shrink-0">
+				<h2 class="text-lg font-semibold text-gray-900 mb-3">Profiles</h2>
+				{#if profilesLoading}
+					<div class="flex items-center gap-2 text-gray-400 text-sm py-4">
+						<div class="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+						Loading...
+					</div>
+				{:else}
+					<div class="space-y-1">
+						{#each profilesList as profile}
+							<button
+								onclick={() => selectProfile(profile)}
+								class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors {selectedProfile?.name === profile.name ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}"
+							>
+								<div class="font-medium">{profile.name}</div>
+								<div class="text-xs text-gray-400 mt-0.5">{profile.user_count} user{profile.user_count !== 1 ? 's' : ''} &middot; {(profile.allowed_to ?? []).length + (profile.extra_permissions ?? []).length} ops</div>
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Profile detail -->
+			<div class="flex-1 min-w-0">
+				{#if selectedProfile}
+					<div class="rounded-lg border border-gray-200 bg-white">
+						<div class="px-5 py-4 border-b border-gray-200">
+							<h3 class="text-lg font-semibold text-gray-900">{selectedProfile.name}</h3>
+							{#if selectedProfile.description}
+								<p class="text-sm text-gray-500 mt-0.5">{selectedProfile.description}</p>
+							{/if}
+						</div>
+
+						<!-- Built-in operations (from allowed_to, not editable) -->
+						<div class="px-5 py-3 border-b border-gray-100">
+							<h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Built-in Operations ({(selectedProfile.allowed_to ?? []).length})</h4>
+							{#if (selectedProfile.allowed_to ?? []).length === 0}
+								<p class="text-xs text-gray-400 italic">None (observer profile)</p>
+							{:else}
+								<div class="flex flex-wrap gap-1">
+									{#each selectedProfile.allowed_to ?? [] as op}
+										<code class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">{op}</code>
+									{/each}
+								</div>
+							{/if}
+						</div>
+
+						<!-- Extra permissions (editable) -->
+						<div class="px-5 py-3 border-b border-gray-200">
+							<div class="flex items-center justify-between mb-2">
+								<h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Extra Permissions ({(selectedProfile.extra_permissions ?? []).length})</h4>
+								{#if profilePendingGrants.size > 0 || profilePendingRevokes.size > 0}
+									<div class="flex items-center gap-2">
+										<span class="text-xs text-gray-500">
+											{#if profilePendingGrants.size > 0}<span class="text-green-600 font-medium">+{profilePendingGrants.size}</span>{/if}
+											{#if profilePendingGrants.size > 0 && profilePendingRevokes.size > 0}&nbsp;/&nbsp;{/if}
+											{#if profilePendingRevokes.size > 0}<span class="text-red-600 font-medium">-{profilePendingRevokes.size}</span>{/if}
+										</span>
+										<button onclick={() => { profilePendingGrants = new Set(); profilePendingRevokes = new Set(); }} class="text-xs text-gray-500 hover:text-gray-700">Discard</button>
+										<button
+											onclick={applyProfilePermChanges}
+											disabled={profilePermApplying}
+											class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-900 text-white rounded-lg hover:bg-black disabled:opacity-40"
+										>
+											{#if profilePermApplying}
+												<div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+											{/if}
+											Apply
+										</button>
+									</div>
+								{/if}
+							</div>
+							{#if (selectedProfile.extra_permissions ?? []).length > 0}
+								<div class="flex flex-wrap gap-1 mb-2">
+									{#each selectedProfile.extra_permissions ?? [] as perm}
+										<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+											{perm}
+											<button onclick={() => toggleProfilePerm(perm)} class="ml-0.5 opacity-60 hover:opacity-100" title="Revoke">&times;</button>
+										</span>
+									{/each}
+								</div>
+							{:else if profilePendingGrants.size === 0}
+								<p class="text-xs text-gray-400 italic mb-2">No extra permissions. Use the filter below to add some.</p>
+							{/if}
+						</div>
+
+						<!-- Permission catalog filter -->
+						<div class="px-5 py-3">
+							<input
+								type="text"
+								bind:value={profilePermFilter}
+								placeholder="Search permissions to add or remove..."
+								class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none mb-2"
+							/>
+
+							{#if profilePermFilter.trim()}
+								{@const q = profilePermFilter.trim().toLowerCase()}
+								{@const filtered = allOperations.filter(op =>
+									op.name.toLowerCase().includes(q) ||
+									op.category.toLowerCase().includes(q) ||
+									op.description.toLowerCase().includes(q)
+								)}
+								<div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+									{#each filtered.slice(0, 30) as op}
+										{@const state = profilePermState(op.name)}
+										{@const checked = isProfilePermChecked(op.name)}
+										{@const isBuiltIn = (selectedProfile.allowed_to ?? []).includes(op.name)}
+										<label
+											class="flex items-start gap-2 px-3 py-2 border-b border-gray-100 last:border-b-0 transition-colors
+												{state === 'pending-grant' ? 'bg-green-50' : state === 'pending-revoke' ? 'bg-red-50' : ''}
+												{isBuiltIn ? 'opacity-50 cursor-default' : 'hover:bg-gray-50 cursor-pointer'}"
+										>
+											<input
+												type="checkbox"
+												checked={checked || isBuiltIn}
+												disabled={isBuiltIn}
+												onchange={() => { if (!isBuiltIn) toggleProfilePerm(op.name); }}
+												class="mt-0.5 h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+											/>
+											<div class="flex-1 min-w-0">
+												<div class="flex items-center gap-2">
+													<code class="text-xs font-medium text-gray-800">{op.name}</code>
+													{#if state === 'pending-grant'}
+														<span class="px-1 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">WILL GRANT</span>
+													{:else if state === 'pending-revoke'}
+														<span class="px-1 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">WILL REVOKE</span>
+													{:else if isBuiltIn}
+														<span class="px-1 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-400">BUILT-IN</span>
+													{:else if state === 'granted'}
+														<span class="px-1 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">EXTRA</span>
+													{/if}
+												</div>
+												<p class="text-xs text-gray-400 mt-0.5">{op.description}</p>
+											</div>
+										</label>
+									{/each}
+									{#if filtered.length === 0}
+										<div class="px-3 py-4 text-center text-xs text-gray-400">No matching permissions</div>
+									{/if}
+									{#if filtered.length > 30}
+										<div class="px-3 py-2 text-center text-xs text-gray-400">Showing first 30 of {filtered.length} results — refine your search</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					</div>
+				{:else}
+					<div class="flex items-center justify-center py-16 text-gray-400 text-sm">
+						Select a profile from the list to manage its permissions
+					</div>
+				{/if}
+			</div>
+		</div>
+
 	<!-- Users List View (default) -->
 	{:else}
 		<div class="rounded-lg border border-gray-200 bg-white">
@@ -745,19 +1020,26 @@
 						class="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
 					/>
 				</div>
-				<button
-					onclick={loadUsers}
-					disabled={loading}
-					class="ml-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-				>
-					{#if loading}
-						<div class="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-						Loading...
-					{:else}
-						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-						Refresh
-					{/if}
-				</button>
+			<button
+				onclick={() => { view = 'profiles'; loadProfilesWithPermissions(); }}
+				class="ml-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
+			>
+				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+				Manage Profiles
+			</button>
+			<button
+				onclick={loadUsers}
+				disabled={loading}
+				class="ml-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+			>
+				{#if loading}
+					<div class="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+					Loading...
+				{:else}
+					<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+					Refresh
+				{/if}
+			</button>
 			</div>
 
 			<!-- Content -->

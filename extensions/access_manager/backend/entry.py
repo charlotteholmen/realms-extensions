@@ -124,6 +124,13 @@ def list_departments(args) -> str:
             except Exception:
                 pass
 
+            permissions = []
+            try:
+                for perm in dept.permissions:
+                    permissions.append(perm.name)
+            except Exception:
+                pass
+
             depts.append({
                 "name": dept.name,
                 "description": dept.description or "",
@@ -132,6 +139,7 @@ def list_departments(args) -> str:
                 "member_count": len(members),
                 "members": members,
                 "extensions": extensions,
+                "permissions": permissions,
             })
 
         return json.dumps({"success": True, "data": {"departments": depts, "total": len(depts)}})
@@ -308,6 +316,195 @@ def remove_department_member(args) -> str:
         return json.dumps({"success": False, "error": str(e)})
     except Exception as e:
         logger.error(f"remove_department_member error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Department Permission Management
+# ---------------------------------------------------------------------------
+
+def get_department_permissions(args) -> str:
+    """Returns all permissions attached to a department."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_VIEW)
+
+        dept_name = args_dict.get("department")
+        if not dept_name:
+            return json.dumps({"success": False, "error": "department is required"})
+
+        dept = Department[dept_name]
+        if not dept:
+            return json.dumps({"success": False, "error": f"Department '{dept_name}' not found"})
+
+        permissions = []
+        for p in dept.permissions:
+            permissions.append({
+                "name": p.name,
+                "description": p.description or "",
+                "category": p.category or "",
+            })
+
+        return json.dumps({
+            "success": True,
+            "data": {"department": dept_name, "permissions": permissions},
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"get_department_permissions error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def grant_department_permission(args) -> str:
+    """Grants a permission to a department."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_GRANT)
+
+        dept_name = args_dict.get("department")
+        permission_name = args_dict.get("permission_name")
+        if not dept_name or not permission_name:
+            return json.dumps({"success": False, "error": "department and permission_name are required"})
+
+        dept = Department[dept_name]
+        if not dept:
+            return json.dumps({"success": False, "error": f"Department '{dept_name}' not found"})
+
+        perm = Permission[permission_name]
+        if not perm:
+            perm = Permission(name=permission_name)
+
+        for existing in dept.permissions:
+            if existing.name == permission_name:
+                return json.dumps({"success": False, "error": f"Permission '{permission_name}' already granted to department '{dept_name}'"})
+
+        dept.permissions.add(perm)
+        logger.info(f"Permission '{permission_name}' granted to department '{dept_name}' by {_get_caller_principal()}")
+        return json.dumps({"success": True, "data": {"message": f"Permission '{permission_name}' granted to department '{dept_name}'"}})
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"grant_department_permission error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def revoke_department_permission(args) -> str:
+    """Revokes a permission from a department."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_REVOKE)
+
+        dept_name = args_dict.get("department")
+        permission_name = args_dict.get("permission_name")
+        if not dept_name or not permission_name:
+            return json.dumps({"success": False, "error": "department and permission_name are required"})
+
+        dept = Department[dept_name]
+        if not dept:
+            return json.dumps({"success": False, "error": f"Department '{dept_name}' not found"})
+
+        target_perm = None
+        for p in dept.permissions:
+            if p.name == permission_name:
+                target_perm = p
+                break
+
+        if not target_perm:
+            return json.dumps({"success": False, "error": f"Permission '{permission_name}' not found on department '{dept_name}'"})
+
+        dept.permissions.remove(target_perm)
+        logger.info(f"Permission '{permission_name}' revoked from department '{dept_name}' by {_get_caller_principal()}")
+        return json.dumps({"success": True, "data": {"message": f"Permission '{permission_name}' revoked from department '{dept_name}'"}})
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"revoke_department_permission error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def batch_grant_department_permissions(args) -> str:
+    """Grant multiple permissions to a department at once."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_GRANT)
+
+        dept_name = args_dict.get("department")
+        permission_names = args_dict.get("permission_names", [])
+        if not dept_name or not permission_names:
+            return json.dumps({"success": False, "error": "department and permission_names are required"})
+
+        dept = Department[dept_name]
+        if not dept:
+            return json.dumps({"success": False, "error": f"Department '{dept_name}' not found"})
+
+        has_all = _is_allowed(caller, Operations.ALL)
+        existing_names = {p.name for p in dept.permissions}
+
+        granted = 0
+        skipped = 0
+        for perm_name in permission_names:
+            if perm_name in existing_names:
+                skipped += 1
+                continue
+            if not has_all and not _is_allowed(caller, perm_name):
+                skipped += 1
+                continue
+            perm = Permission[perm_name]
+            if not perm:
+                perm = Permission(name=perm_name)
+            dept.permissions.add(perm)
+            granted += 1
+
+        logger.info(f"Batch grant to department '{dept_name}': {granted} granted, {skipped} skipped by {_get_caller_principal()}")
+        return json.dumps({"success": True, "data": {"department": dept_name, "granted": granted, "skipped": skipped}})
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"batch_grant_department_permissions error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def batch_revoke_department_permissions(args) -> str:
+    """Revoke multiple permissions from a department at once."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_REVOKE)
+
+        dept_name = args_dict.get("department")
+        permission_names = args_dict.get("permission_names", [])
+        if not dept_name or not permission_names:
+            return json.dumps({"success": False, "error": "department and permission_names are required"})
+
+        dept = Department[dept_name]
+        if not dept:
+            return json.dumps({"success": False, "error": f"Department '{dept_name}' not found"})
+
+        revoked = 0
+        skipped = 0
+        for perm_name in permission_names:
+            target_perm = None
+            for p in dept.permissions:
+                if p.name == perm_name:
+                    target_perm = p
+                    break
+            if not target_perm:
+                skipped += 1
+                continue
+            dept.permissions.remove(target_perm)
+            revoked += 1
+
+        logger.info(f"Batch revoke from department '{dept_name}': {revoked} revoked, {skipped} skipped by {_get_caller_principal()}")
+        return json.dumps({"success": True, "data": {"department": dept_name, "revoked": revoked, "skipped": skipped}})
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"batch_revoke_department_permissions error: {e}\n{traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})
 
 
@@ -788,6 +985,12 @@ EXTENSION_FUNCTIONS = {
     "delete_department": delete_department,
     "add_department_member": add_department_member,
     "remove_department_member": remove_department_member,
+    # Department permissions
+    "get_department_permissions": get_department_permissions,
+    "grant_department_permission": grant_department_permission,
+    "revoke_department_permission": revoke_department_permission,
+    "batch_grant_department_permissions": batch_grant_department_permissions,
+    "batch_revoke_department_permissions": batch_revoke_department_permissions,
     # Extension access
     "list_extensions": list_extensions,
     "grant_extension_to_user": grant_extension_to_user,

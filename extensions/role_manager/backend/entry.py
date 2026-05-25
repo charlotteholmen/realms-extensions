@@ -98,6 +98,13 @@ def _get_user_effective_operations(user: User) -> list:
                     ops.add(perm.name)
     except Exception:
         pass
+    try:
+        for department in user.departments:
+            for perm in department.permissions:
+                if perm.name:
+                    ops.add(perm.name)
+    except Exception:
+        pass
     return sorted(ops)
 
 
@@ -756,6 +763,271 @@ def batch_revoke_permissions(args) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Profile-level permission management
+# ---------------------------------------------------------------------------
+
+def list_profiles_with_permissions(args) -> str:
+    """List all profiles with their allowed_to ops and attached Permission entities."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_VIEW)
+
+        result = []
+        for profile in UserProfile.instances():
+            extra_permissions = []
+            try:
+                for perm in profile.permissions:
+                    extra_permissions.append(perm.name)
+            except Exception:
+                pass
+
+            user_count = 0
+            try:
+                user_count = len(list(profile.users))
+            except Exception:
+                pass
+
+            result.append({
+                "name": profile.name,
+                "description": profile.description or "",
+                "allowed_to": [op for op in str(profile.allowed_to or "").split(OPERATIONS_SEPARATOR) if op],
+                "extra_permissions": extra_permissions,
+                "user_count": user_count,
+            })
+
+        return json.dumps({
+            "success": True,
+            "data": {"profiles": result, "total": len(result)},
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"list_profiles_with_permissions error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def grant_profile_permission(args) -> str:
+    """Attach a fine-grained Permission entity to a profile.
+
+    Enforces that the caller holds the permission they are granting.
+    """
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_GRANT)
+
+        profile_name = args_dict.get("profile_name")
+        permission_name = args_dict.get("permission_name")
+        if not profile_name or not permission_name:
+            return json.dumps({"success": False, "error": "profile_name and permission_name are required"})
+
+        if not _is_allowed(caller, Operations.ALL) and not _is_allowed(caller, permission_name):
+            return json.dumps({"success": False, "error": f"Cannot grant '{permission_name}' — you don't hold this permission"})
+
+        profile = UserProfile[profile_name]
+        if not profile:
+            return json.dumps({"success": False, "error": f"Profile '{profile_name}' not found"})
+
+        try:
+            for perm in profile.permissions:
+                if perm.name == permission_name:
+                    return json.dumps({"success": False, "error": f"Profile already has permission '{permission_name}'"})
+        except Exception:
+            pass
+
+        perm = Permission[permission_name]
+        if not perm:
+            perm = Permission(name=permission_name)
+        profile.permissions.add(perm)
+        logger.info(f"Permission '{permission_name}' granted to profile '{profile_name}' by {_get_caller_principal()}")
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "message": f"Permission '{permission_name}' granted to profile '{profile_name}'",
+                "profile_name": profile_name,
+                "permission": permission_name,
+            },
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"grant_profile_permission error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def revoke_profile_permission(args) -> str:
+    """Remove a fine-grained Permission entity from a profile."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_REVOKE)
+
+        profile_name = args_dict.get("profile_name")
+        permission_name = args_dict.get("permission_name")
+        if not profile_name or not permission_name:
+            return json.dumps({"success": False, "error": "profile_name and permission_name are required"})
+
+        profile = UserProfile[profile_name]
+        if not profile:
+            return json.dumps({"success": False, "error": f"Profile '{profile_name}' not found"})
+
+        found = None
+        try:
+            for perm in profile.permissions:
+                if perm.name == permission_name:
+                    found = perm
+                    break
+        except Exception:
+            pass
+
+        if not found:
+            return json.dumps({"success": False, "error": f"Profile does not have permission '{permission_name}'"})
+
+        profile.permissions.remove(found)
+        found.delete()
+        logger.info(f"Permission '{permission_name}' revoked from profile '{profile_name}' by {_get_caller_principal()}")
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "message": f"Permission '{permission_name}' revoked from profile '{profile_name}'",
+                "profile_name": profile_name,
+                "permission": permission_name,
+            },
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"revoke_profile_permission error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def batch_grant_profile_permissions(args) -> str:
+    """Grant multiple permissions to a profile at once.
+
+    Enforces that the caller can only grant permissions they themselves hold
+    (or all permissions if they have the 'all' operation).
+    """
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_GRANT)
+
+        profile_name = args_dict.get("profile_name")
+        permission_names = args_dict.get("permission_names", [])
+        if not profile_name or not permission_names:
+            return json.dumps({"success": False, "error": "profile_name and permission_names are required"})
+
+        profile = UserProfile[profile_name]
+        if not profile:
+            return json.dumps({"success": False, "error": f"Profile '{profile_name}' not found"})
+
+        caller_ops = set(_get_user_effective_operations(caller))
+        caller_has_all = Operations.ALL in caller_ops
+        if not caller_has_all:
+            forbidden = [p for p in permission_names if p not in caller_ops]
+            if forbidden:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Cannot grant permissions you don't hold: {', '.join(forbidden)}",
+                })
+
+        existing = set()
+        try:
+            for perm in profile.permissions:
+                if perm.name:
+                    existing.add(perm.name)
+        except Exception:
+            pass
+
+        granted = []
+        skipped = []
+        for pname in permission_names:
+            if pname in existing:
+                skipped.append(pname)
+                continue
+            perm = Permission[pname]
+            if not perm:
+                perm = Permission(name=pname)
+            profile.permissions.add(perm)
+            granted.append(pname)
+            existing.add(pname)
+
+        caller_principal = _get_caller_principal()
+        if granted:
+            logger.info(f"Permissions {granted} granted to profile '{profile_name}' by {caller_principal}")
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "granted": granted,
+                "skipped": skipped,
+                "message": f"{len(granted)} permission(s) granted, {len(skipped)} already existed",
+            },
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"batch_grant_profile_permissions error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def batch_revoke_profile_permissions(args) -> str:
+    """Revoke multiple permissions from a profile at once."""
+    try:
+        args_dict = _parse_args(args)
+        caller = _get_caller_user()
+        _require_operation(caller, Operations.PERMISSION_REVOKE)
+
+        profile_name = args_dict.get("profile_name")
+        permission_names = args_dict.get("permission_names", [])
+        if not profile_name or not permission_names:
+            return json.dumps({"success": False, "error": "profile_name and permission_names are required"})
+
+        profile = UserProfile[profile_name]
+        if not profile:
+            return json.dumps({"success": False, "error": f"Profile '{profile_name}' not found"})
+
+        perm_map = {}
+        try:
+            for perm in profile.permissions:
+                if perm.name:
+                    perm_map[perm.name] = perm
+        except Exception:
+            pass
+
+        revoked = []
+        not_found = []
+        for pname in permission_names:
+            if pname in perm_map:
+                profile.permissions.remove(perm_map[pname])
+                perm_map[pname].delete()
+                revoked.append(pname)
+            else:
+                not_found.append(pname)
+
+        caller_principal = _get_caller_principal()
+        if revoked:
+            logger.info(f"Permissions {revoked} revoked from profile '{profile_name}' by {caller_principal}")
+
+        return json.dumps({
+            "success": True,
+            "data": {
+                "revoked": revoked,
+                "not_found": not_found,
+                "message": f"{len(revoked)} permission(s) revoked",
+            },
+        })
+    except PermissionError as e:
+        return json.dumps({"success": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"batch_revoke_profile_permissions error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+# ---------------------------------------------------------------------------
 # Extension API registry
 # ---------------------------------------------------------------------------
 
@@ -771,6 +1043,12 @@ EXTENSION_FUNCTIONS = {
     "get_all_operations": get_all_operations,  # also returns caller capabilities
     "batch_grant_permissions": batch_grant_permissions,
     "batch_revoke_permissions": batch_revoke_permissions,
+    # Profile permissions
+    "list_profiles_with_permissions": list_profiles_with_permissions,
+    "grant_profile_permission": grant_profile_permission,
+    "revoke_profile_permission": revoke_profile_permission,
+    "batch_grant_profile_permissions": batch_grant_profile_permissions,
+    "batch_revoke_profile_permissions": batch_revoke_profile_permissions,
 }
 
 

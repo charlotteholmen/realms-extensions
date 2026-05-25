@@ -21,6 +21,13 @@
 	let newDeptHead = $state('');
 	let expandedDept: string | null = $state(null);
 	let addMemberPrincipal = $state('');
+	let deptPermissions: Record<string, string[]> = $state({});
+	let deptPermLoading: string | null = $state(null);
+	let deptPermFilter = $state('');
+	let deptPendingGrants: Set<string> = $state(new Set());
+	let deptPendingRevokes: Set<string> = $state(new Set());
+	let deptPermApplying = $state(false);
+	let allOperations: any[] = $state([]);
 
 	// Extensions
 	let extensions: any[] = $state([]);
@@ -132,6 +139,96 @@
 		}
 	}
 
+	async function loadDeptPermissions(deptName: string) {
+		deptPermLoading = deptName;
+		try {
+			const res = await callExt('get_department_permissions', { department: deptName });
+			if (res?.success) {
+				deptPermissions = { ...deptPermissions, [deptName]: (res.data?.permissions ?? []).map((p: any) => p.name) };
+			}
+		} catch (e: any) {
+			addToast(e?.message || 'Failed to load permissions', 'error');
+		} finally {
+			deptPermLoading = null;
+		}
+	}
+
+	async function loadAllOperations() {
+		try {
+			const res = await ctx.callSync('get_all_operations');
+			if (res?.success) {
+				allOperations = res.data?.operations ?? [];
+			}
+		} catch {
+			// If role_manager isn't available, we'll just show the filter without catalog
+		}
+	}
+
+	async function applyDeptPermChanges(deptName: string) {
+		deptPermApplying = true;
+		try {
+			const toGrant = [...deptPendingGrants];
+			const toRevoke = [...deptPendingRevokes];
+			if (toGrant.length > 0) {
+				const res = await callExt('batch_grant_department_permissions', {
+					department: deptName,
+					permission_names: toGrant,
+				});
+				if (!res?.success) {
+					addToast(res?.error || 'Failed to grant', 'error');
+					deptPermApplying = false;
+					return;
+				}
+			}
+			if (toRevoke.length > 0) {
+				const res = await callExt('batch_revoke_department_permissions', {
+					department: deptName,
+					permission_names: toRevoke,
+				});
+				if (!res?.success) {
+					addToast(res?.error || 'Failed to revoke', 'error');
+					deptPermApplying = false;
+					return;
+				}
+			}
+			addToast(`${toGrant.length} granted, ${toRevoke.length} revoked`);
+			deptPendingGrants = new Set();
+			deptPendingRevokes = new Set();
+			await loadDeptPermissions(deptName);
+		} catch (e: any) {
+			addToast(e?.message || 'Error', 'error');
+		} finally {
+			deptPermApplying = false;
+		}
+	}
+
+	function toggleDeptPerm(opName: string, deptName: string) {
+		const current = deptPermissions[deptName] ?? [];
+		const isGranted = current.includes(opName);
+		if (isGranted) {
+			if (deptPendingRevokes.has(opName)) {
+				deptPendingRevokes = new Set([...deptPendingRevokes].filter(n => n !== opName));
+			} else {
+				deptPendingRevokes = new Set([...deptPendingRevokes, opName]);
+				deptPendingGrants = new Set([...deptPendingGrants].filter(n => n !== opName));
+			}
+		} else {
+			if (deptPendingGrants.has(opName)) {
+				deptPendingGrants = new Set([...deptPendingGrants].filter(n => n !== opName));
+			} else {
+				deptPendingGrants = new Set([...deptPendingGrants, opName]);
+				deptPendingRevokes = new Set([...deptPendingRevokes].filter(n => n !== opName));
+			}
+		}
+	}
+
+	function isDeptPermChecked(opName: string, deptName: string): boolean {
+		const current = deptPermissions[deptName] ?? [];
+		if (deptPendingGrants.has(opName)) return true;
+		if (deptPendingRevokes.has(opName)) return false;
+		return current.includes(opName);
+	}
+
 	// --- Extensions ---
 	async function loadExtensions() {
 		extLoading = true;
@@ -238,7 +335,7 @@
 	}
 
 	$effect(() => {
-		if (activeTab === 'departments') loadDepartments();
+		if (activeTab === 'departments') { loadDepartments(); loadAllOperations(); }
 		else if (activeTab === 'extensions') loadExtensions();
 		else if (activeTab === 'users') loadUsers();
 	});
@@ -330,7 +427,11 @@
 				{#each departments as dept (dept.name)}
 					<div class="border border-gray-200 rounded-xl overflow-hidden">
 						<button
-							onclick={() => expandedDept = expandedDept === dept.name ? null : dept.name}
+							onclick={() => {
+								const next = expandedDept === dept.name ? null : dept.name;
+								expandedDept = next;
+								if (next) { loadDeptPermissions(next); deptPermFilter = ''; deptPendingGrants = new Set(); deptPendingRevokes = new Set(); }
+							}}
 							class="w-full px-4 py-3 flex items-center justify-between bg-white hover:bg-gray-50 text-left"
 						>
 							<div>
@@ -353,6 +454,69 @@
 								{#if dept.extensions.length > 0}
 									<div class="text-sm"><span class="font-medium text-gray-700">Extensions:</span> {dept.extensions.join(', ')}</div>
 								{/if}
+
+								<!-- Permissions -->
+								<div class="mt-3 pt-3 border-t border-gray-200">
+									<div class="flex items-center justify-between mb-2">
+										<div class="text-sm font-medium text-gray-700">Permissions ({(deptPermissions[dept.name] ?? []).length})</div>
+										{#if deptPendingGrants.size > 0 || deptPendingRevokes.size > 0}
+											<div class="flex items-center gap-2">
+												<span class="text-xs text-gray-500">
+													{#if deptPendingGrants.size > 0}<span class="text-green-600 font-medium">+{deptPendingGrants.size}</span>{/if}
+													{#if deptPendingGrants.size > 0 && deptPendingRevokes.size > 0}&nbsp;/&nbsp;{/if}
+													{#if deptPendingRevokes.size > 0}<span class="text-red-600 font-medium">-{deptPendingRevokes.size}</span>{/if}
+												</span>
+												<button onclick={() => { deptPendingGrants = new Set(); deptPendingRevokes = new Set(); }} class="text-xs text-gray-500 hover:text-gray-700">Discard</button>
+												<button onclick={() => applyDeptPermChanges(dept.name)} disabled={deptPermApplying} class="px-2 py-1 text-xs bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50">Apply</button>
+											</div>
+										{/if}
+									</div>
+
+									{#if (deptPermissions[dept.name] ?? []).length > 0}
+										<div class="flex flex-wrap gap-1 mb-2">
+											{#each deptPermissions[dept.name] ?? [] as perm}
+												<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full font-medium">
+													{perm}
+													<button onclick={() => toggleDeptPerm(perm, dept.name)} class="text-amber-400 hover:text-red-600" title="Revoke">&times;</button>
+												</span>
+											{/each}
+										</div>
+									{/if}
+
+									<input
+										type="text"
+										bind:value={deptPermFilter}
+										placeholder="Search permissions to add..."
+										class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm mb-2"
+									/>
+
+									{#if deptPermFilter.trim()}
+										{@const q = deptPermFilter.trim().toLowerCase()}
+										{@const filtered = allOperations.filter((op: any) =>
+											op.name.toLowerCase().includes(q) ||
+											(op.category || '').toLowerCase().includes(q) ||
+											(op.description || '').toLowerCase().includes(q)
+										).slice(0, 15)}
+										<div class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+											{#each filtered as op}
+												{@const checked = isDeptPermChecked(op.name, dept.name)}
+												<label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0">
+													<input
+														type="checkbox"
+														checked={checked}
+														onchange={() => toggleDeptPerm(op.name, dept.name)}
+														class="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+													/>
+													<code class="text-xs font-medium text-gray-800">{op.name}</code>
+													<span class="text-xs text-gray-400 truncate">{op.description || ''}</span>
+												</label>
+											{/each}
+											{#if filtered.length === 0}
+												<div class="px-3 py-2 text-xs text-gray-400">No matching permissions</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
 
 								<div class="text-sm font-medium text-gray-700 mt-2">Members:</div>
 								{#if dept.members.length === 0}
