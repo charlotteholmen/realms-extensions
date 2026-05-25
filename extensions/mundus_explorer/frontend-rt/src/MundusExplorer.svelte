@@ -21,7 +21,7 @@
 		loading = true;
 		error = '';
 		try {
-			data = await ctx.call('get_mundus_realms');
+			data = await ctx.callSync('get_mundus_realms');
 			// If registries exist, also try async fetch for live realm data
 			if (data?.registries?.length > 0) {
 				try {
