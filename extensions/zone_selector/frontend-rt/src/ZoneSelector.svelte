@@ -16,19 +16,23 @@
 	const H3_RESOLUTION = 6;
 	const INFLUENCE_RINGS = 3;
 
-	async function callExt(fn: string, args: Record<string, unknown> = {}) {
-		return await ctx.callSync(fn, args);
-	}
-
 	async function loadAllZones() {
 		loading = true;
 		error = '';
 		try {
-			const res = await callExt('get_all_zones', {});
-			if (res?.success) {
-				zones = res.data || [];
+			const raw = await ctx.backend.get_zones(BigInt(H3_RESOLUTION));
+			const res = typeof raw === 'string' ? JSON.parse(raw) : raw;
+			if (res?.success && res.zones) {
+				zones = res.zones.map((z: any) => ({
+					latitude: z.center_lat,
+					longitude: z.center_lng,
+					name: z.location_name || 'Zone',
+					h3_index: z.h3_index,
+					user_count: z.user_count,
+				}));
 			} else {
-				zones = res?.data ?? (Array.isArray(res) ? res : []);
+				zones = [];
+				if (res?.error) error = res.error;
 			}
 		} catch (e: any) {
 			error = e?.message || String(e);
