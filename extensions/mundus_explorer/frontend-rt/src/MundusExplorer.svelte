@@ -21,11 +21,12 @@
 		loading = true;
 		error = '';
 		try {
-			data = await ctx.callSync('get_mundus_realms');
-			// If registries exist, also try async fetch for live realm data
+			const syncResponse: any = await ctx.callSync('get_mundus_realms');
+			data = syncResponse?.data ?? syncResponse;
 			if (data?.registries?.length > 0) {
 				try {
-					const liveData = await ctx.callAsync('fetch_realms_from_registry');
+					const asyncResponse: any = await ctx.callAsync('fetch_realms_from_registry');
+					const liveData = asyncResponse?.data ?? asyncResponse;
 					if (liveData?.realms?.length > 0) {
 						data = { ...data, realms: liveData.realms, errors: liveData.errors };
 					}
