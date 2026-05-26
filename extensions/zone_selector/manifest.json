@@ -1,7 +1,7 @@
 {
   "name": "zone_selector",
   "version": "1.0.1",
-  "description": "Allow users to set their zones of influence via geolocation or map selection",
+  "description": "Display the zones where the realm is operative on an interactive map",
   "permissions": [],
   "entry_points": [
     "get_my_zones",
