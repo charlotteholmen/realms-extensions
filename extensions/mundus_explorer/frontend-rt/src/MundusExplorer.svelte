@@ -49,9 +49,21 @@
 		return '';
 	}
 
+	function realmLogoUrl(realm: RealmInfo): string {
+		if (!realm.logo) return '';
+		if (realm.logo.startsWith('http')) return realm.logo;
+		const base = realmUrl(realm);
+		if (base) return `${base}/custom/${realm.logo}`;
+		return '';
+	}
+
 	function formatDate(ts: number): string {
 		if (!ts) return '';
 		return new Date(ts * 1000).toLocaleDateString();
+	}
+
+	function otherRealms(realms: RealmInfo[]): RealmInfo[] {
+		return (realms || []).filter((r) => !r.is_self);
 	}
 </script>
 
@@ -101,9 +113,9 @@
 
 		<div class="mb-4 flex items-center justify-between">
 			<p class="text-sm text-gray-500 dark:text-gray-400">
-				{data.realms?.length || 0} realm{(data.realms?.length || 0) !== 1 ? 's' : ''} in this mundus
-				{#if data.registry_count}
-					&middot; {data.registry_count} registr{data.registry_count !== 1 ? 'ies' : 'y'}
+				{otherRealms(data.realms).length} other realm{otherRealms(data.realms).length !== 1 ? 's' : ''} in mundus
+				{#if data.registries?.length > 0}
+					with registry <span class="font-mono text-[11px]">{data.registries[0].principal_id}</span>
 				{/if}
 			</p>
 			<button
@@ -114,19 +126,14 @@
 			</button>
 		</div>
 
-		{#if data.realms && data.realms.length > 0}
+		{#if otherRealms(data.realms).length > 0}
 			<div class="grid gap-4">
-				{#each data.realms as realm (realm.id)}
-					<div class="relative rounded-lg border {realm.is_self ? 'border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-900/10' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'} p-4 transition-shadow hover:shadow-md">
-						{#if realm.is_self}
-							<span class="absolute top-2 right-3 text-[10px] font-medium uppercase tracking-wide text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-800 px-2 py-0.5 rounded-full">
-								You are here
-							</span>
-						{/if}
+				{#each otherRealms(data.realms) as realm (realm.id)}
+					<div class="relative rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 p-4 transition-shadow hover:shadow-md">
 						<div class="flex items-start gap-4">
 							<div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-								{#if realm.logo}
-									<img src={realm.logo} alt="" class="w-full h-full object-cover" />
+								{#if realmLogoUrl(realm)}
+									<img src={realmLogoUrl(realm)} alt="" class="w-full h-full object-cover" />
 								{:else}
 									<svg class="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
@@ -156,7 +163,7 @@
 									{/if}
 								</div>
 							</div>
-							{#if realmUrl(realm) && !realm.is_self}
+							{#if realmUrl(realm)}
 								<a
 									href={realmUrl(realm)}
 									target="_blank"
