@@ -1,8 +1,5 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import * as leafletLib from 'leaflet';
-	import * as h3Lib from 'h3-js';
-	import leafletCss from 'leaflet/dist/leaflet.css?inline';
 
 	let { ctx }: { ctx: any } = $props();
 
@@ -20,6 +17,26 @@
 	let landLayer: any = null;
 	let circleLayer: any = null;
 	let zoneLayer: any = null;
+
+	async function loadLeaflet() {
+		if (L) return L;
+		L = await import('https://esm.sh/leaflet@1.9.4');
+		L = L.default ?? L;
+		if (!document.querySelector('link[data-leaflet-css]')) {
+			const link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.href = 'https://esm.sh/leaflet@1.9.4/dist/leaflet.css';
+			link.setAttribute('data-leaflet-css', '');
+			document.head.appendChild(link);
+		}
+		return L;
+	}
+
+	async function loadH3() {
+		if (h3) return h3;
+		h3 = await import('https://esm.sh/h3-js@4.2.1');
+		return h3;
+	}
 
 	// Table pagination
 	let tablePage = $state(0);
@@ -84,15 +101,8 @@
 	async function initMap() {
 		if (!mapContainer || mapInstance) return;
 
-		L = leafletLib.default ?? leafletLib;
-		h3 = h3Lib;
-
-		if (!document.querySelector('style[data-leaflet-css]')) {
-			const style = document.createElement('style');
-			style.setAttribute('data-leaflet-css', '');
-			style.textContent = leafletCss;
-			document.head.appendChild(style);
-		}
+		L = await loadLeaflet();
+		h3 = await loadH3();
 
 		mapInstance = L.map(mapContainer).setView([20, 0], 2);
 
