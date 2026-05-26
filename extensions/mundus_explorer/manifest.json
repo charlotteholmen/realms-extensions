@@ -1,0 +1,19 @@
+{
+  "name": "mundus_explorer",
+  "version": "0.1.0",
+  "description": "View other realms connected to the same mundus registry",
+  "author": "Realms Team",
+  "permissions": [],
+  "profiles": [
+    "member",
+    "admin"
+  ],
+  "categories": [
+    "mundus"
+  ],
+  "icon": "world",
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Realms Network"
+  }
+}
