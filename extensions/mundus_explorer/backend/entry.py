@@ -8,8 +8,7 @@ registered in the same mundus (federation of realms).
 import json
 import traceback
 
-from basilisk import Principal, ic
-from _cdk import Record, Service, Vec, float64, nat64, service_query, text
+from basilisk import ic
 from ic_python_logging import get_logger
 
 logger = get_logger("extensions.mundus_explorer")
@@ -19,23 +18,6 @@ _REGISTRY_BY_NETWORK = {
     "staging": "7wzxh-wyaaa-aaaau-aggyq-cai",
     "demo": "rhw4p-gqaaa-aaaac-qbw7q-cai",
 }
-
-
-class RegistryRealmRecord(Record):
-    id: text
-    name: text
-    url: text
-    backend_url: text
-    logo: text
-    users_count: nat64
-    created_at: float64
-    frontend_canister_id: text
-
-
-class RegistryQuery(Service):
-    @service_query
-    def list_realms(self) -> Vec[RegistryRealmRecord]:
-        ...
 
 
 def _ok(data):
@@ -118,6 +100,14 @@ def fetch_realms_from_registry(args: str) -> str:
 
     Called by the frontend after the sync call confirms registries exist.
     """
+    from basilisk import Principal
+    from _cdk import Service, service_query, text
+
+    class RegistryQuery(Service):
+        @service_query
+        def list_realms(self) -> text:
+            ...
+
     try:
         registry_ids = _discover_registry_ids()
         if not registry_ids:
