@@ -44,9 +44,9 @@
 	async function initMap() {
 		if (!mapContainer || mapInstance) return;
 
-		L = await import(/* @vite-ignore */ 'https://esm.sh/leaflet@1.9.4');
+		L = await import('leaflet');
 		try {
-			h3 = await import(/* @vite-ignore */ 'https://esm.sh/h3-js@4.2.1');
+			h3 = await import('h3-js');
 		} catch {
 			h3 = null;
 		}
