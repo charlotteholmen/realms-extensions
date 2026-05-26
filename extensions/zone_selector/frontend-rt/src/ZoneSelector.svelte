@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import * as L from 'leaflet';
+	import * as h3 from 'h3-js';
 
 	let { ctx }: { ctx: any } = $props();
 
@@ -9,8 +11,6 @@
 
 	let mapContainer: HTMLDivElement | undefined = $state();
 	let mapInstance: any = $state(null);
-	let L: any = null;
-	let h3: any = null;
 	let markersLayer: any = null;
 
 	const H3_RESOLUTION = 6;
@@ -44,19 +44,12 @@
 	async function initMap() {
 		if (!mapContainer || mapInstance) return;
 
-		L = await import('leaflet');
-		try {
-			h3 = await import('h3-js');
-		} catch {
-			h3 = null;
-		}
-
 		if (!document.querySelector('link[href*="leaflet"]')) {
 			const link = document.createElement('link');
 			link.rel = 'stylesheet';
 			link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 			document.head.appendChild(link);
-			await new Promise((r) => setTimeout(r, 150));
+			await new Promise((r) => setTimeout(r, 200));
 		}
 
 		mapInstance = L.map(mapContainer, { zoomControl: true }).setView([20, 0], 2);
