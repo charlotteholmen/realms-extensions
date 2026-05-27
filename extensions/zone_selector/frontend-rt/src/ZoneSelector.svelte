@@ -44,7 +44,7 @@
 	}
 
 	async function loadLeaflet() {
-		const base = new URL('.', import.meta.url).href;
+		const base = `${window.location.origin}/ext/${ctx.extensionId}/${ctx.version}/frontend/dist/`;
 		await loadStylesheet(`${base}leaflet.css`);
 		await loadScript(`${base}leaflet.js`);
 		return (window as any).L;
