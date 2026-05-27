@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import * as L from 'leaflet';
-	import * as h3 from 'h3-js';
 
 	let { ctx }: { ctx: any } = $props();
 
@@ -11,10 +9,46 @@
 
 	let mapContainer: HTMLDivElement | undefined = $state();
 	let mapInstance: any = $state(null);
+	let L: any = null;
 	let markersLayer: any = null;
 
 	const H3_RESOLUTION = 6;
-	const INFLUENCE_RINGS = 3;
+
+	function loadScript(src: string): Promise<void> {
+		return new Promise((resolve, reject) => {
+			if (document.querySelector(`script[src="${src}"]`)) {
+				resolve();
+				return;
+			}
+			const script = document.createElement('script');
+			script.src = src;
+			script.onload = () => resolve();
+			script.onerror = () => reject(new Error(`Failed to load ${src}`));
+			document.head.appendChild(script);
+		});
+	}
+
+	function loadStylesheet(href: string): Promise<void> {
+		return new Promise((resolve, reject) => {
+			if (document.querySelector(`link[href="${href}"]`)) {
+				resolve();
+				return;
+			}
+			const link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.href = href;
+			link.onload = () => resolve();
+			link.onerror = () => reject(new Error(`Failed to load ${href}`));
+			document.head.appendChild(link);
+		});
+	}
+
+	async function loadLeaflet() {
+		const base = new URL('.', import.meta.url).href;
+		await loadStylesheet(`${base}leaflet.css`);
+		await loadScript(`${base}leaflet.js`);
+		return (window as any).L;
+	}
 
 	async function loadAllZones() {
 		loading = true;
@@ -44,13 +78,8 @@
 	async function initMap() {
 		if (!mapContainer || mapInstance) return;
 
-		if (!document.querySelector('link[href*="leaflet"]')) {
-			const link = document.createElement('link');
-			link.rel = 'stylesheet';
-			link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-			document.head.appendChild(link);
-			await new Promise((r) => setTimeout(r, 200));
-		}
+		L = await loadLeaflet();
+		if (!L) throw new Error('Leaflet failed to initialize');
 
 		mapInstance = L.map(mapContainer, { zoomControl: true }).setView([20, 0], 2);
 
@@ -81,81 +110,6 @@
 		markersLayer.clearLayers();
 
 		const color = '#3B82F6';
-
-		if (h3) {
-			const hexData: Record<string, { users: number; distance: number; names: string[] }> = {};
-
-			for (const zone of zones) {
-				if (!zone.latitude || !zone.longitude) continue;
-
-				let centerHex: string;
-				try {
-					centerHex = h3.latLngToCell(zone.latitude, zone.longitude, H3_RESOLUTION);
-				} catch {
-					continue;
-				}
-
-				let influenceHexes: string[];
-				try {
-					influenceHexes = h3.gridDisk(centerHex, INFLUENCE_RINGS);
-				} catch {
-					influenceHexes = [centerHex];
-				}
-
-				for (const hexIndex of influenceHexes) {
-					let distance: number;
-					try {
-						distance = h3.gridDistance(centerHex, hexIndex);
-					} catch {
-						distance = hexIndex === centerHex ? 0 : 1;
-					}
-
-					if (!hexData[hexIndex]) {
-						hexData[hexIndex] = { users: 0, distance, names: [] };
-					}
-
-					if (distance < hexData[hexIndex].distance) {
-						hexData[hexIndex].distance = distance;
-					}
-					if (distance === 0) {
-						hexData[hexIndex].users += 1;
-						if (zone.name) hexData[hexIndex].names.push(zone.name);
-					}
-				}
-			}
-
-			for (const [hexIndex, data] of Object.entries(hexData)) {
-				let latLngs: number[][];
-				try {
-					const boundary = h3.cellToBoundary(hexIndex);
-					latLngs = boundary.map((c: number[]) => [c[0], c[1]]);
-				} catch {
-					continue;
-				}
-
-				const isCenter = data.distance === 0;
-				const distanceFactor = 1 - (data.distance / (INFLUENCE_RINGS + 1)) * 0.7;
-				const opacity = isCenter
-					? Math.min(0.35 + data.users * 0.1, 0.65)
-					: Math.max(0.06, 0.12 + distanceFactor * 0.2);
-
-				const hex = L.polygon(latLngs, {
-					color: color,
-					weight: isCenter ? 2 : (data.distance <= 1 ? 1 : 0.6),
-					fillColor: color,
-					fillOpacity: opacity,
-					dashArray: isCenter ? null : (data.distance >= 2 ? '3, 3' : null),
-				}).addTo(markersLayer);
-
-				if (isCenter && data.names.length > 0) {
-					hex.bindPopup(
-						`<div style="font-family:Inter,sans-serif;min-width:140px">` +
-						`<strong style="font-size:13px">${data.names.join(', ')}</strong>` +
-						`</div>`,
-					);
-				}
-			}
-		}
 
 		for (const zone of zones) {
 			if (!zone.latitude || !zone.longitude) continue;
@@ -204,7 +158,13 @@
 	onMount(async () => {
 		await loadAllZones();
 		await tick();
-		if (mapContainer) await initMap();
+		if (mapContainer) {
+			try {
+				await initMap();
+			} catch (e: any) {
+				error = e?.message || String(e);
+			}
+		}
 	});
 </script>
 

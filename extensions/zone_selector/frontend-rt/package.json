@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build"
+    "build": "vite build && cp node_modules/leaflet/dist/leaflet.js node_modules/leaflet/dist/leaflet.css dist/"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
@@ -14,7 +14,6 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
-    "h3-js": "^4.4.0",
     "leaflet": "^1.9.4"
   }
 }
