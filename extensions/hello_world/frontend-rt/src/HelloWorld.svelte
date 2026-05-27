@@ -5,18 +5,27 @@
 	let response = $state('');
 	let loading = $state(false);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	let canSubmit = $derived(!loading && name.trim().length > 0);
 
 	async function greet() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		response = '';
 		try {
 			const result = await ctx.callSync('greet', { name });
 			response = typeof result === 'string' ? result : String(result);
 		} catch (e: any) {
-			error = e?.message ?? String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -69,7 +78,13 @@
 			</div>
 		{/if}
 
-		{#if error}
+		{#if accessDeniedOp}
+			{#if ctx.ui?.AccessDenied}
+				<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+			{:else}
+				<p class="mt-4 text-sm text-gray-500">You need additional permissions to view this page.</p>
+			{/if}
+		{:else if error}
 			<div class="mt-4 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
 				<p class="text-sm text-red-800 dark:text-red-300">{error}</p>
 			</div>

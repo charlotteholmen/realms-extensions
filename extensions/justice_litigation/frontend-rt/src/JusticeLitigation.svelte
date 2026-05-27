@@ -9,6 +9,7 @@
 	let userProfile = $state('member');
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	let principal = $state('');
 	$effect(() => {
@@ -51,6 +52,7 @@
 	async function loadLitigations() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callExt('get_litigations', {
 				user_principal: principal,
@@ -61,7 +63,14 @@
 			totalCount = data?.total_count ?? litigations.length;
 			if (data?.user_profile) userProfile = data.user_profile;
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -238,7 +247,13 @@
 		</button>
 	</div>
 
-	{#if error && !loading}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error && !loading}
 		<div
 			class="mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg text-sm"
 		>

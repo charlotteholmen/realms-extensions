@@ -20,11 +20,13 @@
 	let submitting = $state(false);
 	let submitted = $state(false);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let proposalId = $state('');
 
 	async function submitProposal() {
 		submitting = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const raw = await ctx.backend.extension_sync_call(
 				'voting',
@@ -49,7 +51,14 @@
 				error = res?.error || 'Failed to submit proposal';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			submitting = false;
 		}
@@ -58,6 +67,7 @@
 	function handleClose() {
 		submitted = false;
 		error = '';
+		accessDeniedOp = '';
 		proposalId = '';
 		onclose();
 	}
@@ -150,7 +160,13 @@
 						</p>
 					</div>
 
-					{#if error}
+					{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 						<div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{error}</div>
 					{/if}
 				</div>

@@ -4,6 +4,7 @@
 	let data: any = $state(null);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let lastRefresh = $state('');
 
 	const cn = $derived(ctx?.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' ')));
@@ -11,11 +12,19 @@
 	async function fetchSystemInfo() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			data = await ctx.callSync('get_system_info');
 			lastRefresh = new Date().toLocaleString();
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -106,6 +115,12 @@
 		</div>
 
 	<!-- Error state -->
+	{:else if accessDeniedOp && !data}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
 	{:else if error && !data}
 		<div class="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
 			<p class="text-red-700 dark:text-red-300 font-medium">Error: {error}</p>

@@ -13,6 +13,7 @@
 	let fiscalPeriods: any[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	const categoryColors: Record<string, string> = {
 		cash: '#1E40AF', receivable: '#1D4ED8', equipment: '#2563EB', land: '#3B82F6',
@@ -54,6 +55,7 @@
 	async function loadData() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const [b, l, f, fp] = await Promise.all([
 				loadPaginated('Budget', 100, 'asc'),
@@ -66,7 +68,14 @@
 			funds = f;
 			fiscalPeriods = fp;
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -324,7 +333,13 @@
 		</nav>
 	</div>
 
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-300 mb-6">{error}</div>
 	{/if}
 

@@ -17,6 +17,7 @@
 	let codexes: Codex[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let searchTerm = $state('');
 	let selectedCodex: Codex | null = $state(null);
 	let detailLoading = $state(false);
@@ -40,11 +41,19 @@
 	async function loadCodexes() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callExt('get_all_codexes');
 			codexes = res?.codexes ?? res?.data ?? (Array.isArray(res) ? res : []);
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -53,6 +62,7 @@
 	async function viewCodex(codex: Codex) {
 		detailLoading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const codexId = codex._id || codex.id || codex.name;
 			const res = await callExt('get_codex_details', { codex_id: codexId });
@@ -208,7 +218,13 @@
 		</button>
 	</div>
 
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="error-banner">{error}</div>
 	{/if}
 

@@ -20,6 +20,7 @@
 	let newMessage = $state('');
 	let isLoading = $state(false);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let messagesContainer: HTMLElement | undefined = $state();
 	let suggestions: string[] = $state([]);
 	let isLoadingSuggestions = $state(false);
@@ -165,6 +166,7 @@
 		if (!newMessage.trim()) return;
 
 		error = '';
+		accessDeniedOp = '';
 		messages = [...messages, { text: newMessage, isUser: true }];
 		const messageToSend = newMessage;
 		newMessage = '';
@@ -270,6 +272,7 @@
 
 	function dismissError() {
 		error = '';
+		accessDeniedOp = '';
 	}
 
 	function renderMarkdown(text: string): string {
@@ -412,7 +415,13 @@
 				</div>
 			{/if}
 
-			{#if error}
+			{#if accessDeniedOp}
+				{#if ctx.ui?.AccessDenied}
+					<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+				{:else}
+					<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+				{/if}
+			{:else if error}
 				<div class="error-banner">
 					<span>{error}</span>
 					<button class="error-dismiss" onclick={dismissError} title="Dismiss">&times;</button>

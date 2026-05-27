@@ -8,6 +8,7 @@
 	let proposals: any[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let view: View = $state('list');
 
 	let formTitle = $state('');
@@ -58,6 +59,7 @@
 	async function loadProposals() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callSync('get_proposals');
 			if (res?.success) {
@@ -70,7 +72,14 @@
 				error = res?.error || 'Failed to load proposals';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -108,6 +117,7 @@
 	async function castVote(proposalId: string, vote: string) {
 		votingInProgress = proposalId + vote;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const voter = ctx.principal || 'anonymous';
 			const res = await callSync('cast_vote', { proposal_id: proposalId, vote, voter });
@@ -122,7 +132,14 @@
 				error = res?.error || 'Failed to cast vote';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			votingInProgress = '';
 		}
@@ -191,6 +208,7 @@
 		}
 		codexEntries[i].calculating = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callAsync('fetch_proposal_code', { code_url: entry.url.trim() });
 			if (res?.success) {
@@ -199,7 +217,14 @@
 				error = res?.error || 'Failed to fetch checksum';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			codexEntries[i].calculating = false;
 		}
@@ -227,6 +252,7 @@
 		}
 		submitting = true;
 		error = '';
+		accessDeniedOp = '';
 		submitMsg = '';
 		try {
 			const args: Record<string, any> = {
@@ -260,7 +286,14 @@
 				error = res?.error || 'Failed to submit proposal';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			submitting = false;
 		}
@@ -271,6 +304,7 @@
 		formDescription = '';
 		codexEntries = [{ url: '', name: '', checksum: '', calculating: false }];
 		error = '';
+		accessDeniedOp = '';
 		submitMsg = '';
 		view = 'list';
 	}
@@ -332,7 +366,13 @@
 	</div>
 
 	<!-- Error / Success banners -->
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
 			<svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
 			<span>{error}</span>

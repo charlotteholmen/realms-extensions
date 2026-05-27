@@ -32,6 +32,7 @@
 	let allOperations: OperationDef[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let successMsg = $state('');
 	let view: View = $state('users');
 	let searchQuery = $state('');
@@ -104,6 +105,7 @@
 	async function loadUsers() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callSync('list_users_with_profiles');
 			if (res?.success) {
@@ -112,7 +114,14 @@
 				error = res?.error || 'Failed to load users';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -168,7 +177,14 @@
 				};
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			detailLoading = false;
 		}
@@ -178,6 +194,7 @@
 		if (!selectedUser || !assignProfileName) return;
 		assignLoading = true;
 		error = '';
+		accessDeniedOp = '';
 		successMsg = '';
 		try {
 			const res = await callSync('assign_profile', {
@@ -196,7 +213,14 @@
 				error = res?.error || 'Failed to assign profile';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			assignLoading = false;
 		}
@@ -205,6 +229,7 @@
 	async function handleRevoke(profileName: string) {
 		if (!selectedUser) return;
 		error = '';
+		accessDeniedOp = '';
 		successMsg = '';
 		try {
 			const res = await callSync('revoke_profile', {
@@ -219,7 +244,14 @@
 				error = res?.error || 'Failed to revoke profile';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		}
 	}
 
@@ -270,6 +302,7 @@
 		if (!selectedUser) return;
 		permLoading = true;
 		error = '';
+		accessDeniedOp = '';
 		successMsg = '';
 		const toGrant = [...pendingGrants];
 		const toRevoke = [...pendingRevokes];
@@ -303,7 +336,14 @@
 			pendingRevokes = new Set();
 			await viewUser(selectedUser);
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			permLoading = false;
 		}
@@ -317,6 +357,7 @@
 	async function handleRevokePermission(permissionName: string) {
 		if (!selectedUser) return;
 		error = '';
+		accessDeniedOp = '';
 		successMsg = '';
 		try {
 			const res = await callSync('revoke_permission', {
@@ -330,7 +371,14 @@
 				error = res?.error || 'Failed to revoke permission';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		}
 	}
 
@@ -342,7 +390,14 @@
 				profilesList = res.data?.profiles ?? [];
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			profilesLoading = false;
 		}
@@ -399,6 +454,7 @@
 		if (!selectedProfile) return;
 		profilePermApplying = true;
 		error = '';
+		accessDeniedOp = '';
 		successMsg = '';
 		try {
 			const toGrant = [...profilePendingGrants];
@@ -432,7 +488,14 @@
 			const updated = profilesList.find(p => p.name === selectedProfile?.name);
 			if (updated) selectedProfile = updated;
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			profilePermApplying = false;
 		}
@@ -442,6 +505,7 @@
 		if (!selectedUser || !assignProfileName) return;
 		assignLoading = true;
 		error = '';
+		accessDeniedOp = '';
 		successMsg = '';
 		try {
 			const res = await callSync('propose_role_assignment', {
@@ -456,7 +520,14 @@
 				error = res?.error || 'Failed to create proposal';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			assignLoading = false;
 		}
@@ -545,7 +616,13 @@
 	{/if}
 
 	<!-- Banners -->
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
 			<svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
 			<span class="flex-1">{error}</span>

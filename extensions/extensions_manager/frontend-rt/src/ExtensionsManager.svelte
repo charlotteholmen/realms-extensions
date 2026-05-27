@@ -24,6 +24,7 @@
 	let pkgUpdateCount = $state(0);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let extensionCount = $state(0);
 	let codexCount = $state(0);
 	let extensionManifests: Record<string, ExtManifest> = $state({});
@@ -72,6 +73,7 @@
 	async function loadPackages() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const [extRaw, codexRaw, statusResp] = await Promise.all([
 				ctx.backend.list_runtime_extensions().catch(() => '{}'),
@@ -115,7 +117,14 @@
 			}
 			pkgUpdateCount = updates;
 		} catch (e: any) {
-			error = e?.message ?? String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -246,7 +255,13 @@
 		</nav>
 	</div>
 
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
 			{error}
 			<button onclick={() => error = ''} class="ml-2 text-red-600 hover:text-red-800 font-bold">&times;</button>

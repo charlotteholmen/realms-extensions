@@ -25,6 +25,7 @@
 	let notifications: any[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let notificationsLoading = $state(true);
 	let expandedId: string | null = $state(null);
 
@@ -93,6 +94,7 @@
 	async function loadDashboard() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const args = { user_id: principal };
 			const [sum, cit] = await Promise.all([
@@ -102,7 +104,14 @@
 			summary = sum?.data ?? sum;
 			citizenship = cit?.data ?? cit;
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -364,7 +373,13 @@
 				<div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
 				<p class="mt-4 text-lg text-gray-500 dark:text-gray-400">Loading dashboard…</p>
 			</div>
-		{:else if error}
+		{:else if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 			<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-700 dark:text-red-300">
 				<span class="font-medium">Error:</span> {error}
 			</div>

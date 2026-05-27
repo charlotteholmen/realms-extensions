@@ -36,6 +36,7 @@
 	let saving = $state(false);
 	let runningOnce = $state(false);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	let editInterval = $state(60);
 	let editBatchSize = $state(3);
@@ -68,7 +69,14 @@
 				error = data.error || 'Failed to fetch status';
 			}
 		} catch (e: any) {
-			error = e?.message ?? String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -78,6 +86,7 @@
 		if (!status) return;
 		toggling = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const raw = await ctx.callSync('toggle', { enabled: !status.running });
 			const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -87,7 +96,14 @@
 				error = data.error || 'Toggle failed';
 			}
 		} catch (e: any) {
-			error = e?.message ?? String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			toggling = false;
 		}
@@ -96,6 +112,7 @@
 	async function saveConfig() {
 		saving = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const maxVal = editMaxEntities.toString().trim();
 			const config: Record<string, any> = {
@@ -114,7 +131,14 @@
 				error = data.error || 'Save failed';
 			}
 		} catch (e: any) {
-			error = e?.message ?? String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			saving = false;
 		}
@@ -123,13 +147,21 @@
 	async function runOnce() {
 		runningOnce = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const raw = await ctx.callSync('run_once', {});
 			const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
 			await fetchStatus();
 			if (data.error) error = data.error;
 		} catch (e: any) {
-			error = e?.message ?? String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			runningOnce = false;
 		}
@@ -137,6 +169,7 @@
 
 	async function handleReset() {
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const raw = await ctx.callSync('reset', {});
 			const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -146,7 +179,14 @@
 				error = data.error || 'Reset failed';
 			}
 		} catch (e: any) {
-			error = e?.message ?? String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		}
 	}
 
@@ -322,7 +362,13 @@
 			</div>
 		</div>
 
-		{#if error}
+		{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 			<div
 				class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
 			>

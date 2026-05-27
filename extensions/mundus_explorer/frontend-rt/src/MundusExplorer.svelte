@@ -4,6 +4,7 @@
 	let data: any = $state(null);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	interface RealmInfo {
 		id: string;
@@ -20,6 +21,7 @@
 	async function fetchRealms() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const syncResponse: any = await ctx.callSync('get_mundus_realms');
 			data = syncResponse?.data ?? syncResponse;
@@ -33,7 +35,14 @@
 				} catch {}
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -80,6 +89,12 @@
 			<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
 			<span class="ml-3 text-gray-500">Loading realms network...</span>
 		</div>
+	{:else if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
 	{:else if error}
 		<div class="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 border border-red-200 dark:border-red-800">
 			<p class="text-sm text-red-700 dark:text-red-300">{error}</p>
