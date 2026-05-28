@@ -48,6 +48,14 @@
 
 	const INFLUENCE_RINGS = 3;
 
+	async function loadScript(url: string, globalName: string): Promise<any> {
+		if ((window as any)[globalName]) return (window as any)[globalName];
+		const resp = await fetch(url);
+		const code = await resp.text();
+		(0, eval)(code);
+		return (window as any)[globalName];
+	}
+
 	async function initMap() {
 		if (!mapContainer || zones.length === 0) return;
 
@@ -59,8 +67,9 @@
 			await new Promise((r) => { link.onload = r; link.onerror = r; });
 		}
 
-		const L = await import('leaflet');
-		const { cellToBoundary, gridDisk } = await import('h3-js');
+		const L = await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'L');
+		const h3 = await loadScript('https://unpkg.com/h3-js@4.2.1/dist/h3-js.umd.js', 'h3');
+		const { cellToBoundary, gridDisk } = h3;
 
 		const map = L.map(mapContainer).setView([20, 0], 2);
 
