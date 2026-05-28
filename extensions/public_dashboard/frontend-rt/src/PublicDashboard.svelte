@@ -19,30 +19,28 @@
 
 	async function loadData() {
 		loading = true;
-		try {
-			const backend = ctx.backend;
-			const [statusResp, realmResp, zonesResp, latestResp] = await Promise.all([
-				backend.status(),
-				backend.get_objects_paginated('Realm', 0, 1, 'asc'),
-				backend.get_objects_paginated('Zone', 0, 200, 'asc'),
-				backend.get_objects_paginated('User', 0, 50, 'desc'),
-			]);
+		const backend = ctx.backend;
 
-			if (statusResp?.success && statusResp?.data?.status) {
-				statusData = statusResp.data.status;
-			}
+		const [statusResp, realmResp, zonesResp, latestResp] = await Promise.all([
+			backend.status().catch((e: any) => { console.warn('status() failed:', e); return null; }),
+			backend.get_objects_paginated('Realm', 0, 1, 'asc').catch((e: any) => { console.warn('Realm fetch failed:', e); return null; }),
+			backend.get_objects_paginated('Zone', 0, 200, 'asc').catch((e: any) => { console.warn('Zone fetch failed:', e); return null; }),
+			backend.get_objects_paginated('User', 0, 50, 'desc').catch((e: any) => { console.warn('User fetch failed:', e); return null; }),
+		]);
 
-			const realms = parseEntities(realmResp);
-			if (realms.length > 0) {
-				realmData = realms[0];
-			}
-
-			const allZones = parseEntities(zonesResp);
-			zones = allZones.filter((z: any) => z.h3_index || (z.latitude && z.longitude));
-			latestUsers = parseEntities(latestResp);
-		} catch (e) {
-			console.error('Error loading dashboard data:', e);
+		if (statusResp?.success && statusResp?.data?.status) {
+			statusData = statusResp.data.status;
 		}
+
+		const realms = parseEntities(realmResp);
+		if (realms.length > 0) {
+			realmData = realms[0];
+		}
+
+		const allZones = parseEntities(zonesResp);
+		zones = allZones.filter((z: any) => z.h3_index || (z.latitude && z.longitude));
+		latestUsers = parseEntities(latestResp);
+
 		loading = false;
 	}
 
@@ -255,23 +253,23 @@
 			<span class="ml-3 text-gray-500">Loading dashboard...</span>
 		</div>
 	{:else}
-		<!-- Hero: full-viewport background image -->
+		<!-- Hero: full-viewport background image with content inside -->
 		{#if realmData}
 			<div
 				use:fullBleed
-				style="height: 100vh; background: url('/custom/background.png') center/cover no-repeat; margin-top: -5rem; position: relative; display: flex; flex-direction: column;"
+				style="height: 105vh; background: url('/custom/background.png') center/cover no-repeat; position: relative; display: flex; flex-direction: column; margin-top: -6rem; padding-top: 6rem;"
 			>
 				<!-- Gradient overlay that fades in -->
 				<div
-					style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.5) 30%, transparent 60%); opacity: {showOverlay ? 1 : 0}; transition: opacity 3s cubic-bezier(0.25, 0.1, 0.25, 1);"
+					style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.85) 15%, rgba(255,255,255,0.4) 28%, transparent 40%); opacity: {showOverlay ? 1 : 0}; transition: opacity 3s cubic-bezier(0.25, 0.1, 0.25, 1); pointer-events: none;"
 				></div>
 
-				<!-- Spacer -->
+				<!-- Top spacer: pushes content to the bottom -->
 				<div style="flex: 1;"></div>
 
 				<!-- Realm identity: fades in + slides up after 2s -->
 				<div
-					style="position: relative; padding: 0 24px 48px; opacity: {showOverlay ? 1 : 0}; transform: translateY({showOverlay ? '0px' : '30px'}); transition: opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.5s, transform 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;"
+					style="position: relative; padding: 0 24px; opacity: {showOverlay ? 1 : 0}; transform: translateY({showOverlay ? '0px' : '30px'}); transition: opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.5s, transform 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;"
 				>
 					<div style="max-width: 700px; margin: 0 auto;">
 						<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
@@ -283,11 +281,11 @@
 							/>
 							<h1 style="font-size: 2rem; font-weight: 700; color: #111827; margin: 0;">{realmData.name || 'Realm'}</h1>
 						</div>
-						{#if realmData.description}
-							<p style="font-size: 1.05rem; color: #374151; line-height: 1.6; margin: 0 0 4px;">
-								{realmData.description}
-							</p>
-						{/if}
+					{#if realmData.manifesto}
+						<p style="font-size: 1.05rem; color: #374151; line-height: 1.6; margin: 0 0 4px;">
+							{realmData.manifesto}
+						</p>
+					{/if}
 						{#if realmData.welcome_message}
 							<p style="font-size: 0.95rem; color: #6b7280; font-style: italic; margin: 0;">
 								{realmData.welcome_message}
@@ -296,20 +294,42 @@
 					</div>
 				</div>
 
-				<!-- Scroll indicator: subtle animated line -->
+				<!-- Scroll indicator: animated chevron -->
 				<div
-					style="position: relative; display: flex; justify-content: center; padding-bottom: 20px; opacity: {showOverlay ? 0.6 : 0}; transition: opacity 2s ease 2s;"
+					style="position: relative; display: flex; justify-content: center; padding: 20px 0; opacity: {showOverlay ? 1 : 0}; transition: opacity 1.5s ease 0.5s;"
 				>
-					<div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
-						<div style="width: 1px; height: 24px; background: #9ca3af; animation: scrollPulse 2s ease-in-out infinite;"></div>
-					</div>
+					<svg style="width: 28px; height: 28px; animation: bounceDown 2s ease-in-out infinite;" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M6 9l6 6 6-6" />
+					</svg>
 				</div>
+
+				<!-- Bottom breathing room -->
+				<div style="height: 24px; flex-shrink: 0;"></div>
 			</div>
 
 		<style>
-			@keyframes scrollPulse {
-				0%, 100% { opacity: 0.3; transform: scaleY(0.7); }
-				50% { opacity: 1; transform: scaleY(1); }
+			@keyframes bounceDown {
+				0%, 100% { transform: translateY(0); }
+				50% { transform: translateY(8px); }
+			}
+			.join-btn {
+				display: inline-flex;
+				align-items: center;
+				gap: 10px;
+				padding: 16px 48px;
+				border-radius: 12px;
+				background: #111827;
+				color: #fff;
+				font-size: 1.15rem;
+				font-weight: 600;
+				text-decoration: none;
+				box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+				transition: background 0.2s, transform 0.2s;
+				letter-spacing: 0.02em;
+			}
+			.join-btn:hover {
+				background: #000;
+				transform: translateY(-1px);
 			}
 			.kpi-card {
 				background: #fff;
@@ -351,19 +371,14 @@
 		</style>
 
 			<!-- Join button below the hero -->
-			<div class="flex justify-center py-8">
+			<div style="display: flex; justify-content: center; padding: 2.5rem 0;">
 				<a
 					href="/join"
-					class="inline-flex items-center gap-2 px-8 py-4 rounded-lg bg-gray-900 text-white text-lg font-semibold hover:bg-black transition-colors shadow-lg"
+					class="join-btn"
 				>
 					Join this Realm
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M13 7l5 5m0 0l-5 5m5-5H6"
-						/>
+					<svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
 					</svg>
 				</a>
 			</div>

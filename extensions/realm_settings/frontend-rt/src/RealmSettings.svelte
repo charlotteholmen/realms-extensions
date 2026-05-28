@@ -19,7 +19,7 @@
 	let settingsMessage = $state('');
 	let settingsError = $state('');
 	let realmSettingsName = $state('');
-	let realmSettingsDescription = $state('');
+	let realmSettingsManifesto = $state('');
 	let realmSettingsWelcome = $state('');
 	let realmSettingsLogoUrl = $state('');
 	let realmSettingsBackgroundUrl = $state('');
@@ -44,7 +44,7 @@
 	function buildRealmConfigCode(): string {
 		const lines = ['from ggg import Realm', '', 'realm = Realm.load("1")'];
 		if (realmSettingsName) lines.push(`realm.name = ${JSON.stringify(realmSettingsName)}`);
-		if (realmSettingsDescription) lines.push(`realm.description = ${JSON.stringify(realmSettingsDescription)}`);
+		if (realmSettingsManifesto) lines.push(`realm.manifesto = ${JSON.stringify(realmSettingsManifesto)}`);
 		lines.push(`realm.welcome_message = ${JSON.stringify(realmSettingsWelcome)}`);
 		if (realmSettingsLogoUrl) lines.push(`realm.logo_url = ${JSON.stringify(realmSettingsLogoUrl)}`);
 		if (realmSettingsBackgroundUrl) lines.push(`realm.background_image_url = ${JSON.stringify(realmSettingsBackgroundUrl)}`);
@@ -56,7 +56,7 @@
 
 	function openProposalForSettings(deniedOp: string) {
 		proposalModalTitle = 'Update realm settings';
-		proposalModalDescription = 'This proposal updates the realm configuration (name, description, welcome message, branding, and registration settings) as specified in the code below.';
+		proposalModalDescription = 'This proposal updates the realm configuration (name, manifesto, welcome message, branding, and registration settings) as specified in the code below.';
 		proposalModalCode = buildRealmConfigCode();
 		proposalModalOperation = deniedOp;
 		proposalModalOpen = true;
@@ -70,7 +70,7 @@
 			if (resp?.success && resp?.data?.status) {
 				const s = resp.data.status;
 				realmSettingsName = s.realm_name || '';
-				realmSettingsDescription = s.realm_description || '';
+				realmSettingsManifesto = s.realm_manifesto || '';
 				realmSettingsWelcome = s.realm_welcome_message || '';
 				realmSettingsLogoUrl = s.logo_url || '';
 				realmSettingsBackgroundUrl = s.background_image_url || '';
@@ -92,7 +92,7 @@
 		try {
 			const config: Record<string, unknown> = {
 				name: realmSettingsName,
-				description: realmSettingsDescription,
+				manifesto: realmSettingsManifesto,
 				welcome_message: realmSettingsWelcome,
 				logo_url: realmSettingsLogoUrl,
 				background_image_url: realmSettingsBackgroundUrl,
@@ -154,7 +154,7 @@
 	<div class="flex justify-between items-center mb-6">
 		<div>
 			<h1 class="text-3xl font-bold text-gray-900">Settings</h1>
-			<p class="text-gray-600 mt-1">Configure your realm's name, description, branding, and registration settings.</p>
+			<p class="text-gray-600 mt-1">Configure your realm's name, manifesto, branding, and registration settings.</p>
 		</div>
 	</div>
 
@@ -172,8 +172,8 @@
 				</div>
 
 				<div>
-					<label for="rs-desc" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-					<textarea id="rs-desc" bind:value={realmSettingsDescription} rows="2"
+					<label for="rs-desc" class="block text-sm font-medium text-gray-700 mb-1">Manifesto</label>
+					<textarea id="rs-desc" bind:value={realmSettingsManifesto} rows="2"
 						class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"></textarea>
 				</div>
 
