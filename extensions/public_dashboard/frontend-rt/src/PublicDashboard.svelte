@@ -218,15 +218,14 @@
 	{:else}
 		<!-- Realm Hero Section -->
 		{#if realmData}
-			{@const bgImage = '/images/background.png'}
 			<div
 				class="rounded-lg border border-gray-200 shadow-md relative"
-				style="background: linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('{bgImage}') center/cover no-repeat;"
+				style="background: linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('/custom/background.png') center/cover no-repeat;"
 			>
 				<div class="p-8">
 					<div class="flex items-center gap-3 mb-3">
 						<img
-							src="/images/logo.png"
+							src="/custom/logo.png"
 							alt={realmData.name || 'Realm'}
 							class="w-12 h-12 object-contain"
 							onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
