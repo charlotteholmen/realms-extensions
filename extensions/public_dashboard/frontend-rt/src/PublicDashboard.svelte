@@ -8,7 +8,6 @@
 	let zones: any[] = $state([]);
 	let latestUsers: any[] = $state([]);
 	let loading = $state(true);
-	let askText = $state('');
 	let mapContainer: HTMLDivElement | undefined = $state();
 
 	function parseEntities(response: any): any[] {
@@ -26,7 +25,7 @@
 				backend.status(),
 				backend.get_objects_paginated('Realm', 0, 1, 'asc'),
 				backend.get_objects_paginated('Zone', 0, 200, 'asc'),
-				backend.get_objects_paginated('User', 0, 8, 'desc'),
+				backend.get_objects_paginated('User', 0, 50, 'desc'),
 			]);
 
 			if (statusResp?.success && statusResp?.data?.status) {
@@ -52,8 +51,11 @@
 	async function initMap() {
 		if (!mapContainer || zones.length === 0) return;
 
-		const L = await import(/* @vite-ignore */ 'https://esm.sh/leaflet@1.9.4');
-		const { cellToBoundary, gridDisk } = await import(/* @vite-ignore */ 'https://esm.sh/h3-js@4.2.1');
+		const leafletModule = await import(/* @vite-ignore */ 'https://esm.sh/leaflet@1.9.4');
+		const L = leafletModule.default || leafletModule;
+		const h3Module = await import(/* @vite-ignore */ 'https://esm.sh/h3-js@4.2.1');
+		const cellToBoundary = h3Module.cellToBoundary;
+		const gridDisk = h3Module.gridDisk;
 
 		const map = L.map(mapContainer).setView([20, 0], 2);
 
@@ -149,12 +151,6 @@
 		}
 	}
 
-	function askAI() {
-		if (askText.trim()) {
-			ctx.navigate(`/extensions/llm_chat?q=${encodeURIComponent(askText.trim())}`);
-		}
-	}
-
 	let kpiCards = $derived(
 		statusData
 			? [
@@ -183,7 +179,6 @@
 	<link
 		rel="stylesheet"
 		href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
 		crossorigin=""
 	/>
 </svelte:head>
@@ -275,58 +270,6 @@
 			</div>
 		{/if}
 
-		<!-- AI Assistant -->
-		<div class="rounded-lg border border-gray-200 shadow-md bg-white p-5">
-			<div class="flex items-center gap-3 mb-3">
-				<div
-					class="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0"
-				>
-					<svg
-						class="w-5 h-5 text-indigo-600"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-						/>
-					</svg>
-				</div>
-				<div>
-					<h3 class="text-lg font-semibold text-gray-900">Ask the AI Assistant</h3>
-					<p class="text-xs text-gray-500">
-						Get answers about this realm, its governance, and services
-					</p>
-				</div>
-			</div>
-			<form onsubmit={(e) => { e.preventDefault(); askAI(); }} class="flex gap-2">
-				<input
-					type="text"
-					bind:value={askText}
-					placeholder="Ask anything about this realm..."
-					class="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-				/>
-				<button
-					type="submit"
-					disabled={!askText.trim()}
-					class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-				>
-					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-						/>
-					</svg>
-					Ask
-				</button>
-			</form>
-		</div>
-
 		<!-- Zones Map -->
 		{#if zones.length > 0}
 			<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
@@ -336,7 +279,8 @@
 				</p>
 				<div
 					bind:this={mapContainer}
-					class="w-full h-80 rounded-lg overflow-hidden border border-gray-200 relative z-0"
+					style="width: 100%; height: 320px; position: relative; z-index: 0;"
+					class="rounded-lg overflow-hidden border border-gray-200"
 				></div>
 			</div>
 		{/if}
