@@ -51,11 +51,16 @@
 	async function initMap() {
 		if (!mapContainer || zones.length === 0) return;
 
-		const leafletModule = await import(/* @vite-ignore */ 'https://esm.sh/leaflet@1.9.4');
-		const L = leafletModule.default || leafletModule;
-		const h3Module = await import(/* @vite-ignore */ 'https://esm.sh/h3-js@4.2.1');
-		const cellToBoundary = h3Module.cellToBoundary;
-		const gridDisk = h3Module.gridDisk;
+		if (!document.querySelector('link[href*="leaflet"]')) {
+			const link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+			document.head.appendChild(link);
+			await new Promise((r) => { link.onload = r; link.onerror = r; });
+		}
+
+		const L = await import('leaflet');
+		const { cellToBoundary, gridDisk } = await import('h3-js');
 
 		const map = L.map(mapContainer).setView([20, 0], 2);
 
@@ -175,13 +180,6 @@
 	});
 </script>
 
-<svelte:head>
-	<link
-		rel="stylesheet"
-		href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-		crossorigin=""
-	/>
-</svelte:head>
 
 <div class="mt-px pt-20 space-y-4">
 	{#if loading}
