@@ -357,13 +357,6 @@
 	>
 		{#if messages.length === 0 && !isExplainMode}
 			<div class="welcome-message">
-				<div class="avatar">
-					{#if selectedAssistant}
-						<span>{selectedAssistant.emoji}</span>
-					{:else}
-						<span>🏛</span>
-					{/if}
-				</div>
 				<div class="bubble assistant-bubble">
 					{#if isAuthenticated}
 						<p>Welcome back! I'm your AI assistant. Ask me anything about this realm — governance, proposals, codices, or general questions.</p>
@@ -382,13 +375,6 @@
 					</div>
 				{:else}
 					<div class="message-row assistant-row">
-						<div class="avatar small">
-							{#if selectedAssistant}
-								<span>{selectedAssistant.emoji}</span>
-							{:else}
-								<span>🏛</span>
-							{/if}
-						</div>
 						<div class="bubble assistant-bubble markdown-content">
 							{@html renderMarkdown(message.text)}
 						</div>
@@ -398,13 +384,6 @@
 
 			{#if isLoading}
 				<div class="message-row assistant-row">
-					<div class="avatar small">
-						{#if selectedAssistant}
-							<span>{selectedAssistant.emoji}</span>
-						{:else}
-							<span>🏛</span>
-						{/if}
-					</div>
 					<div class="bubble assistant-bubble">
 						<div class="typing-animation">
 							<span></span>

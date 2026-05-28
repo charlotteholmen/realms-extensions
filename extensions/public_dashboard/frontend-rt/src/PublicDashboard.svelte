@@ -168,31 +168,70 @@
 	let kpiCards = $derived(
 		statusData
 			? [
-					{ label: 'Users', value: Number(statusData.users_count), color: 'blue' },
-					{
-						label: 'Organizations',
-						value: Number(statusData.organizations_count),
-						color: 'purple',
-					},
-					{ label: 'Proposals', value: Number(statusData.proposals_count), color: 'amber' },
-					{ label: 'Votes', value: Number(statusData.votes_count), color: 'green' },
-					{ label: 'Transfers', value: Number(statusData.transfers_count), color: 'rose' },
-					{ label: 'Licenses', value: Number(statusData.licenses_count), color: 'cyan' },
+					{ label: 'Users', value: Number(statusData.users_count), color: '#3b82f6', icon: 'users' },
+					{ label: 'Organizations', value: Number(statusData.organizations_count), color: '#8b5cf6', icon: 'org' },
+					{ label: 'Proposals', value: Number(statusData.proposals_count), color: '#f59e0b', icon: 'proposal' },
+					{ label: 'Votes', value: Number(statusData.votes_count), color: '#10b981', icon: 'vote' },
+					{ label: 'Transfers', value: Number(statusData.transfers_count), color: '#f43f5e', icon: 'transfer' },
+					{ label: 'Zones', value: zones.length, color: '#06b6d4', icon: 'zone' },
 				]
 			: [],
 	);
+
+	let kpiVisible = $state(false);
+	let animatedValues: number[] = $state([]);
+
+	function animateCountUp() {
+		if (kpiCards.length === 0) return;
+		animatedValues = kpiCards.map(() => 0);
+		kpiVisible = true;
+		const duration = 1200;
+		const fps = 60;
+		const totalFrames = Math.round(duration / (1000 / fps));
+		let frame = 0;
+
+		function step() {
+			frame++;
+			const progress = frame / totalFrames;
+			const ease = 1 - Math.pow(1 - progress, 3);
+			animatedValues = kpiCards.map((card) => Math.round(card.value * ease));
+			if (frame < totalFrames) requestAnimationFrame(step);
+		}
+		requestAnimationFrame(step);
+	}
+
+	let showOverlay = $state(false);
+
+	function fullBleed(node: HTMLElement) {
+		function adjust() {
+			node.style.marginLeft = '';
+			node.style.marginRight = '';
+			node.style.width = '';
+			const rect = node.getBoundingClientRect();
+			const left = rect.left;
+			const right = window.innerWidth - rect.right;
+			node.style.marginLeft = `-${left}px`;
+			node.style.marginRight = `-${right}px`;
+			node.style.width = `100vw`;
+		}
+		adjust();
+		window.addEventListener('resize', adjust);
+		return { destroy() { window.removeEventListener('resize', adjust); } };
+	}
 
 	onMount(async () => {
 		await loadData();
 		await tick();
 		await initMap();
+		setTimeout(() => { showOverlay = true; }, 2000);
+		setTimeout(() => { animateCountUp(); }, 2800);
 	});
 </script>
 
 
-<div class="mt-px pt-20 space-y-4">
+<div>
 	{#if loading}
-		<div class="flex items-center justify-center py-12">
+		<div class="flex items-center justify-center py-12 mt-20">
 			<svg
 				class="animate-spin h-8 w-8 text-gray-400"
 				xmlns="http://www.w3.org/2000/svg"
@@ -216,106 +255,198 @@
 			<span class="ml-3 text-gray-500">Loading dashboard...</span>
 		</div>
 	{:else}
-		<!-- Realm Hero Section -->
+		<!-- Hero: full-viewport background image -->
 		{#if realmData}
 			<div
-				class="rounded-lg border border-gray-200 shadow-md relative"
-				style="background: linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('/custom/background.png') center/cover no-repeat;"
+				use:fullBleed
+				style="height: 100vh; background: url('/custom/background.png') center/cover no-repeat; margin-top: -5rem; position: relative; display: flex; flex-direction: column;"
 			>
-				<div class="p-8">
-					<div class="flex items-center gap-3 mb-3">
-						<img
-							src="/custom/logo.png"
-							alt={realmData.name || 'Realm'}
-							class="w-12 h-12 object-contain"
-							onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
-						/>
-						<h1 class="text-3xl font-bold text-gray-900">{realmData.name || 'Realm'}</h1>
-					</div>
-					{#if realmData.description}
-						<p class="text-base text-gray-700 leading-relaxed mb-2 max-w-3xl">
-							{realmData.description}
-						</p>
-					{/if}
-					{#if realmData.welcome_message}
-						<p class="text-sm text-gray-600 italic mb-6 max-w-3xl">
-							{realmData.welcome_message}
-						</p>
-					{/if}
-
-					{#if kpiCards.length > 0}
-						<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-							{#each kpiCards as card}
-								<div
-									class="rounded-lg bg-white/60 backdrop-blur-sm border border-white/80 p-3"
-								>
-									<p class="text-xs text-gray-500 font-medium">{card.label}</p>
-									<p class="text-2xl font-bold text-gray-900">
-										{card.value.toLocaleString()}
-									</p>
-								</div>
-							{/each}
-						</div>
-					{/if}
-
-					<a
-						href="/join"
-						class="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gray-900 text-white font-semibold hover:bg-black transition-colors shadow-md"
-					>
-						Join this Realm
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M13 7l5 5m0 0l-5 5m5-5H6"
-							/>
-						</svg>
-					</a>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Zones Map -->
-		{#if zones.length > 0}
-			<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
-				<h3 class="text-xl font-semibold text-gray-900 mb-1">Realm Zones</h3>
-				<p class="text-sm text-gray-500 mb-4">
-					{zones.length} zone{zones.length !== 1 ? 's' : ''} in this realm
-				</p>
+				<!-- Gradient overlay that fades in -->
 				<div
-					bind:this={mapContainer}
-					style="width: 100%; height: 320px; position: relative; z-index: 0;"
-					class="rounded-lg overflow-hidden border border-gray-200"
+					style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.5) 30%, transparent 60%); opacity: {showOverlay ? 1 : 0}; transition: opacity 3s cubic-bezier(0.25, 0.1, 0.25, 1);"
 				></div>
-			</div>
-		{/if}
 
-		<!-- Latest Users -->
-		{#if latestUsers.length > 0}
-			<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
-				<h3 class="text-lg font-semibold text-gray-900 mb-4">Latest Members</h3>
-				<div class="flex flex-wrap gap-4">
-					{#each latestUsers as user}
-						<div class="flex flex-col items-center" style="width: 72px;">
+				<!-- Spacer -->
+				<div style="flex: 1;"></div>
+
+				<!-- Realm identity: fades in + slides up after 2s -->
+				<div
+					style="position: relative; padding: 0 24px 48px; opacity: {showOverlay ? 1 : 0}; transform: translateY({showOverlay ? '0px' : '30px'}); transition: opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.5s, transform 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;"
+				>
+					<div style="max-width: 700px; margin: 0 auto;">
+						<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
 							<img
-								src={`https://api.dicebear.com/9.x/glass/svg?seed=${user.name || user.id}`}
-								alt={user.name || user.id}
-								width="48"
-								height="48"
-								style="width: 48px; height: 48px; border-radius: 9999px;"
-								class="ring-2 ring-gray-200 hover:ring-gray-300 transition-all duration-200"
+								src="/custom/logo.png"
+								alt={realmData.name || 'Realm'}
+								style="width: 36px; height: 36px; object-fit: contain;"
+								onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
 							/>
-							<span
-								class="text-xs text-gray-600 text-center truncate w-full mt-1"
-								title={user.name || user.id}
-							>
-								{user.name || user.id.substring(0, 8)}
-							</span>
+							<h1 style="font-size: 2rem; font-weight: 700; color: #111827; margin: 0;">{realmData.name || 'Realm'}</h1>
 						</div>
-					{/each}
+						{#if realmData.description}
+							<p style="font-size: 1.05rem; color: #374151; line-height: 1.6; margin: 0 0 4px;">
+								{realmData.description}
+							</p>
+						{/if}
+						{#if realmData.welcome_message}
+							<p style="font-size: 0.95rem; color: #6b7280; font-style: italic; margin: 0;">
+								{realmData.welcome_message}
+							</p>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Scroll indicator: subtle animated line -->
+				<div
+					style="position: relative; display: flex; justify-content: center; padding-bottom: 20px; opacity: {showOverlay ? 0.6 : 0}; transition: opacity 2s ease 2s;"
+				>
+					<div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+						<div style="width: 1px; height: 24px; background: #9ca3af; animation: scrollPulse 2s ease-in-out infinite;"></div>
+					</div>
 				</div>
 			</div>
+
+		<style>
+			@keyframes scrollPulse {
+				0%, 100% { opacity: 0.3; transform: scaleY(0.7); }
+				50% { opacity: 1; transform: scaleY(1); }
+			}
+			.kpi-card {
+				background: #fff;
+				border-radius: 12px;
+				padding: 16px 18px;
+				box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+				transition: box-shadow 0.2s ease, transform 0.2s ease;
+			}
+			.kpi-card:hover {
+				box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+				transform: translateY(-2px);
+			}
+			.kpi-header {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin-bottom: 8px;
+			}
+			.kpi-icon {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+			}
+			.kpi-label {
+				font-size: 0.8rem;
+				font-weight: 500;
+				color: #6b7280;
+				letter-spacing: 0.01em;
+			}
+			.kpi-value {
+				font-size: 1.85rem;
+				font-weight: 700;
+				color: #111827;
+				margin: 0;
+				line-height: 1.1;
+				font-variant-numeric: tabular-nums;
+			}
+		</style>
+
+			<!-- Join button below the hero -->
+			<div class="flex justify-center py-8">
+				<a
+					href="/join"
+					class="inline-flex items-center gap-2 px-8 py-4 rounded-lg bg-gray-900 text-white text-lg font-semibold hover:bg-black transition-colors shadow-lg"
+				>
+					Join this Realm
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M13 7l5 5m0 0l-5 5m5-5H6"
+						/>
+					</svg>
+				</a>
+			</div>
+
+			<!-- KPI stats -->
+			{#if kpiCards.length > 0}
+				<div class="px-4 pb-6">
+					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
+						{#each kpiCards as card, i}
+							<div
+								class="kpi-card"
+								style="border-left: 3px solid {card.color}; opacity: {kpiVisible ? 1 : 0}; transform: translateY({kpiVisible ? '0px' : '16px'}); transition: opacity 0.5s ease {i * 0.08}s, transform 0.5s ease {i * 0.08}s;"
+							>
+								<div class="kpi-header">
+									<div class="kpi-icon" style="color: {card.color};">
+										{#if card.icon === 'users'}
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+										{:else if card.icon === 'org'}
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a4 4 0 0 0-8 0v2"/><path d="M12 12v3"/><circle cx="12" cy="12" r="1"/></svg>
+										{:else if card.icon === 'proposal'}
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+										{:else if card.icon === 'vote'}
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+										{:else if card.icon === 'transfer'}
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+										{:else if card.icon === 'zone'}
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+										{/if}
+									</div>
+									<span class="kpi-label">{card.label}</span>
+								</div>
+								<p class="kpi-value">
+									{(animatedValues[i] ?? 0).toLocaleString()}
+								</p>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		{/if}
+
+		<div class="space-y-4 px-4 pb-8">
+			<!-- Zones Map -->
+			{#if zones.length > 0}
+				<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
+					<h3 class="text-xl font-semibold text-gray-900 mb-1">Realm Zones</h3>
+					<p class="text-sm text-gray-500 mb-4">
+						{zones.length} zone{zones.length !== 1 ? 's' : ''} in this realm
+					</p>
+					<div
+						bind:this={mapContainer}
+						style="width: 100%; height: 320px; position: relative; z-index: 0;"
+						class="rounded-lg overflow-hidden border border-gray-200"
+					></div>
+				</div>
+			{/if}
+
+			<!-- Latest Users -->
+			{#if latestUsers.length > 0}
+				<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
+					<h3 class="text-lg font-semibold text-gray-900 mb-4">Latest Members</h3>
+				<div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));">
+					{#each latestUsers as user}
+						<div class="flex flex-col items-center">
+								<img
+									src={`https://api.dicebear.com/9.x/glass/svg?seed=${user.name || user.id}`}
+									alt={user.name || user.id}
+									width="48"
+									height="48"
+									style="width: 48px; height: 48px; border-radius: 9999px;"
+									class="ring-2 ring-gray-200 hover:ring-gray-300 transition-all duration-200"
+								/>
+								<span
+									class="text-xs text-gray-600 text-center truncate w-full mt-1"
+									title={user.name || user.id}
+								>
+									{user.name || user.id.substring(0, 8)}
+								</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
