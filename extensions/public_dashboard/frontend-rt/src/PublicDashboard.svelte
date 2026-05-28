@@ -345,16 +345,19 @@
 		{#if latestUsers.length > 0}
 			<div class="rounded-lg border border-gray-200 shadow-md bg-white p-6">
 				<h3 class="text-lg font-semibold text-gray-900 mb-4">Latest Members</h3>
-				<div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
+				<div class="flex flex-wrap gap-4">
 					{#each latestUsers as user}
-						<div class="flex flex-col items-center space-y-2">
+						<div class="flex flex-col items-center" style="width: 72px;">
 							<img
 								src={`https://api.dicebear.com/9.x/glass/svg?seed=${user.name || user.id}`}
 								alt={user.name || user.id}
-								class="w-14 h-14 rounded-full ring-2 ring-gray-200 hover:ring-gray-300 transition-all duration-200"
+								width="48"
+								height="48"
+								style="width: 48px; height: 48px; border-radius: 9999px;"
+								class="ring-2 ring-gray-200 hover:ring-gray-300 transition-all duration-200"
 							/>
 							<span
-								class="text-xs text-gray-600 text-center truncate w-full"
+								class="text-xs text-gray-600 text-center truncate w-full mt-1"
 								title={user.name || user.id}
 							>
 								{user.name || user.id.substring(0, 8)}
