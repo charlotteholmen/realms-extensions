@@ -25,6 +25,44 @@ from ic_python_logging import get_logger
 
 logger = get_logger("extensions.role_manager")
 
+# Crypto group whose members may decrypt member private data shared with admins.
+# Kept in sync with the "admin" profile so members can consent to share their
+# encrypted data with the current admin set (see issue #215).
+MEMBER_DATA_READERS_GROUP = "member_data_readers"
+ADMIN_PROFILE_NAME = "admin"
+
+
+def _sync_admin_in_reader_group(principal: str, is_admin: bool) -> None:
+    """Mirror an admin profile change into the member_data_readers crypto group.
+
+    Best-effort: failures are logged but never block profile management.
+    """
+    try:
+        from api.crypto import (
+            group_add_member,
+            group_create,
+            group_list,
+            group_remove_member,
+        )
+
+        if is_admin:
+            existing = {g["name"] for g in group_list().get("groups", [])}
+            if MEMBER_DATA_READERS_GROUP not in existing:
+                group_create(
+                    MEMBER_DATA_READERS_GROUP,
+                    "Admins authorized to read member private data shared by consent",
+                )
+            group_add_member(MEMBER_DATA_READERS_GROUP, principal, "member")
+            logger.info(f"Added {principal} to {MEMBER_DATA_READERS_GROUP}")
+        else:
+            group_remove_member(MEMBER_DATA_READERS_GROUP, principal)
+            logger.info(f"Removed {principal} from {MEMBER_DATA_READERS_GROUP}")
+    except Exception as e:
+        logger.warning(
+            f"Could not sync {principal} ({'add' if is_admin else 'remove'}) "
+            f"in {MEMBER_DATA_READERS_GROUP}: {e}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -251,6 +289,9 @@ def assign_profile(args) -> str:
         # Posthook: notifications, logging
         User.role_assign_posthook(target_user, profile_name, caller_principal)
 
+        if profile_name == ADMIN_PROFILE_NAME:
+            _sync_admin_in_reader_group(target_principal, is_admin=True)
+
         return json.dumps({
             "success": True,
             "data": {
@@ -307,6 +348,9 @@ def revoke_profile(args) -> str:
 
         # Posthook: notifications, logging
         User.role_revoke_posthook(target_user, profile_name, caller_principal)
+
+        if profile_name == ADMIN_PROFILE_NAME:
+            _sync_admin_in_reader_group(target_principal, is_admin=False)
 
         return json.dumps({
             "success": True,
