@@ -163,11 +163,11 @@
 		lifecycleLoading = true;
 		lifecycleError = '';
 		try {
-			const raw = await ctx.backend.extension_sync_call({
-				extension_name: 'realm_settings',
-				function_name: 'get_realm_stage',
-				args: '',
-			});
+		const raw = await ctx.backend.extension_sync_call(
+			'realm_settings',
+			'get_realm_stage',
+			'{}',
+		);
 			const envelope = typeof raw === 'string' ? JSON.parse(raw) : raw;
 			const res = envelope?.response
 				? typeof envelope.response === 'string'
@@ -193,11 +193,11 @@
 		lifecycleAdvancing = true;
 		lifecycleError = '';
 		try {
-			const raw = await ctx.backend.extension_sync_call({
-				extension_name: 'realm_settings',
-				function_name: 'set_realm_stage',
-				args: JSON.stringify({ stage: nextStage, reason: 'Admin advancement via Settings' }),
-			});
+		const raw = await ctx.backend.extension_sync_call(
+			'realm_settings',
+			'set_realm_stage',
+			JSON.stringify({ stage: nextStage, reason: 'Admin advancement via Settings' }),
+		);
 			const envelope = typeof raw === 'string' ? JSON.parse(raw) : raw;
 			const res = envelope?.response
 				? typeof envelope.response === 'string'
@@ -269,7 +269,15 @@
 	<!-- Realm Lifecycle Stage -->
 	<div class="bg-white shadow-sm rounded-lg p-6 mb-6">
 		<h2 class="text-lg font-semibold text-gray-900 mb-1">Realm Lifecycle</h2>
-		<p class="text-sm text-gray-500 mb-5">Current operational stage of this realm.</p>
+		<p class="text-sm text-gray-500 mb-5">
+			Current operational stage of this realm.
+			<a
+				href="https://github.com/smart-social-contracts/realms/blob/main/docs/reference/REALM_LIFECYCLE.md"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="ml-1 text-blue-600 hover:underline"
+			>Learn about stages ↗</a>
+		</p>
 
 		{#if lifecycleLoading}
 			<div class="flex items-center justify-center py-6">
