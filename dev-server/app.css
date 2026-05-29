@@ -1,0 +1,2 @@
+@import "tailwindcss";
+@source "../extensions/*/frontend-rt/src/**/*.svelte";

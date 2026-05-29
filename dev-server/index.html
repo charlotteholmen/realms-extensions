@@ -3,15 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Public Dashboard – Dev</title>
-  <style>
-    @import "tailwindcss";
-  </style>
+  <title>Extension Dev</title>
+  <link rel="stylesheet" href="/app.css" />
 </head>
 <body class="bg-white">
-  <!-- Mimics the real realm frontend shell -->
   <div class="flex h-screen flex-col overflow-hidden">
-    <!-- Top nav bar (matches real realm nav) -->
     <nav class="bg-white px-2 sm:px-4 py-2.5 w-full text-black relative z-50 shrink-0">
       <div class="mx-auto flex flex-wrap justify-between items-center w-full relative">
         <div class="absolute left-1/2 transform -translate-x-1/2">
@@ -19,12 +15,11 @@
             <img class="h-8 sm:h-10" src="/custom/logo.png" alt="Logo" />
           </a>
         </div>
-        <div class="ms-auto flex items-center gap-2 text-gray-500">
-          <span class="text-xs text-gray-400">dev preview</span>
+        <div class="ms-auto flex items-center gap-2 text-gray-400">
+          <span class="text-xs" id="dev-label">dev</span>
         </div>
       </div>
     </nav>
-    <!-- Main content area (matches the real scroll container) -->
     <div class="flex flex-1 overflow-hidden">
       <div class="relative flex-1 overflow-y-auto overflow-x-hidden bg-white lg:pl-6">
         <div class="p-4">
@@ -33,6 +28,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="/src/dev.ts"></script>
+  <script type="module" src="/__dev_entry.ts"></script>
 </body>
 </html>

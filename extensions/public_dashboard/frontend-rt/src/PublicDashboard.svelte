@@ -281,11 +281,6 @@
 							/>
 							<h1 style="font-size: 2rem; font-weight: 700; color: #111827; margin: 0;">{realmData.name || 'Realm'}</h1>
 						</div>
-					{#if realmData.manifesto}
-						<p style="font-size: 1.05rem; color: #374151; line-height: 1.6; margin: 0 0 4px;">
-							{realmData.manifesto}
-						</p>
-					{/if}
 						{#if realmData.welcome_message}
 							<p style="font-size: 0.95rem; color: #6b7280; font-style: italic; margin: 0;">
 								{realmData.welcome_message}
@@ -370,7 +365,16 @@
 			}
 		</style>
 
-			<!-- Join button below the hero -->
+			<!-- Manifesto -->
+			{#if realmData.manifesto}
+				<div style="max-width: 700px; margin: 0 auto; padding: 2.5rem 24px 0;">
+					<p style="font-size: 1.1rem; color: #374151; line-height: 1.8; text-align: center;">
+						{realmData.manifesto}
+					</p>
+				</div>
+			{/if}
+
+			<!-- Join button -->
 			<div style="display: flex; justify-content: center; padding: 2.5rem 0;">
 				<a
 					href="/join"
