@@ -16,6 +16,20 @@
 		type: string;
 	}
 
+	interface Conversation {
+		conversation_id: string;
+		title: string;
+		persona?: string;
+		message_count?: number;
+		updated_at?: string;
+	}
+
+	interface PageContext {
+		pathname: string;
+		extensionId: string;
+		title: string;
+	}
+
 	let messages: ChatMessage[] = $state([]);
 	let newMessage = $state('');
 	let isLoading = $state(false);
@@ -33,13 +47,25 @@
 	let pendingExplainCodexId: string | null = $state(null);
 	let isExplainMode = $state(false);
 
+	// Multiple conversations
+	let conversations: Conversation[] = $state([]);
+	let currentConversationId: string | null = $state(null);
+	let showConversationList = $state(false);
+	let isLoadingConversations = $state(false);
+	let isLoadingMessages = $state(false);
+
+	// Page awareness: what the user is currently viewing
+	let currentPageContext: PageContext | null = $state(null);
+	let unsubPageContext: (() => void) | undefined;
+
 	const PRODUCTION_API_HOST = 'https://geister-api.realmsgos.dev/';
 	let API_URL = `${PRODUCTION_API_HOST}api/ask`;
 	let SUGGESTIONS_API_URL = `${PRODUCTION_API_HOST}suggestions`;
 	let ASSISTANTS_API_URL = `${PRODUCTION_API_HOST}api/personas/assistants`;
+	let CONVERSATIONS_API_URL = `${PRODUCTION_API_HOST}api/conversations`;
 
 	let REALM_CANISTER_ID = '';
-	let userPrincipal = '';
+	let userPrincipal = $state('');
 
 	let unsubPrincipal: (() => void) | undefined;
 	let unsubAuth: (() => void) | undefined;
@@ -51,18 +77,164 @@
 			(globalThis as any).__CANISTER_IDS?.realm_backend ||
 			'';
 		unsubPrincipal = ctx.principal?.subscribe?.((v: string) => {
+			const wasAnonymous = !userPrincipal;
 			userPrincipal = v || '';
+			// Once we know who the user is, load their saved conversations
+			if (userPrincipal && wasAnonymous && !isExplainMode) {
+				loadConversations();
+			}
 		});
 		unsubAuth = ctx.isAuthenticated?.subscribe?.((v: boolean) => {
 			isAuthenticated = v;
 		});
 
+		// Subscribe to the host's page-context store so the assistant knows what
+		// the user is currently viewing in the website.
+		unsubPageContext = ctx.pageContext?.subscribe?.((v: PageContext) => {
+			currentPageContext = v || null;
+		});
+
 		handleExplainParam();
 		await fetchAssistants();
+		if (userPrincipal && !isExplainMode) {
+			await loadConversations();
+		}
 		if (!isExplainMode) {
 			await fetchSuggestions();
 		}
 	});
+
+	async function loadConversations(): Promise<void> {
+		if (!userPrincipal || isLoadingConversations) return;
+		isLoadingConversations = true;
+		try {
+			const params = new URLSearchParams({
+				user_principal: userPrincipal,
+				realm_principal: REALM_CANISTER_ID || '',
+			});
+			const response = await fetch(`${CONVERSATIONS_API_URL}?${params.toString()}`, {
+				method: 'GET',
+				headers: { 'Content-Type': 'application/json' },
+			});
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			const data = await response.json();
+			if (data.conversations && Array.isArray(data.conversations)) {
+				conversations = data.conversations;
+			}
+		} catch (err) {
+			console.error('Error loading conversations:', err);
+		} finally {
+			isLoadingConversations = false;
+		}
+	}
+
+	async function ensureConversation(): Promise<string | null> {
+		// Anonymous users keep an ephemeral, non-persisted thread.
+		if (!userPrincipal) return null;
+		if (currentConversationId) return currentConversationId;
+		try {
+			const response = await fetch(CONVERSATIONS_API_URL, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					user_principal: userPrincipal,
+					realm_principal: REALM_CANISTER_ID || '',
+					persona: selectedAssistant?.id || 'ashoka',
+				}),
+			});
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			const data = await response.json();
+			currentConversationId = data.conversation_id || null;
+			return currentConversationId;
+		} catch (err) {
+			console.error('Error creating conversation:', err);
+			return null;
+		}
+	}
+
+	async function selectConversation(conversationId: string): Promise<void> {
+		if (conversationId === currentConversationId) {
+			showConversationList = false;
+			return;
+		}
+		showConversationList = false;
+		isLoadingMessages = true;
+		error = '';
+		try {
+			const response = await fetch(
+				`${CONVERSATIONS_API_URL}/${encodeURIComponent(conversationId)}/messages`,
+				{ method: 'GET', headers: { 'Content-Type': 'application/json' } },
+			);
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			const data = await response.json();
+			const loaded: ChatMessage[] = [];
+			for (const m of data.messages || []) {
+				if (m.question) loaded.push({ text: m.question, isUser: true });
+				if (m.response) loaded.push({ text: m.response, isUser: false });
+			}
+			messages = loaded;
+			currentConversationId = conversationId;
+		} catch (err) {
+			console.error('Error loading conversation messages:', err);
+			error = 'Could not load that conversation.';
+		} finally {
+			isLoadingMessages = false;
+		}
+	}
+
+	function startNewConversation(): void {
+		currentConversationId = null;
+		messages = [];
+		error = '';
+		accessDeniedOp = '';
+		showConversationList = false;
+		fetchSuggestions();
+	}
+
+	async function renameConversation(conversationId: string): Promise<void> {
+		const current = conversations.find((c) => c.conversation_id === conversationId);
+		const next = (typeof window !== 'undefined'
+			? window.prompt('Rename conversation', current?.title || '')
+			: null);
+		if (next === null) return;
+		const title = next.trim();
+		if (!title) return;
+		try {
+			const response = await fetch(`${CONVERSATIONS_API_URL}/${encodeURIComponent(conversationId)}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title }),
+			});
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			conversations = conversations.map((c) =>
+				c.conversation_id === conversationId ? { ...c, title } : c,
+			);
+		} catch (err) {
+			console.error('Error renaming conversation:', err);
+		}
+	}
+
+	async function deleteConversation(conversationId: string): Promise<void> {
+		if (typeof window !== 'undefined' && !window.confirm('Delete this conversation?')) return;
+		try {
+			const response = await fetch(`${CONVERSATIONS_API_URL}/${encodeURIComponent(conversationId)}`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+			});
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			conversations = conversations.filter((c) => c.conversation_id !== conversationId);
+			if (conversationId === currentConversationId) {
+				startNewConversation();
+			}
+		} catch (err) {
+			console.error('Error deleting conversation:', err);
+		}
+	}
+
+	function currentConversationTitle(): string {
+		const c = conversations.find((x) => x.conversation_id === currentConversationId);
+		return c?.title || 'New conversation';
+	}
 
 	function handleExplainParam() {
 		try {
@@ -172,6 +344,10 @@
 		newMessage = '';
 		isLoading = true;
 
+		// Create/lookup the chat thread so this message is saved to the right conversation
+		const isFirstMessageInThread = !currentConversationId;
+		const conversationId = await ensureConversation();
+
 		try {
 			const payload: Record<string, any> = {
 				question: messageToSend,
@@ -180,6 +356,14 @@
 				stream: true,
 				persona: selectedAssistant?.id || 'ashoka',
 			};
+
+			if (conversationId) {
+				payload.conversation_id = conversationId;
+			}
+
+			if (currentPageContext) {
+				payload.page_context = currentPageContext;
+			}
 
 			if (pendingExplainCodexId) {
 				payload.explain_codex_id = pendingExplainCodexId;
@@ -253,6 +437,10 @@
 
 			isLoading = false;
 			await fetchSuggestions();
+			// Refresh the thread list so a new conversation appears and titles/order update
+			if (userPrincipal && (isFirstMessageInThread || conversations.length === 0)) {
+				loadConversations();
+			}
 		} catch (err: any) {
 			console.error('Error calling LLM:', err);
 			if (err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'))) {
@@ -321,6 +509,8 @@
 
 	function selectAssistant(assistant: AssistantPersona) {
 		selectedAssistant = assistant;
+		// Switching persona starts a fresh thread so histories don't mix personas
+		currentConversationId = null;
 		messages = [];
 		fetchSuggestions();
 	}
@@ -329,11 +519,92 @@
 		return () => {
 			unsubPrincipal?.();
 			unsubAuth?.();
+			unsubPageContext?.();
 		};
 	});
 </script>
 
 <div class="llm-chat-root">
+	<!-- Conversation header (multiple conversations) -->
+	{#if userPrincipal}
+		<div class="conversation-header">
+			<button
+				class="conv-icon-btn"
+				onclick={() => (showConversationList = !showConversationList)}
+				title="Your conversations"
+				aria-label="Show conversations"
+			>
+				<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+				</svg>
+			</button>
+			<span class="conv-title" title={currentConversationTitle()}>{currentConversationTitle()}</span>
+			<button
+				class="conv-icon-btn"
+				onclick={startNewConversation}
+				title="New conversation"
+				aria-label="New conversation"
+			>
+				<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+				</svg>
+			</button>
+		</div>
+
+		{#if showConversationList}
+			<div class="conversation-list">
+				<button class="conv-list-item new" onclick={startNewConversation}>+ New conversation</button>
+				{#if isLoadingConversations}
+					<div class="conv-list-empty">Loading…</div>
+				{:else if conversations.length === 0}
+					<div class="conv-list-empty">No saved conversations yet</div>
+				{:else}
+					{#each conversations as conv}
+						<div class="conv-list-row {conv.conversation_id === currentConversationId ? 'active' : ''}">
+							<button
+								class="conv-list-item"
+								onclick={() => selectConversation(conv.conversation_id)}
+								title={conv.title}
+							>
+								{conv.title}
+							</button>
+							<button
+								class="conv-row-action"
+								onclick={() => renameConversation(conv.conversation_id)}
+								title="Rename"
+								aria-label="Rename conversation"
+							>
+								<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+								</svg>
+							</button>
+							<button
+								class="conv-row-action danger"
+								onclick={() => deleteConversation(conv.conversation_id)}
+								title="Delete"
+								aria-label="Delete conversation"
+							>
+								<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+								</svg>
+							</button>
+						</div>
+					{/each}
+				{/if}
+			</div>
+		{/if}
+	{/if}
+
+	{#if currentPageContext?.title}
+		<div class="page-context-chip" title={currentPageContext.pathname}>
+			<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+				<path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+			</svg>
+			<span>Viewing: {currentPageContext.title}</span>
+		</div>
+	{/if}
+
 	<!-- Assistant Selector -->
 	{#if availableAssistants.length > 1}
 		<div class="assistant-selector">
@@ -355,7 +626,12 @@
 		bind:this={messagesContainer}
 		class="messages-area"
 	>
-		{#if messages.length === 0 && !isExplainMode}
+		{#if isLoadingMessages}
+			<div class="conv-loading">
+				<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-500"></div>
+				<span>Loading conversation…</span>
+			</div>
+		{:else if messages.length === 0 && !isExplainMode}
 			<div class="welcome-message">
 				<div class="bubble assistant-bubble">
 					{#if isAuthenticated}
@@ -468,6 +744,160 @@
 		min-height: 300px;
 		overflow: hidden;
 		background: transparent;
+	}
+
+	/* Conversation header */
+	.conversation-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 0;
+		flex-shrink: 0;
+		border-bottom: 1px solid #e5e7eb;
+	}
+
+	.conv-title {
+		flex: 1;
+		min-width: 0;
+		font-size: 13px;
+		font-weight: 600;
+		color: #374151;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: center;
+	}
+
+	.conv-icon-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 8px;
+		border: 1px solid #e5e7eb;
+		background: #fff;
+		color: #4b5563;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: all 0.15s ease;
+	}
+
+	.conv-icon-btn:hover {
+		background: #f3f4f6;
+		color: #4338ca;
+		border-color: #c7d2fe;
+	}
+
+	/* Conversation list */
+	.conversation-list {
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		max-height: 220px;
+		overflow-y: auto;
+		padding: 6px 0;
+		border-bottom: 1px solid #e5e7eb;
+	}
+
+	.conv-list-empty {
+		font-size: 12px;
+		color: #9ca3af;
+		padding: 8px 10px;
+	}
+
+	.conv-list-row {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		border-radius: 8px;
+	}
+
+	.conv-list-row.active {
+		background: #eef2ff;
+	}
+
+	.conv-list-item {
+		flex: 1;
+		min-width: 0;
+		text-align: left;
+		padding: 8px 10px;
+		font-size: 13px;
+		color: #374151;
+		background: none;
+		border: none;
+		cursor: pointer;
+		border-radius: 8px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.conv-list-item:hover {
+		background: #f3f4f6;
+	}
+
+	.conv-list-item.new {
+		color: #4338ca;
+		font-weight: 600;
+	}
+
+	.conv-row-action {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: none;
+		background: none;
+		color: #9ca3af;
+		cursor: pointer;
+		border-radius: 6px;
+		flex-shrink: 0;
+	}
+
+	.conv-row-action:hover {
+		background: #e5e7eb;
+		color: #4b5563;
+	}
+
+	.conv-row-action.danger:hover {
+		background: #fee2e2;
+		color: #dc2626;
+	}
+
+	/* Conversation loading */
+	.conv-loading {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		justify-content: center;
+		padding: 24px 0;
+		font-size: 13px;
+		color: #6b7280;
+	}
+
+	/* Page context chip */
+	.page-context-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		align-self: flex-start;
+		margin: 8px 0 0;
+		padding: 3px 10px;
+		font-size: 11px;
+		color: #6b7280;
+		background: #f3f4f6;
+		border: 1px solid #e5e7eb;
+		border-radius: 12px;
+		max-width: 100%;
+	}
+
+	.page-context-chip span {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	/* Assistant selector */
