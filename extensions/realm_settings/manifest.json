@@ -1,6 +1,6 @@
 {
   "name": "realm_settings",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Realm configuration and branding",
   "author": "Realms Team",
   "categories": [
@@ -15,6 +15,6 @@
   "profiles": [
     "admin"
   ],
-  "show_in_sidebar": false,
+  "show_in_sidebar": true,
   "icon": "settings"
 }

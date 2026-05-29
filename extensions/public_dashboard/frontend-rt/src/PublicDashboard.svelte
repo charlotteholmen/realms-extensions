@@ -176,6 +176,25 @@
 			: [],
 	);
 
+	const STAGE_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+		alpha: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
+		beta: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+		production: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
+		deprecation: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
+		terminated: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+	};
+	const STAGE_LABELS: Record<string, string> = {
+		alpha: 'Alpha',
+		beta: 'Beta',
+		production: 'Live',
+		deprecation: 'Winding Down',
+		terminated: 'Archived',
+	};
+
+	let realmStage = $derived(realmData?.status || 'alpha');
+	let stageStyle = $derived(STAGE_COLORS[realmStage] || STAGE_COLORS.alpha);
+	let stageLabel = $derived(STAGE_LABELS[realmStage] || realmStage);
+
 	let kpiVisible = $state(false);
 	let animatedValues: number[] = $state([]);
 
@@ -280,6 +299,10 @@
 								onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
 							/>
 							<h1 style="font-size: 2rem; font-weight: 700; color: #111827; margin: 0;">{realmData.name || 'Realm'}</h1>
+							<span class="{stageStyle.bg} {stageStyle.text} inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold">
+								<span class="{stageStyle.dot} w-1.5 h-1.5 rounded-full inline-block"></span>
+								{stageLabel}
+							</span>
 						</div>
 						{#if realmData.welcome_message}
 							<p style="font-size: 0.95rem; color: #6b7280; font-style: italic; margin: 0;">

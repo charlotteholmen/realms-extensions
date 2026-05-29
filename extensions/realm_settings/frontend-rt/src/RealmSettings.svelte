@@ -27,6 +27,29 @@
 	let realmSettingsFileRegistryId = $state('');
 	let realmSettingsMarketplaceId = $state('');
 
+	// Lifecycle state
+	let lifecycleLoading = $state(true);
+	let lifecycleAdvancing = $state(false);
+	let lifecycleError = $state('');
+	let currentStage = $state('alpha');
+	let stageIndex = $state(0);
+	let lifecycleData: any = $state({});
+	const STAGES = ['alpha', 'beta', 'production', 'deprecation', 'terminated'];
+	const STAGE_LABELS: Record<string, string> = {
+		alpha: 'Alpha',
+		beta: 'Beta',
+		production: 'Production',
+		deprecation: 'Deprecation',
+		terminated: 'Terminated',
+	};
+	const STAGE_DESCRIPTIONS: Record<string, string> = {
+		alpha: 'Gathering interest, deposits refundable',
+		beta: 'Deposits locked, infrastructure preparation',
+		production: 'Fully operational',
+		deprecation: 'Winding down, no new members',
+		terminated: 'Closed, read-only archive',
+	};
+
 	let proposalModalOpen = $state(false);
 	let proposalModalTitle = $state('');
 	let proposalModalDescription = $state('');
@@ -132,8 +155,93 @@
 	let marketplaceIdValid = $derived(isValidCanisterId(realmSettingsMarketplaceId));
 	let infraValid = $derived(fileRegistryIdValid && marketplaceIdValid);
 
+	let nextStage = $derived(
+		stageIndex < STAGES.length - 1 ? STAGES[stageIndex + 1] : null
+	);
+
+	async function loadLifecycle() {
+		lifecycleLoading = true;
+		lifecycleError = '';
+		try {
+			const raw = await ctx.backend.extension_sync_call({
+				extension_name: 'realm_settings',
+				function_name: 'get_realm_stage',
+				args: '',
+			});
+			const envelope = typeof raw === 'string' ? JSON.parse(raw) : raw;
+			const res = envelope?.response
+				? typeof envelope.response === 'string'
+					? JSON.parse(envelope.response)
+					: envelope.response
+				: envelope;
+			if (res?.success && res?.data) {
+				currentStage = res.data.stage || 'alpha';
+				stageIndex = res.data.stage_index ?? 0;
+				lifecycleData = res.data.lifecycle || {};
+			} else {
+				lifecycleError = res?.error || 'Failed to load lifecycle';
+			}
+		} catch (e: any) {
+			lifecycleError = e?.message || String(e);
+		} finally {
+			lifecycleLoading = false;
+		}
+	}
+
+	async function advanceStage() {
+		if (!nextStage) return;
+		lifecycleAdvancing = true;
+		lifecycleError = '';
+		try {
+			const raw = await ctx.backend.extension_sync_call({
+				extension_name: 'realm_settings',
+				function_name: 'set_realm_stage',
+				args: JSON.stringify({ stage: nextStage, reason: 'Admin advancement via Settings' }),
+			});
+			const envelope = typeof raw === 'string' ? JSON.parse(raw) : raw;
+			const res = envelope?.response
+				? typeof envelope.response === 'string'
+					? JSON.parse(envelope.response)
+					: envelope.response
+				: envelope;
+			if (res?.success) {
+				addToast(`Stage advanced to ${STAGE_LABELS[nextStage]}`);
+				await loadLifecycle();
+			} else if (res?.denied_operation) {
+				openProposalForStageAdvance(res.denied_operation);
+			} else {
+				lifecycleError = res?.error || 'Failed to advance stage';
+			}
+		} catch (e: any) {
+			const msg = e?.message || String(e);
+			if (msg.includes('Access denied') && msg.includes("lacks permission")) {
+				const match = msg.match(/lacks permission '([^']+)'/);
+				openProposalForStageAdvance(match?.[1] || 'realm.lifecycle.advance');
+			} else {
+				lifecycleError = msg;
+			}
+		} finally {
+			lifecycleAdvancing = false;
+		}
+	}
+
+	function openProposalForStageAdvance(deniedOp: string) {
+		if (!nextStage) return;
+		proposalModalTitle = `Advance realm to ${STAGE_LABELS[nextStage]} stage`;
+		proposalModalDescription = `This proposal advances the realm from "${STAGE_LABELS[currentStage]}" to "${STAGE_LABELS[nextStage]}". ${STAGE_DESCRIPTIONS[nextStage]}.`;
+		proposalModalCode = [
+			'from ggg import Realm',
+			'',
+			'realm = Realm.load("1")',
+			`realm.status = "${nextStage}"`,
+		].join('\n');
+		proposalModalOperation = deniedOp;
+		proposalModalOpen = true;
+	}
+
 	$effect(() => {
 		loadRealmSettings();
+		loadLifecycle();
 	});
 </script>
 
@@ -156,6 +264,134 @@
 			<h1 class="text-3xl font-bold text-gray-900">Settings</h1>
 			<p class="text-gray-600 mt-1">Configure your realm's name, manifesto, branding, and registration settings.</p>
 		</div>
+	</div>
+
+	<!-- Realm Lifecycle Stage -->
+	<div class="bg-white shadow-sm rounded-lg p-6 mb-6">
+		<h2 class="text-lg font-semibold text-gray-900 mb-1">Realm Lifecycle</h2>
+		<p class="text-sm text-gray-500 mb-5">Current operational stage of this realm.</p>
+
+		{#if lifecycleLoading}
+			<div class="flex items-center justify-center py-6">
+				<div class="animate-spin h-6 w-6 border-3 border-blue-500 border-t-transparent rounded-full"></div>
+			</div>
+		{:else}
+			<!-- Stage timeline -->
+			<div class="relative mb-6">
+				<div class="flex items-center justify-between">
+					{#each STAGES as stage, i}
+						{@const isCurrent = i === stageIndex}
+						{@const isPast = i < stageIndex}
+						{@const isFuture = i > stageIndex}
+						<div class="flex flex-col items-center relative z-10" style="flex: 1;">
+							<div class={cn(
+								'w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all',
+								isCurrent ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200' :
+								isPast ? 'bg-green-500 border-green-500 text-white' :
+								'bg-gray-100 border-gray-300 text-gray-400'
+							)}>
+								{#if isPast}
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+								{:else}
+									{i + 1}
+								{/if}
+							</div>
+							<span class={cn(
+								'text-xs mt-2 font-medium text-center',
+								isCurrent ? 'text-blue-700' : isPast ? 'text-green-600' : 'text-gray-400'
+							)}>{STAGE_LABELS[stage]}</span>
+							{#if isCurrent}
+								<span class="text-[10px] text-gray-500 mt-0.5 text-center max-w-[90px]">{STAGE_DESCRIPTIONS[stage]}</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+				<!-- Progress line behind circles -->
+				<div class="absolute top-[18px] left-[10%] right-[10%] h-0.5 bg-gray-200 -z-0"></div>
+				<div
+					class="absolute top-[18px] left-[10%] h-0.5 bg-green-500 -z-0 transition-all duration-500"
+					style="width: {stageIndex / (STAGES.length - 1) * 80}%"
+				></div>
+			</div>
+
+			<!-- Lifecycle metrics -->
+			{#if currentStage === 'alpha' || currentStage === 'beta'}
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+					<div class="bg-gray-50 rounded-lg p-3 border border-gray-100">
+						<div class="text-xs text-gray-500 mb-1">Registered Users</div>
+						<div class="text-lg font-bold text-gray-900">{lifecycleData.registered_users?.toLocaleString() ?? '—'}</div>
+					</div>
+					<div class="bg-gray-50 rounded-lg p-3 border border-gray-100">
+						<div class="text-xs text-gray-500 mb-1">Critical Mass</div>
+						<div class="text-lg font-bold text-gray-900">{lifecycleData.critical_mass?.toLocaleString() ?? '—'}</div>
+					</div>
+					<div class="bg-gray-50 rounded-lg p-3 border border-gray-100">
+						<div class="text-xs text-gray-500 mb-1">Deposits Locked</div>
+						<div class={cn('text-lg font-bold', lifecycleData.deposits_locked ? 'text-amber-600' : 'text-gray-400')}>
+							{lifecycleData.deposits_locked ? 'Yes' : 'No'}
+						</div>
+					</div>
+					<div class="bg-gray-50 rounded-lg p-3 border border-gray-100">
+						<div class="text-xs text-gray-500 mb-1">Progress</div>
+						<div class="text-lg font-bold text-blue-600">
+							{lifecycleData.critical_mass
+								? Math.min(100, Math.round((lifecycleData.registered_users / lifecycleData.critical_mass) * 100))
+								: 0}%
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			{#if currentStage === 'beta'}
+				<div class="grid grid-cols-3 gap-3 mb-5">
+					<div class={cn('rounded-lg p-3 border', lifecycleData.land_acquired ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100')}>
+						<div class="text-xs text-gray-500 mb-1">Land Acquired</div>
+						<div class={cn('text-sm font-semibold', lifecycleData.land_acquired ? 'text-green-700' : 'text-gray-400')}>
+							{lifecycleData.land_acquired ? 'Ready' : 'Pending'}
+						</div>
+					</div>
+					<div class={cn('rounded-lg p-3 border', lifecycleData.infrastructure_ready ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100')}>
+						<div class="text-xs text-gray-500 mb-1">Infrastructure</div>
+						<div class={cn('text-sm font-semibold', lifecycleData.infrastructure_ready ? 'text-green-700' : 'text-gray-400')}>
+							{lifecycleData.infrastructure_ready ? 'Ready' : 'Pending'}
+						</div>
+					</div>
+					<div class={cn('rounded-lg p-3 border', lifecycleData.providers_ready ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100')}>
+						<div class="text-xs text-gray-500 mb-1">Providers</div>
+						<div class={cn('text-sm font-semibold', lifecycleData.providers_ready ? 'text-green-700' : 'text-gray-400')}>
+							{lifecycleData.providers_ready ? 'Ready' : 'Pending'}
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Advance button -->
+			{#if nextStage && currentStage !== 'terminated'}
+				<div class="flex items-center gap-3 pt-2 border-t border-gray-100">
+					<button
+						onclick={advanceStage}
+						disabled={lifecycleAdvancing}
+						class={cn(
+							'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+							currentStage === 'production'
+								? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+								: 'bg-blue-600 text-white hover:bg-blue-700',
+							'disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed'
+						)}
+					>
+						{#if lifecycleAdvancing}
+							<div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+						{/if}
+						Advance to {STAGE_LABELS[nextStage]}
+					</button>
+					<span class="text-xs text-gray-500">{STAGE_DESCRIPTIONS[nextStage]}</span>
+				</div>
+			{/if}
+
+			{#if lifecycleError}
+				<div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{lifecycleError}</div>
+			{/if}
+		{/if}
 	</div>
 
 	<div class="bg-white shadow-sm rounded-lg p-6">
