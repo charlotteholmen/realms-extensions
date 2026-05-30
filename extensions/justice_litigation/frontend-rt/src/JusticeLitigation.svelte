@@ -51,9 +51,15 @@
 	});
 
 	let selectedDefendantEntry: any = $state(null);
+	// The principal actually submitted. When the user picks a suggestion we show
+	// its friendly label in the input but keep the real principal here.
+	let defendantPrincipal = $state('');
 
 	let defendantLabel = $derived.by(() => {
-		if (selectedDefendantEntry) return `${selectedDefendantEntry.label} (${selectedDefendantEntry.kind})`;
+		if (selectedDefendantEntry) {
+			const p = selectedDefendantEntry.principal;
+			return `${selectedDefendantEntry.label} (${selectedDefendantEntry.kind})${p ? ` — ${p}` : ''}`;
+		}
 		const v = formDefendant.trim();
 		if (!v) return '';
 		const hit = directory.find((e) => e.principal === v);
@@ -79,8 +85,11 @@
 	}
 
 	function selectDefendant(entry: any) {
-		if (entry?.principal) formDefendant = entry.principal;
-		selectedDefendantEntry = entry || null;
+		if (!entry) return;
+		// Show the human-friendly label in the box, submit the real principal.
+		formDefendant = entry.label || entry.principal || '';
+		defendantPrincipal = entry.principal || '';
+		selectedDefendantEntry = entry;
 		showDefendantSuggestions = false;
 	}
 
@@ -162,7 +171,7 @@
 	}
 
 	async function createLitigation() {
-		if (!formTitle.trim() || !formDescription.trim() || !formDefendant.trim()) {
+		if (!formTitle.trim() || !formDescription.trim() || !defendantPrincipal.trim()) {
 			createError = 'All fields are required';
 			return;
 		}
@@ -177,7 +186,7 @@
 			// 1. Open the case (no plaintext leaves the browser): reserve an id,
 			//    its sharing scope, and the recipient principals (justice dept).
 			const created: any = await callExt('create_litigation', {
-				defendant_principal: formDefendant.trim(),
+				defendant_principal: defendantPrincipal.trim(),
 			});
 			const cdata = created?.data ?? created;
 			const id = cdata?.id;
@@ -203,6 +212,7 @@
 			formTitle = '';
 			formDescription = '';
 			formDefendant = '';
+			defendantPrincipal = '';
 			selectedDefendantEntry = null;
 			await loadLitigations();
 			setTimeout(() => {
@@ -260,6 +270,7 @@
 		formTitle = '';
 		formDescription = '';
 		formDefendant = '';
+		defendantPrincipal = '';
 		selectedDefendantEntry = null;
 		createError = '';
 		createSuccess = false;
@@ -611,7 +622,11 @@
 									id="jl-defendant"
 									type="text"
 									bind:value={formDefendant}
-									oninput={() => { selectedDefendantEntry = null; showDefendantSuggestions = true; }}
+									oninput={() => {
+									selectedDefendantEntry = null;
+									defendantPrincipal = formDefendant.trim();
+									showDefendantSuggestions = true;
+								}}
 									onfocus={() => (showDefendantSuggestions = true)}
 									onblur={() => setTimeout(() => (showDefendantSuggestions = false), 250)}
 									autocomplete="off"
@@ -731,7 +746,7 @@
 							disabled={creating ||
 								!formTitle.trim() ||
 								!formDescription.trim() ||
-								!formDefendant.trim()}
+								!defendantPrincipal.trim()}
 						>
 							{#if creating}
 								<svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
