@@ -581,15 +581,15 @@ def file_case(args: str) -> str:
             })
         
         # Find entities
-        court = Court.find(court_id)
+        court = Court[court_id]
         if not court:
             return json.dumps({"success": False, "error": f"Court {court_id} not found"})
         
-        plaintiff = User.find(plaintiff_id)
+        plaintiff = User[plaintiff_id]
         if not plaintiff:
             return json.dumps({"success": False, "error": f"Plaintiff user {plaintiff_id} not found"})
         
-        defendant = User.find(defendant_id)
+        defendant = User[defendant_id]
         if not defendant:
             return json.dumps({"success": False, "error": f"Defendant user {defendant_id} not found"})
         
@@ -634,11 +634,11 @@ def assign_judge(args: str) -> str:
                 "error": "case_id and judge_id are required"
             })
         
-        case = Case.find(case_id)
+        case = Case[case_id]
         if not case:
             return json.dumps({"success": False, "error": f"Case {case_id} not found"})
         
-        judge = Judge.find(judge_id)
+        judge = Judge[judge_id]
         if not judge:
             return json.dumps({"success": False, "error": f"Judge {judge_id} not found"})
         
@@ -710,18 +710,18 @@ def issue_verdict(args: str) -> str:
                 "error": "case_id, judge_id, and decision are required"
             })
         
-        case = Case.find(case_id)
+        case = Case[case_id]
         if not case:
             return json.dumps({"success": False, "error": f"Case {case_id} not found"})
         
-        judge = Judge.find(judge_id)
+        judge = Judge[judge_id]
         if not judge:
             return json.dumps({"success": False, "error": f"Judge {judge_id} not found"})
         
         # Build penalty list
         penalty_list = []
         for p in penalties:
-            target_user = User.find(p.get("target_user_id")) if p.get("target_user_id") else None
+            target_user = User[p.get("target_user_id")] if p.get("target_user_id") else None
             penalty_list.append({
                 "penalty_type": p.get("type", PenaltyType.FINE),
                 "amount": p.get("amount", 0),
@@ -805,7 +805,7 @@ def execute_penalty(args: str) -> str:
         if not penalty_id:
             return json.dumps({"success": False, "error": "penalty_id is required"})
         
-        penalty = Penalty.find(penalty_id)
+        penalty = Penalty[penalty_id]
         if not penalty:
             return json.dumps({"success": False, "error": f"Penalty {penalty_id} not found"})
         
@@ -841,7 +841,7 @@ def waive_penalty(args: str) -> str:
         if not penalty_id:
             return json.dumps({"success": False, "error": "penalty_id is required"})
         
-        penalty = Penalty.find(penalty_id)
+        penalty = Penalty[penalty_id]
         if not penalty:
             return json.dumps({"success": False, "error": f"Penalty {penalty_id} not found"})
         
@@ -922,15 +922,15 @@ def file_appeal(args: str) -> str:
                 "error": "case_id, appellant_id, and grounds are required"
             })
         
-        case = Case.find(case_id)
+        case = Case[case_id]
         if not case:
             return json.dumps({"success": False, "error": f"Case {case_id} not found"})
         
-        appellant = User.find(appellant_id)
+        appellant = User[appellant_id]
         if not appellant:
             return json.dumps({"success": False, "error": f"Appellant user {appellant_id} not found"})
         
-        appellate_court = Court.find(appellate_court_id) if appellate_court_id else None
+        appellate_court = Court[appellate_court_id] if appellate_court_id else None
         
         # Get the original verdict
         verdicts = list(case.verdicts) if hasattr(case, 'verdicts') else []
@@ -981,7 +981,7 @@ def decide_appeal(args: str) -> str:
                 "error": "appeal_id and decision are required"
             })
         
-        appeal = Appeal.find(appeal_id)
+        appeal = Appeal[appeal_id]
         if not appeal:
             return json.dumps({"success": False, "error": f"Appeal {appeal_id} not found"})
         
@@ -1187,18 +1187,16 @@ def create_litigation(args: str) -> str:
                     {"success": False, "error": "No courts available. Please create a court first."}
                 )
 
-        court = Court.find(court_id)
+        court = Court[court_id]
         if not court:
             return json.dumps({"success": False, "error": f"Court {court_id} not found"})
 
-        plaintiff = User[submitter] or User.find(submitter)
+        plaintiff = User[submitter]
         if not plaintiff:
             return json.dumps({"success": False, "error": f"Submitter {submitter} is not a registered user"})
 
         # The defendant is recorded but is NOT granted read access.
         defendant = User[defendant_id] if defendant_id else None
-        if defendant_id and not defendant:
-            defendant = User.find(defendant_id)
 
         # Create the public Case with empty title/description; the real content
         # lives encrypted in this extension's own LitigationContent entity.
@@ -1265,8 +1263,6 @@ def set_litigation_content(args: str) -> str:
             case = Case[case_id]
         except (KeyError, Exception):
             case = None
-        if not case:
-            case = Case.find(case_id)
         if not case:
             return json.dumps({"success": False, "error": f"Case {case_id} not found"})
 
