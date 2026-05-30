@@ -57,8 +57,12 @@
 
 	let defendantLabel = $derived.by(() => {
 		if (selectedDefendantEntry) {
-			const p = selectedDefendantEntry.principal;
-			return `${selectedDefendantEntry.label} (${selectedDefendantEntry.kind})${p ? ` — ${p}` : ''}`;
+			const e = selectedDefendantEntry;
+			// A department is filed against as a whole entity, so don't show its
+			// head's principal (that would imply the case targets one person).
+			if (e.kind === 'department') return `${e.label} (department)`;
+			const p = e.principal;
+			return `${e.label} (${e.kind})${p && p !== e.label ? ` — ${p}` : ''}`;
 		}
 		const v = formDefendant.trim();
 		if (!v) return '';
@@ -682,9 +686,13 @@
 														<span class="block font-medium text-gray-900 dark:text-white truncate">
 															{s.label}
 														</span>
-														{#if s.principal && s.principal !== s.label}
+														{#if s.kind === 'department'}
+															<span class="block text-xs text-gray-500 dark:text-gray-400 truncate">
+																whole department
+															</span>
+														{:else if s.principal && s.principal !== s.label}
 															<span class="block font-mono text-xs text-gray-500 dark:text-gray-400 truncate">
-																{s.principal || 'no principal'}
+																{s.principal}
 															</span>
 														{/if}
 													</span>
