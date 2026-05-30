@@ -24,8 +24,10 @@ API:
 import json
 import traceback
 
-from ggg import Department, DepartmentDocument
+from ggg import Department
+from ic_python_db import String
 from ic_python_logging import get_logger
+from core.extensions import create_extension_entity_class
 
 try:
     from _cdk import ic as _ic
@@ -33,6 +35,34 @@ except ImportError:
     _ic = None
 
 logger = get_logger("extensions.department_docs")
+
+# This extension owns its encrypted-document entity (no host ggg edit needed).
+ExtensionEntity = create_extension_entity_class("department_docs")
+
+
+class DepartmentDocument(ExtensionEntity):
+    """An encrypted document shared with a department.
+
+    Stored namespaced as ``ext_department_docs::DepartmentDocument``. The
+    ``ciphertext`` is opaque to the canister (AES-GCM under a per-document DEK);
+    read access is governed by KeyEnvelope records at scope
+    ``dept:<department>:doc:<id>``, which the host's built-in ``dept:`` scope
+    policy lets the department head (or a realm admin) manage. The canister
+    never sees the plaintext, the DEK, or any vetKey.
+    """
+
+    department = String(max_length=256)
+    title = String(max_length=512)
+    ciphertext = String()  # enc:v=2:... AES-GCM blob (may be empty until set)
+    scope = String(max_length=512)  # dept:<department>:doc:<id>
+    created_by = String(max_length=128)  # author principal
+
+
+def register_entities():
+    """Register this extension's entity types (called by the host at init)."""
+    from ic_python_db import Database
+
+    Database.get_instance().register_entity_type(DepartmentDocument)
 
 
 # ---------------------------------------------------------------------------

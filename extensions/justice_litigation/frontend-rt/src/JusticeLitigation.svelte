@@ -49,6 +49,36 @@
 		return await ctx.callSync(fn, args);
 	}
 
+	// Decrypt a litigation row's title/description in the browser. Private rows
+	// carry an opaque ciphertext + scope; only principals holding a key (the
+	// submitter and the justice department) can decrypt. Rows we cannot decrypt
+	// are flagged `locked` so the UI shows a "no access" indicator. Legacy
+	// (plaintext) rows pass through unchanged.
+	async function decryptRow(row: any) {
+		if (!row?.is_private) {
+			return { ...row, locked: false };
+		}
+		const scope = row.content_scope;
+		const ciphertext = row.content_ciphertext;
+		if (!scope || !ciphertext || !ctx.crypto?.decryptScope) {
+			return { ...row, locked: true };
+		}
+		try {
+			const decrypted = await ctx.crypto.decryptScope(scope, ciphertext);
+			if (decrypted && (decrypted.title || decrypted.description)) {
+				return {
+					...row,
+					case_title: decrypted.title ?? '',
+					description: decrypted.description ?? '',
+					locked: false,
+				};
+			}
+		} catch (e) {
+			console.warn('[justice_litigation] decrypt failed', e);
+		}
+		return { ...row, locked: true };
+	}
+
 	async function loadLitigations() {
 		loading = true;
 		error = '';
@@ -59,7 +89,8 @@
 				user_profile: userProfile,
 			});
 			const data = res?.data ?? res;
-			litigations = data?.litigations ?? (Array.isArray(data) ? data : []);
+			const rows = data?.litigations ?? (Array.isArray(data) ? data : []);
+			litigations = await Promise.all(rows.map(decryptRow));
 			totalCount = data?.total_count ?? litigations.length;
 			if (data?.user_profile) userProfile = data.user_profile;
 		} catch (e: any) {
@@ -81,16 +112,39 @@
 			createError = 'All fields are required';
 			return;
 		}
+		if (!ctx.crypto?.encryptForRecipients || !ctx.crypto?.grantScope) {
+			createError = 'Secure sharing is unavailable in this host version.';
+			return;
+		}
 		creating = true;
 		createError = '';
 		createSuccess = false;
 		try {
-			await callExt('create_litigation', {
-				requester_principal: principal,
+			// 1. Open the case (no plaintext leaves the browser): reserve an id,
+			//    its sharing scope, and the recipient principals (justice dept).
+			const created: any = await callExt('create_litigation', {
 				defendant_principal: formDefendant.trim(),
-				case_title: formTitle.trim(),
+			});
+			const cdata = created?.data ?? created;
+			const id = cdata?.id;
+			const scope = cdata?.scope;
+			if (!id || !scope) throw new Error(cdata?.error || created?.error || 'Failed to open litigation');
+
+			// 2. Recipients = submitter + justice department members.
+			const recipients = Array.from(
+				new Set([...(cdata?.recipients ?? []), principal].filter(Boolean)),
+			);
+
+			// 3. Encrypt title + description locally (fresh DEK, IBE-wrapped per
+			//    recipient) and attach the ciphertext, then grant the wrapped DEKs.
+			const { ciphertext, wrappedDeks } = await ctx.crypto.encryptForRecipients(recipients, {
+				title: formTitle.trim(),
 				description: formDescription.trim(),
 			});
+			const setRes: any = await callExt('set_litigation_content', { id, ciphertext });
+			if (setRes?.success === false) throw new Error(setRes?.data?.error || setRes?.error || 'Failed to store litigation');
+			await ctx.crypto.grantScope(scope, wrappedDeks);
+
 			createSuccess = true;
 			formTitle = '';
 			formDescription = '';
@@ -405,15 +459,27 @@
 										{lit.case_number || lit.id}
 									</td>
 										<td class="px-4 py-3">
-											<div class="font-medium text-gray-900 dark:text-white">
-												{lit.case_title}
-											</div>
-											{#if lit.description}
-												<div
-													class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs"
-												>
-													{lit.description}
+											{#if lit.locked}
+												<div class="flex items-center gap-1.5 font-medium text-gray-400 dark:text-gray-500 italic">
+													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+													</svg>
+													Encrypted — no access
 												</div>
+											{:else}
+												<div class="flex items-center gap-1.5 font-medium text-gray-900 dark:text-white">
+													{#if lit.is_private}
+														<svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Private">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+														</svg>
+													{/if}
+													{lit.case_title || '(untitled)'}
+												</div>
+												{#if lit.description}
+													<div class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
+														{lit.description}
+													</div>
+												{/if}
 											{/if}
 										</td>
 										<td class="px-4 py-3">
@@ -467,7 +533,9 @@
 						Create New Litigation Case
 					</h3>
 					<p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
-						Submit a new litigation request. All fields are required.
+						Submit a new litigation request. All fields are required. The title and
+						description are encrypted in your browser and shared only with you and the
+						justice department — no one else (not even the defendant) can read them.
 					</p>
 
 					<div class="space-y-4">

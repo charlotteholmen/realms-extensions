@@ -1,7 +1,7 @@
 {
   "name": "justice_litigation",
-  "version": "0.2.0",
-  "description": "Comprehensive legal case management with courts, judges, verdicts, penalties, and appeals",
+  "version": "0.3.0",
+  "description": "Private-by-default litigations (end-to-end encrypted, shared only with the submitter and the justice department) plus courts, judges, verdicts, penalties, and appeals",
   "permissions": [],
   "entry_points": [
     "get_justice_systems",
@@ -22,6 +22,8 @@
     "get_statistics",
     "get_litigations",
     "create_litigation",
+    "set_litigation_content",
+    "get_justice_audience",
     "execute_verdict",
     "load_demo_litigations"
   ],

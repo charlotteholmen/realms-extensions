@@ -39,6 +39,205 @@ from ic_python_logging import get_logger
 
 logger = get_logger("extensions.justice_litigation")
 
+try:
+    from _cdk import ic as _ic
+except ImportError:  # unit-test / non-canister context
+    _ic = None
+
+# The department whose members may read every litigation (alongside the
+# submitter). A litigation is private by default and shared only with the
+# submitter and this department. Configurable by renaming the realm's
+# Department; falls back to realm administrators when it is not seeded yet.
+JUSTICE_DEPARTMENT_NAME = "Justice"
+
+
+# ============================================================================
+# Self-contained encrypted storage + sharing policy (no host edits needed)
+# ============================================================================
+#
+# This extension owns everything it needs for end-to-end-encrypted, private
+# litigations:
+#   1. its OWN entity for the opaque ciphertext (LitigationContent), and
+#   2. its OWN sharing-scope policy (the `litigation:` scope kind),
+# both registered into the host's generic facilities at load/init time. The
+# host's crypto endpoints and the Case entity are reused unchanged.
+
+from ic_python_db import String  # noqa: E402
+from core.extensions import create_extension_entity_class  # noqa: E402
+from core.crypto_scopes import scope_kind, ScopeAuthContext  # noqa: E402
+
+ExtensionEntity = create_extension_entity_class("justice_litigation")
+
+
+class LitigationContent(ExtensionEntity):
+    """Encrypted title/description for a private litigation.
+
+    Stored namespaced as ``ext_justice_litigation::LitigationContent``. The
+    ``ciphertext`` is an opaque AES-GCM ``enc:v=2:...`` blob (the canister never
+    sees plaintext, the DEK, or any vetKey). Read access is governed by
+    KeyEnvelope records at ``scope`` (``litigation:<dept>:<submitter>:<case_id>``).
+    Keyed by the host ``Case`` id so the public Case record stays unchanged.
+    """
+
+    __alias__ = "case_id"
+    case_id = String(max_length=64)
+    ciphertext = String()
+    scope = String(max_length=512)
+    created_by = String(max_length=128)
+
+
+def register_entities():
+    """Register this extension's entity types (called by the host at init)."""
+    from ic_python_db import Database
+
+    Database.get_instance().register_entity_type(LitigationContent)
+
+
+@scope_kind("litigation")
+def _manage_litigation_scope(parts, caller, ctx: ScopeAuthContext) -> bool:
+    """``litigation:<department>:<submitter>:<case_id>``.
+
+    A litigation is private by default: only its *submitter* and the justice
+    *department* may read it. Managing read access (grant/revoke) is allowed
+    for the submitter (``parts[2]``), the justice department head (``parts[1]``),
+    or a realm admin. Department *members* are recipients, not managers.
+    """
+    if len(parts) < 4 or not parts[1] or not parts[2]:
+        return False
+    department, submitter = parts[1], parts[2]
+    return (
+        caller == submitter
+        or ctx.is_realm_admin(caller)
+        or ctx.is_department_head(department, caller)
+    )
+
+
+def _litigation_content(case_id: str):
+    """Return the LitigationContent for a case id, or None."""
+    try:
+        return LitigationContent[str(case_id)]
+    except Exception:
+        return None
+
+
+# ============================================================================
+# Privacy helpers — caller identity, justice-department resolution, read auth
+# ============================================================================
+
+def _caller_principal() -> str:
+    """The authenticated caller's principal (never trust a client-supplied one)."""
+    if _ic is not None:
+        try:
+            return _ic.caller().to_str()
+        except Exception:
+            pass
+    return ""
+
+
+def _auth_ctx():
+    """Reuse the realm's pluggable scope-authorization context."""
+    from core.crypto_scopes import production_context
+
+    return production_context()
+
+
+def _is_realm_admin(caller: str) -> bool:
+    if not caller:
+        return False
+    try:
+        return _auth_ctx().is_realm_admin(caller)
+    except Exception:
+        return False
+
+
+def _is_justice_head(caller: str) -> bool:
+    if not caller:
+        return False
+    try:
+        return _auth_ctx().is_department_head(JUSTICE_DEPARTMENT_NAME, caller)
+    except Exception:
+        return False
+
+
+def _justice_member_principals() -> List[str]:
+    """Principals that make up the justice department (members + head).
+
+    These are the recipients (besides the submitter) for whom a litigation's
+    data-encryption key is IBE-wrapped, so they can decrypt it. When no
+    ``Justice`` department has been seeded yet, fall back to the realm
+    administrators (the ``member_data_readers`` crypto group) so the feature
+    still works out of the box.
+    """
+    principals: List[str] = []
+    try:
+        from ggg import Department
+
+        dept = None
+        try:
+            dept = Department[JUSTICE_DEPARTMENT_NAME]
+        except Exception:
+            dept = None
+        if dept is not None:
+            try:
+                for m in dept.members:
+                    pid = getattr(m, "id", None)
+                    if pid and str(pid) not in principals:
+                        principals.append(str(pid))
+            except Exception:
+                pass
+            head = getattr(dept, "head", None)
+            if head is not None:
+                hid = getattr(head, "id", None)
+                if hid and str(hid) not in principals:
+                    principals.append(str(hid))
+    except Exception as e:
+        logger.warning(f"_justice_member_principals: {e}")
+
+    if not principals:
+        try:
+            from api.crypto import group_members
+
+            res = group_members("member_data_readers")
+            for m in res.get("members", []):
+                pid = m.get("principal")
+                if pid and pid not in principals:
+                    principals.append(pid)
+        except Exception as e:
+            logger.warning(f"_justice_member_principals admin fallback: {e}")
+
+    return principals
+
+
+def _is_justice_member(caller: str) -> bool:
+    return bool(caller) and caller in _justice_member_principals()
+
+
+def _case_submitter(case: "Case") -> str:
+    plaintiff = getattr(case, "plaintiff", None)
+    return str(plaintiff._id) if plaintiff else ""
+
+
+def _can_view_case(case: "Case", caller: str) -> bool:
+    """Who may *see* a litigation: its submitter, the justice department, or an
+    admin. (The defendant is intentionally NOT granted access.)"""
+    if not caller:
+        return False
+    if _is_realm_admin(caller) or _is_justice_member(caller):
+        return True
+    return _case_submitter(case) == caller
+
+
+def _can_manage_case(case: "Case", caller: str) -> bool:
+    """Who may set a litigation's ciphertext / manage its sharing: the
+    submitter, the justice department head, or a realm admin."""
+    if not caller:
+        return False
+    return (
+        _is_realm_admin(caller)
+        or _is_justice_head(caller)
+        or _case_submitter(case) == caller
+    )
+
 
 # ============================================================================
 # Helper Functions - Entity to Dict Converters
@@ -869,112 +1068,220 @@ def get_statistics(args: str) -> str:
 # ============================================================================
 
 def get_litigations(args: str) -> str:
+    """List the litigations the caller may access.
+
+    Privacy model: a litigation is visible only to its **submitter** and the
+    **justice department** (and realm admins). Members see their own cases;
+    justice members / admins see all. The encrypted ``content_ciphertext`` and
+    its ``content_scope`` are returned so the client can decrypt the title and
+    description for principals that hold a key; the canister never returns the
+    plaintext for private cases.
     """
-    DEPRECATED: Use get_cases() instead.
-    
-    This function is kept for backwards compatibility with the old frontend.
-    It maps Case entities to the old litigation format.
-    """
-    logger.info(f"justice_litigation.get_litigations called (DEPRECATED - use get_cases)")
-    
+    logger.info("justice_litigation.get_litigations called")
+
     try:
-        params = json.loads(args) if args else {}
-        user_principal = params.get("user_principal")
-        user_profile = params.get("user_profile", "member")
-        
-        # Get cases from new system
-        cases = list(Case.instances())
-        
-        # Filter by user if not admin
-        # Note: user_principal is the II principal, need to find matching User
-        if user_profile != "admin" and user_principal:
-            # Find Identity by principal using Entity.find()
-            from ggg import Identity
-            identities = Identity.find({"metadata": user_principal})
-            matching_user_ids = {
-                i.user._id for i in identities 
-                if hasattr(i, 'user') and i.user
-            }
-            
-            # Only filter if we found a matching user, otherwise show all (demo mode)
-            if matching_user_ids:
-                cases = [c for c in cases if 
-                         (c.plaintiff and c.plaintiff._id in matching_user_ids) or 
-                         (c.defendant and c.defendant._id in matching_user_ids)]
-        
-        # Map to old format for backwards compatibility
+        caller = _caller_principal()
+        if not caller:
+            params = json.loads(args) if args else {}
+            caller = params.get("user_principal", "")
+
+        # Compute the justice audience once (it is the same for every case).
+        sees_all = _is_realm_admin(caller) or _is_justice_member(caller)
+
         litigations = []
-        for case in cases:
-            verdicts = list(case.verdicts) if hasattr(case, 'verdicts') else []
-            litigations.append({
-                "id": str(case._id),
-                "case_number": case.case_number or "",
-                "requester_principal": case.plaintiff._id if case.plaintiff else "unknown",
-                "defendant_principal": case.defendant._id if case.defendant else "unknown",
-                "case_title": case.title or "",
-                "description": case.description or "",
-                "status": case.status or "pending",
-                "requested_at": case.filed_date or "",
-                "verdict": verdicts[0].decision if verdicts else None,
-                "actions_taken": [],
-            })
-        
-        return json.dumps({
-            "success": True,
-            "data": {
-                "litigations": litigations,
-                "total_count": len(litigations),
-                "user_profile": user_profile,
+        for case in Case.instances():
+            # Visible to the submitter, the justice department, or an admin.
+            if not (sees_all or _case_submitter(case) == caller):
+                continue
+            verdicts = list(case.verdicts) if hasattr(case, "verdicts") else []
+            content = _litigation_content(case._id)
+            is_private = content is not None
+            litigations.append(
+                {
+                    "id": str(case._id),
+                    "case_number": case.case_number or "",
+                    "requester_principal": case.plaintiff._id if case.plaintiff else "unknown",
+                    "defendant_principal": case.defendant._id if case.defendant else "unknown",
+                    # Private cases carry no plaintext; the client decrypts the
+                    # ciphertext below. Legacy plaintext cases still expose it.
+                    "case_title": "" if is_private else (case.title or ""),
+                    "description": "" if is_private else (case.description or ""),
+                    "content_scope": (content.scope or "") if is_private else "",
+                    "content_ciphertext": (content.ciphertext or "") if is_private else "",
+                    "is_private": is_private,
+                    "status": case.status or "filed",
+                    "requested_at": case.filed_date or "",
+                    "verdict": verdicts[0].decision if verdicts else None,
+                    "actions_taken": [],
+                }
+            )
+
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "litigations": litigations,
+                    "total_count": len(litigations),
+                    "user_profile": "admin" if sees_all else "member",
+                    "can_view_all": sees_all,
+                },
             }
-        })
-        
+        )
+
     except Exception as e:
-        logger.error(f"Error in get_litigations: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Error in get_litigations: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def get_justice_audience(args: str = "") -> str:
+    """Return the justice department's recipient principals.
+
+    The frontend needs these (plus the submitter) to IBE-wrap a litigation's
+    data-encryption key for everyone allowed to read it.
+    """
+    try:
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "department": JUSTICE_DEPARTMENT_NAME,
+                    "principals": _justice_member_principals(),
+                },
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error in get_justice_audience: {e}\n{traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})
 
 
 def create_litigation(args: str) -> str:
+    """Open a new private litigation (step 1 of 2).
+
+    The case is created with *no* plaintext title/description; the real content
+    is encrypted client-side and attached via :func:`set_litigation_content`.
+    Returns the new case id plus the ``content_scope`` and the recipient
+    principals (submitter + justice department) the client must wrap the DEK
+    for.
     """
-    DEPRECATED: Use file_case() instead.
-    
-    This function is kept for backwards compatibility with the old frontend.
-    """
-    logger.info(f"justice_litigation.create_litigation called (DEPRECATED - use file_case)")
-    
+    logger.info("justice_litigation.create_litigation called")
+
     try:
         params = json.loads(args) if args else {}
-        
-        # Map old params to new
+
+        # The submitter is always the authenticated caller — never trust a
+        # client-supplied principal for who owns the case.
+        submitter = _caller_principal() or params.get("requester_principal", "")
+        if not submitter:
+            return json.dumps({"success": False, "error": "Unable to determine caller principal"})
+
+        defendant_id = params.get("defendant_principal") or params.get("defendant_id")
         court_id = params.get("court_id")
-        plaintiff_id = params.get("requester_principal")
-        defendant_id = params.get("defendant_principal")
-        title = params.get("case_title")
-        description = params.get("description", "")
-        
-        # If no court specified, try to find the first available court
+
+        # If no court specified, use the first available court.
         if not court_id:
             courts = list(Court.instances())
             if courts:
                 court_id = courts[0]._id
             else:
-                return json.dumps({
-                    "success": False,
-                    "error": "No courts available. Please create a court first."
-                })
-        
-        # Call the new file_case
-        new_args = json.dumps({
-            "court_id": court_id,
-            "plaintiff_id": plaintiff_id,
-            "defendant_id": defendant_id,
-            "title": title,
-            "description": description
-        })
-        
-        return file_case(new_args)
-        
+                return json.dumps(
+                    {"success": False, "error": "No courts available. Please create a court first."}
+                )
+
+        court = Court.find(court_id)
+        if not court:
+            return json.dumps({"success": False, "error": f"Court {court_id} not found"})
+
+        plaintiff = User[submitter] or User.find(submitter)
+        if not plaintiff:
+            return json.dumps({"success": False, "error": f"Submitter {submitter} is not a registered user"})
+
+        # The defendant is recorded but is NOT granted read access.
+        defendant = User[defendant_id] if defendant_id else None
+        if defendant_id and not defendant:
+            defendant = User.find(defendant_id)
+
+        # Create the public Case with empty title/description; the real content
+        # lives encrypted in this extension's own LitigationContent entity.
+        new_case = case_file(
+            court=court,
+            plaintiff=plaintiff,
+            defendant=defendant,
+            title="",
+            description="",
+            metadata=json.dumps({"defendant_principal": defendant_id}) if defendant_id else "",
+        )
+
+        scope = f"litigation:{JUSTICE_DEPARTMENT_NAME}:{submitter}:{new_case._id}"
+        LitigationContent(
+            case_id=str(new_case._id),
+            ciphertext="",
+            scope=scope,
+            created_by=submitter,
+        )
+
+        recipients = list(_justice_member_principals())
+        if submitter not in recipients:
+            recipients.append(submitter)
+
+        return json.dumps(
+            {
+                "success": True,
+                "data": {
+                    "id": str(new_case._id),
+                    "case_number": new_case.case_number or "",
+                    "scope": scope,
+                    "recipients": recipients,
+                    "message": f"Litigation {new_case.case_number} opened",
+                },
+            }
+        )
+
+    except ValueError as e:
+        logger.warning(f"Validation error in create_litigation: {e}")
+        return json.dumps({"success": False, "error": str(e)})
     except Exception as e:
-        logger.error(f"Error in create_litigation: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Error in create_litigation: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def set_litigation_content(args: str) -> str:
+    """Attach (or replace) the encrypted title/description blob (step 2 of 2).
+
+    ``ciphertext`` is an opaque ``enc:v=2:...`` AES-GCM blob produced in the
+    browser; the canister never sees the plaintext or the DEK. Only the
+    submitter, the justice department head, or a realm admin may set it.
+    """
+    logger.info("justice_litigation.set_litigation_content called")
+
+    try:
+        params = json.loads(args) if args else {}
+        case_id = params.get("id") or params.get("case_id")
+        ciphertext = params.get("ciphertext") or ""
+        if not case_id:
+            return json.dumps({"success": False, "error": "id is required"})
+
+        case = None
+        try:
+            case = Case[case_id]
+        except (KeyError, Exception):
+            case = None
+        if not case:
+            case = Case.find(case_id)
+        if not case:
+            return json.dumps({"success": False, "error": f"Case {case_id} not found"})
+
+        caller = _caller_principal()
+        if not _can_manage_case(case, caller):
+            return json.dumps({"success": False, "error": "Not allowed to edit this litigation"})
+
+        content = _litigation_content(case._id)
+        if content is None:
+            return json.dumps({"success": False, "error": "Litigation has no private content record"})
+        content.ciphertext = ciphertext
+        return json.dumps({"success": True, "data": {"id": str(case._id)}})
+
+    except Exception as e:
+        logger.error(f"Error in set_litigation_content: {e}\n{traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})
 
 
