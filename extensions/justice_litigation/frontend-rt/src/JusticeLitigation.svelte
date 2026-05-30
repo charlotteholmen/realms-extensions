@@ -50,7 +50,10 @@
 			.slice(0, 8);
 	});
 
+	let selectedDefendantEntry: any = $state(null);
+
 	let defendantLabel = $derived.by(() => {
+		if (selectedDefendantEntry) return `${selectedDefendantEntry.label} (${selectedDefendantEntry.kind})`;
 		const v = formDefendant.trim();
 		if (!v) return '';
 		const hit = directory.find((e) => e.principal === v);
@@ -77,6 +80,7 @@
 
 	function selectDefendant(entry: any) {
 		if (entry?.principal) formDefendant = entry.principal;
+		selectedDefendantEntry = entry || null;
 		showDefendantSuggestions = false;
 	}
 
@@ -199,6 +203,7 @@
 			formTitle = '';
 			formDescription = '';
 			formDefendant = '';
+			selectedDefendantEntry = null;
 			await loadLitigations();
 			setTimeout(() => {
 				createSuccess = false;
@@ -255,6 +260,7 @@
 		formTitle = '';
 		formDescription = '';
 		formDefendant = '';
+		selectedDefendantEntry = null;
 		createError = '';
 		createSuccess = false;
 	}
@@ -605,9 +611,9 @@
 									id="jl-defendant"
 									type="text"
 									bind:value={formDefendant}
-									oninput={() => (showDefendantSuggestions = true)}
+									oninput={() => { selectedDefendantEntry = null; showDefendantSuggestions = true; }}
 									onfocus={() => (showDefendantSuggestions = true)}
-									onblur={() => setTimeout(() => (showDefendantSuggestions = false), 150)}
+									onblur={() => setTimeout(() => (showDefendantSuggestions = false), 250)}
 									autocomplete="off"
 									placeholder="Search by name, department, or principal…"
 									disabled={creating}
