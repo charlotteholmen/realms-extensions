@@ -27,6 +27,7 @@ from ggg import (
     LicenseType,
     User,
     Member,
+    Department,
     case_file,
     case_assign_judges,
     case_issue_verdict,
@@ -1096,12 +1097,30 @@ def get_litigations(args: str) -> str:
             verdicts = list(case.verdicts) if hasattr(case, "verdicts") else []
             content = _litigation_content(case._id)
             is_private = content is not None
+
+            # Defendant may be a User (relation) or a department (metadata).
+            meta = {}
+            try:
+                meta = json.loads(case.metadata) if case.metadata else {}
+            except (ValueError, TypeError):
+                meta = {}
+            if meta.get("defendant_kind") == "department":
+                defendant_kind = "department"
+                defendant_principal = ""
+                defendant_label = meta.get("defendant_department") or "Department"
+            else:
+                defendant_kind = "user"
+                defendant_principal = case.defendant._id if case.defendant else (meta.get("defendant_principal") or "unknown")
+                defendant_label = defendant_principal
+
             litigations.append(
                 {
                     "id": str(case._id),
                     "case_number": case.case_number or "",
                     "requester_principal": case.plaintiff._id if case.plaintiff else "unknown",
-                    "defendant_principal": case.defendant._id if case.defendant else "unknown",
+                    "defendant_principal": defendant_principal,
+                    "defendant_kind": defendant_kind,
+                    "defendant_label": defendant_label,
                     # Private cases carry no plaintext; the client decrypts the
                     # ciphertext below. Legacy plaintext cases still expose it.
                     "case_title": "" if is_private else (case.title or ""),
@@ -1175,6 +1194,14 @@ def create_litigation(args: str) -> str:
             return json.dumps({"success": False, "error": "Unable to determine caller principal"})
 
         defendant_id = params.get("defendant_principal") or params.get("defendant_id")
+        # A defendant may be a person (User principal) or a department. The host
+        # Case.defendant relation only points to a User, so we record department
+        # defendants in this extension's own metadata instead of that relation.
+        defendant_kind = (params.get("defendant_kind") or "").strip().lower()
+        defendant_department = (params.get("defendant_department") or "").strip()
+        defendant_department_id = str(params.get("defendant_department_id") or "").strip()
+        if not defendant_kind:
+            defendant_kind = "department" if (defendant_department or defendant_department_id) else "user"
         court_id = params.get("court_id")
 
         # If no court specified, use the first available court.
@@ -1195,8 +1222,32 @@ def create_litigation(args: str) -> str:
         if not plaintiff:
             return json.dumps({"success": False, "error": f"Submitter {submitter} is not a registered user"})
 
-        # The defendant is recorded but is NOT granted read access.
-        defendant = User[defendant_id] if defendant_id else None
+        # Resolve the defendant. For a department we leave the host's User
+        # relation empty (it can't reference a Department) and capture the
+        # department in metadata; for a person we set the User relation.
+        # Either way the defendant is recorded but NEVER granted read access,
+        # so the litigation stays private regardless of defendant type.
+        if defendant_kind == "department":
+            if not (defendant_department or defendant_department_id):
+                return json.dumps({"success": False, "error": "Department defendant requires a name or id"})
+            dept = None
+            if defendant_department_id:
+                dept = Department[defendant_department_id]
+            if dept is None and defendant_department:
+                dept = Department[defendant_department]
+            dept_label = getattr(dept, "name", None) or defendant_department or defendant_department_id
+            dept_ident = str(getattr(dept, "_id", "") or defendant_department_id or "")
+            defendant = None
+            metadata = json.dumps(
+                {
+                    "defendant_kind": "department",
+                    "defendant_department": dept_label,
+                    "defendant_department_id": dept_ident,
+                }
+            )
+        else:
+            defendant = User[defendant_id] if defendant_id else None
+            metadata = json.dumps({"defendant_kind": "user", "defendant_principal": defendant_id}) if defendant_id else ""
 
         # Create the public Case with empty title/description; the real content
         # lives encrypted in this extension's own LitigationContent entity.
@@ -1206,7 +1257,7 @@ def create_litigation(args: str) -> str:
             defendant=defendant,
             title="",
             description="",
-            metadata=json.dumps({"defendant_principal": defendant_id}) if defendant_id else "",
+            metadata=metadata,
         )
 
         scope = f"litigation:{JUSTICE_DEPARTMENT_NAME}:{submitter}:{new_case._id}"

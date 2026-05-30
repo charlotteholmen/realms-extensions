@@ -66,6 +66,10 @@
 		return hit ? `${hit.label} (${hit.kind})` : '';
 	});
 
+	// A defendant is valid if a directory entry was picked (user OR department)
+	// or the user typed a raw principal directly.
+	let hasDefendant = $derived(!!selectedDefendantEntry || !!defendantPrincipal.trim());
+
 	async function loadDirectory() {
 		if (directoryLoaded || directoryLoading || !ctx.backend?.directory_list) return;
 		directoryLoading = true;
@@ -171,7 +175,7 @@
 	}
 
 	async function createLitigation() {
-		if (!formTitle.trim() || !formDescription.trim() || !defendantPrincipal.trim()) {
+		if (!formTitle.trim() || !formDescription.trim() || !hasDefendant) {
 			createError = 'All fields are required';
 			return;
 		}
@@ -185,9 +189,21 @@
 		try {
 			// 1. Open the case (no plaintext leaves the browser): reserve an id,
 			//    its sharing scope, and the recipient principals (justice dept).
-			const created: any = await callExt('create_litigation', {
-				defendant_principal: defendantPrincipal.trim(),
-			});
+			// Build the defendant payload. A department is recorded by name/id
+			// (the host Case.defendant only holds a User); a person by principal.
+			const e = selectedDefendantEntry;
+			const defendantParams =
+				e && e.kind === 'department'
+					? {
+							defendant_kind: 'department',
+							defendant_department: e.label || '',
+							defendant_department_id: e.id || '',
+						}
+					: {
+							defendant_kind: 'user',
+							defendant_principal: (e?.principal || defendantPrincipal).trim(),
+						};
+			const created: any = await callExt('create_litigation', defendantParams);
 			const cdata = created?.data ?? created;
 			const id = cdata?.id;
 			const scope = cdata?.scope;
@@ -567,7 +583,16 @@
 											<td
 												class="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400"
 											>
-												{truncatePrincipal(lit.defendant_principal)}
+												{#if lit.defendant_kind === 'department'}
+													<span
+														class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 mr-1"
+													>
+														dept
+													</span>
+													<span class="font-sans">{lit.defendant_label}</span>
+												{:else}
+													{truncatePrincipal(lit.defendant_label || lit.defendant_principal)}
+												{/if}
 											</td>
 										{/if}
 										<td class="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
@@ -746,7 +771,7 @@
 							disabled={creating ||
 								!formTitle.trim() ||
 								!formDescription.trim() ||
-								!defendantPrincipal.trim()}
+								!hasDefendant}
 						>
 							{#if creating}
 								<svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
