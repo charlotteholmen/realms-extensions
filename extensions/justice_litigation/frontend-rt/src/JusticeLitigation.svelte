@@ -30,6 +30,56 @@
 	let createError = $state('');
 	let createSuccess = $state(false);
 
+	// Defendant autocomplete — realm directory (users + departments) is fetched
+	// once from the host's `directory_list` query and filtered client-side.
+	let directory: any[] = $state([]);
+	let directoryLoaded = $state(false);
+	let directoryLoading = $state(false);
+	let showDefendantSuggestions = $state(false);
+
+	let defendantSuggestions = $derived.by(() => {
+		const q = formDefendant.trim().toLowerCase();
+		if (!q || !showDefendantSuggestions) return [];
+		return directory
+			.filter(
+				(e) =>
+					(e.label || '').toLowerCase().includes(q) ||
+					(e.principal || '').toLowerCase().includes(q) ||
+					(e.kind || '').toLowerCase().includes(q),
+			)
+			.slice(0, 8);
+	});
+
+	let defendantLabel = $derived.by(() => {
+		const v = formDefendant.trim();
+		if (!v) return '';
+		const hit = directory.find((e) => e.principal === v);
+		return hit ? `${hit.label} (${hit.kind})` : '';
+	});
+
+	async function loadDirectory() {
+		if (directoryLoaded || directoryLoading || !ctx.backend?.directory_list) return;
+		directoryLoading = true;
+		try {
+			const resp: any = await ctx.backend.directory_list();
+			if (resp?.success && resp?.data?.message) {
+				const parsed = JSON.parse(resp.data.message);
+				directory = Array.isArray(parsed?.entries) ? parsed.entries : [];
+			}
+			directoryLoaded = true;
+		} catch (e) {
+			// Non-fatal: the user can still paste a raw principal.
+			console.warn('[justice_litigation] directory load failed', e);
+		} finally {
+			directoryLoading = false;
+		}
+	}
+
+	function selectDefendant(entry: any) {
+		if (entry?.principal) formDefendant = entry.principal;
+		showDefendantSuggestions = false;
+	}
+
 	// Verdict modal
 	let showVerdict = $state(false);
 	let verdictCase: any = $state(null);
@@ -245,6 +295,10 @@
 			loading = false;
 			error = 'User not authenticated';
 		}
+	});
+
+	$effect(() => {
+		if (tab === 'create' && !directoryLoaded) void loadDirectory();
 	});
 </script>
 
@@ -544,16 +598,65 @@
 								for="jl-defendant"
 								class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
 							>
-								Defendant Principal ID
+								Defendant
 							</label>
-							<input
-								id="jl-defendant"
-								type="text"
-								bind:value={formDefendant}
-								placeholder="Enter defendant's principal ID"
-								disabled={creating}
-								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50"
-							/>
+							<div class="relative">
+								<input
+									id="jl-defendant"
+									type="text"
+									bind:value={formDefendant}
+									oninput={() => (showDefendantSuggestions = true)}
+									onfocus={() => (showDefendantSuggestions = true)}
+									onblur={() => setTimeout(() => (showDefendantSuggestions = false), 150)}
+									autocomplete="off"
+									placeholder="Search by name, department, or principal…"
+									disabled={creating}
+									class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50"
+								/>
+								{#if defendantSuggestions.length > 0}
+									<ul
+										class="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1"
+									>
+										{#each defendantSuggestions as s (s.kind + ':' + s.principal + ':' + s.label)}
+											<li>
+												<button
+													type="button"
+													onmousedown={() => selectDefendant(s)}
+													class="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors"
+												>
+													<span
+														class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide {s.kind ===
+														'department'
+															? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+															: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'}"
+													>
+														{s.kind}
+													</span>
+													<span class="flex-1 min-w-0">
+														<span class="block font-medium text-gray-900 dark:text-white truncate">
+															{s.label}
+														</span>
+														{#if s.principal && s.principal !== s.label}
+															<span class="block font-mono text-xs text-gray-500 dark:text-gray-400 truncate">
+																{s.principal || 'no principal'}
+															</span>
+														{/if}
+													</span>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</div>
+							{#if defendantLabel}
+								<p class="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+									Selected: {defendantLabel}
+								</p>
+							{:else}
+								<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+									Start typing to pick a user or department, or paste a principal ID.
+								</p>
+							{/if}
 						</div>
 
 						<div>
