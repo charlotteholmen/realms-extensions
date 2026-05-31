@@ -103,6 +103,32 @@ def to_nat(value):
     return int(str(value).replace("_", "").strip().strip('"'))
 
 
+def find_objects(class_name, **fields):
+    """Query the realm's generic entity store (find_objects) and return the
+    matching entities as parsed dicts (their full serialization).
+
+    Matches are exact string-equality on serialized fields, so this is best used
+    with a unique string field (e.g. a per-run `metadata` tag). Useful to read
+    persisted entity state directly, independent of any extension read endpoint.
+    """
+    recs = " ".join(
+        "record { %s; %s };" % (json.dumps(k), json.dumps(str(v)))
+        for k, v in fields.items()
+    )
+    out = call_canister(REALM, "find_objects", "(%s, vec { %s })" % (json.dumps(class_name), recs))
+    objs = out.get("data", {}).get("objectsList", {}).get("objects", [])
+    return [json.loads(o) for o in objs]
+
+
+def resolve_user_id(principal):
+    """Return the User entity's primary key (_id) for a given principal, or None.
+
+    A registered member's `User.id` field holds their principal; the entity's
+    `_id` is the sequential key used by extensions (e.g. land owner_user_id)."""
+    users = find_objects("User", id=principal)
+    return users[0]["_id"] if users else None
+
+
 # --- test token faucet ------------------------------------------------------
 
 

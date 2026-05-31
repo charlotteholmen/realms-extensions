@@ -16,6 +16,7 @@ testing/
 │   ├── run_scenarios.sh                 ← discovers & runs all *_scenario.py
 │   ├── citizen_onboarding_scenario.py
 │   ├── governance_execution_scenario.py
+│   ├── land_ownership_scenario.py
 │   ├── token_treasury_scenario.py
 │   └── vault_treasury_scenario.py
 └── README.md
@@ -71,6 +72,14 @@ aggregates results and exits non-zero if any scenario fails.
   deposit/withdraw deltas reconcile (amount + fee) and the withdrawal is recorded in
   the vault's transaction history. Self-registers the test token in the vault if
   missing, so no manual setup is required.
+- **land_ownership** — provisions two members and a residential parcel, then walks
+  the full ownership lifecycle: create → assign to member A → read back → transfer
+  to member B → read back → release. Also pins the domain rules (members may own
+  only residential land; ownership cannot be split user+org) and that `get_land`
+  fails cleanly for an unknown parcel. This journey originally surfaced three real
+  `land_registry` bugs (now fixed): `create_land` returned `id=null`,
+  `update_land_ownership` called a non-existent `land.save()`, and `get_land` read
+  `owner_user.name` (the `User` entity exposes `nickname`, not `name`).
 
 ## Adding a scenario
 

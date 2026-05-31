@@ -137,6 +137,10 @@ def create_land(args: str) -> str:
             metadata=params.get("metadata", "{}"),
         )
 
+        # `id` is Land's __alias__ field; if the caller didn't provide one, derive
+        # a stable handle from the primary key so the response is usable for lookups.
+        land.id = params.get("id") or str(land._id)
+
         return json.dumps(
             {
                 "success": True,
@@ -211,7 +215,7 @@ def update_land_ownership(args: str) -> str:
             land.owner_user = None
             land.owner_organization = None
 
-        land.save()
+        # ggg entities persist on attribute assignment; there is no save().
 
         return json.dumps(
             {"success": True, "data": {"message": "Ownership updated successfully"}}
@@ -347,7 +351,7 @@ def get_land(args: str) -> str:
             "owner_organization_id": (
                 land.owner_organization.id if land.owner_organization else None
             ),
-            "owner_user_name": land.owner_user.name if land.owner_user else None,
+            "owner_user_name": land.owner_user.nickname if land.owner_user else None,
             "owner_organization_name": (
                 land.owner_organization.name if land.owner_organization else None
             ),
