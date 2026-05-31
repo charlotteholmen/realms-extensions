@@ -12,13 +12,15 @@ local replica. There are two layers:
 ```
 testing/
 ├── scenarios/
-│   ├── realm_client.py                  ← shared dfx client + identity + assertions
-│   ├── run_scenarios.sh                 ← discovers & runs all *_scenario.py
+│   ├── realm_client.py                      ← shared dfx client + identity + assertions
+│   ├── run_scenarios.sh                     ← discovers & runs all *_scenario.py
 │   ├── citizen_onboarding_scenario.py
 │   ├── governance_execution_scenario.py
 │   ├── justice_case_scenario.py
 │   ├── land_ownership_scenario.py
+│   ├── messaging_privacy_scenario.py
 │   ├── notifications_scenario.py
+│   ├── realm_foundation_scenario.py
 │   ├── token_treasury_scenario.py
 │   └── vault_treasury_scenario.py
 └── README.md
@@ -90,6 +92,18 @@ aggregates results and exits non-zero if any scenario fails.
   `land_registry` bugs (now fixed): `create_land` returned `id=null`,
   `update_land_ownership` called a non-existent `land.save()`, and `get_land` read
   `owner_user.name` (the `User` entity exposes `nickname`, not `name`).
+- **realm_foundation** — creates a new department via the realm's codex facility,
+  generates a real member invitation code (`create_registration_code`), has two
+  members join via the real code-based path (not the test-mode bypass), exhausts
+  the invite (max_uses=2) and verifies a third attempt is rejected, assigns both
+  members to the department, verifies the department appears in the realm's
+  audience roster, and checks that department notifications are visible to members
+  but not to outsiders.
+- **messaging_privacy** — exercises all notification audience types and visibility
+  rules with four actors (admin, member_a in dept_a, member_b in dept_b, outsider):
+  user→user private (only target sees it), user→department private (only dept
+  members), admin→department private (different dept isolation), user→user public
+  (visible to all), and realm-wide broadcast (visible to all registered users).
 
 ## Adding a scenario
 
