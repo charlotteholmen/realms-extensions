@@ -731,10 +731,9 @@ def issue_verdict(args: str) -> str:
                 "target_user": target_user,
             })
         
-        # Issue verdict using GGG function
+        # Issue verdict using GGG function (judge already assigned via assign_judge)
         verdict = case_issue_verdict(
             case=case,
-            judge=judge,
             decision=decision,
             reasoning=reasoning,
             penalties=penalty_list

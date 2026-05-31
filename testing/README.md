@@ -16,7 +16,9 @@ testing/
 │   ├── run_scenarios.sh                 ← discovers & runs all *_scenario.py
 │   ├── citizen_onboarding_scenario.py
 │   ├── governance_execution_scenario.py
+│   ├── justice_case_scenario.py
 │   ├── land_ownership_scenario.py
+│   ├── notifications_scenario.py
 │   ├── token_treasury_scenario.py
 │   └── vault_treasury_scenario.py
 └── README.md
@@ -72,6 +74,14 @@ aggregates results and exits non-zero if any scenario fails.
   deposit/withdraw deltas reconcile (amount + fee) and the withdrawal is recorded in
   the vault's transaction history. Self-registers the test token in the vault if
   missing, so no manual setup is required.
+- **justice_case** — provisions two members as plaintiff and defendant, files a case
+  at a seeded court, verifies the verdict-before-judge-assigned invariant, assigns a
+  judge, issues a verdict with a fine penalty, and reads back the verdict and penalty
+  via `get_verdicts`/`get_penalties`. Also surfaced and fixed a stale-deployment bug
+  (`case_issue_verdict` signature mismatch) and an `amount` type validation issue.
+- **notifications** — a new member joins the realm and receives the auto-generated
+  welcome notification; a targeted notification is then created, read back as the
+  member (visibility-aware), marked as read, and the unread count is verified to drop.
 - **land_ownership** — provisions two members and a residential parcel, then walks
   the full ownership lifecycle: create → assign to member A → read back → transfer
   to member B → read back → release. Also pins the domain rules (members may own
