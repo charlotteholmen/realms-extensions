@@ -3,9 +3,10 @@
 
 	let { ctx }: { ctx: any } = $props();
 
-	const isSidebar = ctx.sidebarPanel === true;
 	const settingsPath = ctx.settingsPath ?? '/extensions/llm_chat';
 	const modelLabel = ctx.config?.llmModelLabel ?? 'Default';
+	let isSidebar = $state(ctx.sidebarPanel === true);
+	let chatRoot: HTMLElement | undefined = $state();
 
 	interface ChatMessage {
 		text: string;
@@ -106,6 +107,25 @@
 		if (!isExplainMode) {
 			await fetchSuggestions();
 		}
+	});
+
+	$effect(() => {
+		if (ctx.sidebarPanel || !chatRoot || isSidebar) return;
+
+		const detectSidebarLayout = () => {
+			const width = chatRoot?.clientWidth ?? 0;
+			if (width > 0 && width <= 384) {
+				isSidebar = true;
+			}
+		};
+
+		detectSidebarLayout();
+		const resizeObserver = new ResizeObserver(detectSidebarLayout);
+		resizeObserver.observe(chatRoot);
+
+		return () => {
+			resizeObserver.disconnect();
+		};
 	});
 
 	async function loadConversations(): Promise<void> {
@@ -536,7 +556,7 @@
 	});
 </script>
 
-<div class="llm-chat-root {isSidebar ? 'sidebar-panel' : ''}">
+<div class="llm-chat-root {isSidebar ? 'sidebar-panel' : ''}" bind:this={chatRoot}>
 	<!-- Conversation header (multiple conversations) -->
 	{#if userPrincipal}
 		<div class="conversation-toolbar {isSidebar ? 'compact' : ''}">
