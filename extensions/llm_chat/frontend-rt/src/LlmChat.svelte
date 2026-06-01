@@ -3,6 +3,10 @@
 
 	let { ctx }: { ctx: any } = $props();
 
+	const isSidebar = ctx.sidebarPanel === true;
+	const settingsPath = ctx.settingsPath ?? '/extensions/llm_chat';
+	const modelLabel = ctx.config?.llmModelLabel ?? 'Default';
+
 	interface ChatMessage {
 		text: string;
 		isUser: boolean;
@@ -515,6 +519,14 @@
 		fetchSuggestions();
 	}
 
+	function openSettings(): void {
+		if (ctx.navigate) {
+			ctx.navigate(settingsPath);
+		} else if (typeof window !== 'undefined') {
+			window.location.href = settingsPath;
+		}
+	}
+
 	$effect(() => {
 		return () => {
 			unsubPrincipal?.();
@@ -524,78 +536,83 @@
 	});
 </script>
 
-<div class="llm-chat-root">
+<div class="llm-chat-root {isSidebar ? 'sidebar-panel' : ''}">
 	<!-- Conversation header (multiple conversations) -->
 	{#if userPrincipal}
-		<div class="conversation-header">
-			<button
-				class="conv-icon-btn"
-				onclick={() => (showConversationList = !showConversationList)}
-				title="Your conversations"
-				aria-label="Show conversations"
-			>
-				<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-				</svg>
-			</button>
-			<span class="conv-title" title={currentConversationTitle()}>{currentConversationTitle()}</span>
-			<button
-				class="conv-icon-btn"
-				onclick={startNewConversation}
-				title="New conversation"
-				aria-label="New conversation"
-			>
-				<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-				</svg>
-			</button>
-		</div>
-
-		{#if showConversationList}
-			<div class="conversation-list">
-				<button class="conv-list-item new" onclick={startNewConversation}>+ New conversation</button>
-				{#if isLoadingConversations}
-					<div class="conv-list-empty">Loading…</div>
-				{:else if conversations.length === 0}
-					<div class="conv-list-empty">No saved conversations yet</div>
-				{:else}
-					{#each conversations as conv}
-						<div class="conv-list-row {conv.conversation_id === currentConversationId ? 'active' : ''}">
-							<button
-								class="conv-list-item"
-								onclick={() => selectConversation(conv.conversation_id)}
-								title={conv.title}
-							>
-								{conv.title}
-							</button>
-							<button
-								class="conv-row-action"
-								onclick={() => renameConversation(conv.conversation_id)}
-								title="Rename"
-								aria-label="Rename conversation"
-							>
-								<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-								</svg>
-							</button>
-							<button
-								class="conv-row-action danger"
-								onclick={() => deleteConversation(conv.conversation_id)}
-								title="Delete"
-								aria-label="Delete conversation"
-							>
-								<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-								</svg>
-							</button>
-						</div>
-					{/each}
-				{/if}
+		<div class="conversation-toolbar {isSidebar ? 'compact' : ''}">
+			<div class="conversation-header">
+				<button
+					class="conv-icon-btn"
+					onclick={() => (showConversationList = !showConversationList)}
+					title="Your conversations"
+					aria-label="Show conversations"
+					aria-expanded={showConversationList}
+				>
+					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+					</svg>
+				</button>
+				<span class="conv-title" title={currentConversationTitle()}>{currentConversationTitle()}</span>
+				<button
+					class="conv-icon-btn"
+					onclick={startNewConversation}
+					title="New conversation"
+					aria-label="New conversation"
+				>
+					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+					</svg>
+				</button>
 			</div>
-		{/if}
+
+			{#if showConversationList}
+				<div class="conversation-list {isSidebar ? 'overlay' : ''}">
+					{#if !isSidebar}
+						<button class="conv-list-item new" onclick={startNewConversation}>+ New conversation</button>
+					{/if}
+					{#if isLoadingConversations}
+						<div class="conv-list-empty">Loading…</div>
+					{:else if conversations.length === 0}
+						<div class="conv-list-empty">No saved conversations yet</div>
+					{:else}
+						{#each conversations as conv}
+							<div class="conv-list-row {conv.conversation_id === currentConversationId ? 'active' : ''}">
+								<button
+									class="conv-list-item"
+									onclick={() => selectConversation(conv.conversation_id)}
+									title={conv.title}
+								>
+									{conv.title}
+								</button>
+								<button
+									class="conv-row-action"
+									onclick={() => renameConversation(conv.conversation_id)}
+									title="Rename"
+									aria-label="Rename conversation"
+								>
+									<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+									</svg>
+								</button>
+								<button
+									class="conv-row-action danger"
+									onclick={() => deleteConversation(conv.conversation_id)}
+									title="Delete"
+									aria-label="Delete conversation"
+								>
+									<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									</svg>
+								</button>
+							</div>
+						{/each}
+					{/if}
+				</div>
+			{/if}
+		</div>
 	{/if}
 
-	{#if currentPageContext?.title}
+	{#if !isSidebar && currentPageContext?.title}
 		<div class="page-context-chip" title={currentPageContext.pathname}>
 			<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -732,6 +749,23 @@
 				{/if}
 			</button>
 		</div>
+
+		{#if isSidebar}
+			<div class="model-bar">
+				<span class="model-label">{modelLabel}</span>
+				<button
+					class="settings-btn"
+					onclick={openSettings}
+					title="Open AI Assistant settings"
+					aria-label="Open AI Assistant settings"
+				>
+					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+						<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+					</svg>
+				</button>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -746,26 +780,53 @@
 		background: transparent;
 	}
 
+	.llm-chat-root.sidebar-panel {
+		height: 100%;
+		max-height: 100%;
+		min-height: 0;
+		padding: 0 12px;
+	}
+
+	/* Conversation toolbar */
+	.conversation-toolbar {
+		flex-shrink: 0;
+	}
+
+	.conversation-toolbar.compact {
+		position: relative;
+		z-index: 10;
+	}
+
 	/* Conversation header */
 	.conversation-header {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 6px;
 		padding: 8px 0;
 		flex-shrink: 0;
 		border-bottom: 1px solid #e5e7eb;
 	}
 
+	.conversation-toolbar.compact .conversation-header {
+		padding: 4px 0;
+		gap: 4px;
+	}
+
 	.conv-title {
 		flex: 1;
 		min-width: 0;
-		font-size: 13px;
+		font-size: 12px;
 		font-weight: 600;
 		color: #374151;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		text-align: center;
+	}
+
+	.conversation-toolbar.compact .conv-title {
+		font-size: 11px;
+		font-weight: 500;
 	}
 
 	.conv-icon-btn {
@@ -783,10 +844,24 @@
 		transition: all 0.15s ease;
 	}
 
+	.conversation-toolbar.compact .conv-icon-btn {
+		width: 26px;
+		height: 26px;
+		border-radius: 6px;
+		border: none;
+		background: transparent;
+	}
+
 	.conv-icon-btn:hover {
 		background: #f3f4f6;
 		color: #4338ca;
 		border-color: #c7d2fe;
+	}
+
+	.conversation-toolbar.compact .conv-icon-btn:hover {
+		background: #f3f4f6;
+		color: #374151;
+		border-color: transparent;
 	}
 
 	/* Conversation list */
@@ -801,10 +876,26 @@
 		border-bottom: 1px solid #e5e7eb;
 	}
 
+	.conversation-list.overlay {
+		position: absolute;
+		top: 100%;
+		left: -12px;
+		right: -12px;
+		z-index: 20;
+		max-height: 160px;
+		padding: 4px 8px;
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-top: none;
+		border-bottom-left-radius: 8px;
+		border-bottom-right-radius: 8px;
+		box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+	}
+
 	.conv-list-empty {
-		font-size: 12px;
+		font-size: 11px;
 		color: #9ca3af;
-		padding: 8px 10px;
+		padding: 6px 8px;
 	}
 
 	.conv-list-row {
@@ -832,6 +923,11 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.conversation-list.overlay .conv-list-item {
+		padding: 6px 8px;
+		font-size: 12px;
 	}
 
 	.conv-list-item:hover {
@@ -1117,6 +1213,10 @@
 		background: transparent;
 	}
 
+	.sidebar-panel .input-section {
+		padding: 8px 0 10px;
+	}
+
 	.suggestions {
 		display: flex;
 		flex-wrap: wrap;
@@ -1169,6 +1269,11 @@
 		outline: none;
 	}
 
+	.sidebar-panel .chat-input {
+		padding: 10px 12px;
+		min-height: 40px;
+	}
+
 	.chat-input:focus {
 		border-color: #6366f1;
 		box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
@@ -1200,5 +1305,53 @@
 	.send-btn:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	.sidebar-panel .send-btn {
+		background: #6b7280;
+		color: #fff;
+	}
+
+	.sidebar-panel .send-btn:hover:not(:disabled) {
+		background: #4b5563;
+	}
+
+	.sidebar-panel .chat-input:focus {
+		border-color: #9ca3af;
+		box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.15);
+	}
+
+	/* Model bar (sidebar footer) */
+	.model-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 8px;
+		padding-top: 6px;
+	}
+
+	.model-label {
+		font-size: 11px;
+		color: #9ca3af;
+		font-weight: 500;
+	}
+
+	.settings-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: none;
+		border-radius: 6px;
+		background: transparent;
+		color: #9ca3af;
+		cursor: pointer;
+		transition: color 0.15s ease, background 0.15s ease;
+	}
+
+	.settings-btn:hover {
+		background: #f3f4f6;
+		color: #4b5563;
 	}
 </style>
