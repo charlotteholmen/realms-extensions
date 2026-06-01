@@ -770,7 +770,7 @@
 			</button>
 		</div>
 
-		{#if isSidebar}
+		{#if isSidebar && !ctx.hideModelBar}
 			<div class="model-bar">
 				<span class="model-label">{modelLabel}</span>
 				<button
@@ -1341,7 +1341,7 @@
 		box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.15);
 	}
 
-	/* Model bar (sidebar footer) */
+	/* Fallback model bar when host panel has not taken over header chrome */
 	.model-bar {
 		display: flex;
 		align-items: center;
