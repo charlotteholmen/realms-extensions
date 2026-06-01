@@ -260,6 +260,16 @@
 		return c?.title || 'New conversation';
 	}
 
+	function handleConversationSelect(event: Event): void {
+		const select = event.target as HTMLSelectElement;
+		const id = select.value;
+		if (!id) {
+			startNewConversation();
+			return;
+		}
+		selectConversation(id);
+	}
+
 	function handleExplainParam() {
 		try {
 			const params = new URLSearchParams(window.location.search);
@@ -560,74 +570,99 @@
 	<!-- Conversation header (multiple conversations) -->
 	{#if userPrincipal}
 		<div class="conversation-toolbar {isSidebar ? 'compact' : ''}">
-			<div class="conversation-header">
-				<button
-					class="conv-icon-btn"
-					onclick={() => (showConversationList = !showConversationList)}
-					title="Your conversations"
-					aria-label="Show conversations"
-					aria-expanded={showConversationList}
-				>
-					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-					</svg>
-				</button>
-				<span class="conv-title" title={currentConversationTitle()}>{currentConversationTitle()}</span>
-				<button
-					class="conv-icon-btn"
-					onclick={startNewConversation}
-					title="New conversation"
-					aria-label="New conversation"
-				>
-					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-					</svg>
-				</button>
-			</div>
-
-			{#if showConversationList}
-				<div class="conversation-list {isSidebar ? 'overlay' : ''}">
-					{#if !isSidebar}
-						<button class="conv-list-item new" onclick={startNewConversation}>+ New conversation</button>
-					{/if}
-					{#if isLoadingConversations}
-						<div class="conv-list-empty">Loading…</div>
-					{:else if conversations.length === 0}
-						<div class="conv-list-empty">No saved conversations yet</div>
-					{:else}
-						{#each conversations as conv}
-							<div class="conv-list-row {conv.conversation_id === currentConversationId ? 'active' : ''}">
-								<button
-									class="conv-list-item"
-									onclick={() => selectConversation(conv.conversation_id)}
-									title={conv.title}
-								>
-									{conv.title}
-								</button>
-								<button
-									class="conv-row-action"
-									onclick={() => renameConversation(conv.conversation_id)}
-									title="Rename"
-									aria-label="Rename conversation"
-								>
-									<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-									</svg>
-								</button>
-								<button
-									class="conv-row-action danger"
-									onclick={() => deleteConversation(conv.conversation_id)}
-									title="Delete"
-									aria-label="Delete conversation"
-								>
-									<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-									</svg>
-								</button>
-							</div>
-						{/each}
-					{/if}
+			{#if isSidebar}
+				<div class="conversation-header sidebar-header">
+					<label class="conv-dropdown-wrap">
+						<span class="conv-dropdown-label">Conversations</span>
+						<select
+							class="conv-select"
+							value={currentConversationId ?? ''}
+							onchange={handleConversationSelect}
+							disabled={isLoadingConversations}
+							aria-label="Conversations"
+						>
+							{#if isLoadingConversations}
+								<option value="">Loading…</option>
+							{:else if conversations.length === 0}
+								<option value="">No saved conversations</option>
+							{:else}
+								<option value="">New conversation</option>
+								{#each conversations as conv}
+									<option value={conv.conversation_id}>{conv.title}</option>
+								{/each}
+							{/if}
+						</select>
+					</label>
+					<button type="button" class="conv-new-btn" onclick={startNewConversation}>New</button>
 				</div>
+			{:else}
+				<div class="conversation-header">
+					<button
+						class="conv-icon-btn"
+						onclick={() => (showConversationList = !showConversationList)}
+						title="Your conversations"
+						aria-label="Show conversations"
+						aria-expanded={showConversationList}
+					>
+						<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+						</svg>
+					</button>
+					<span class="conv-title" title={currentConversationTitle()}>{currentConversationTitle()}</span>
+					<button
+						class="conv-icon-btn"
+						onclick={startNewConversation}
+						title="New conversation"
+						aria-label="New conversation"
+					>
+						<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+						</svg>
+					</button>
+				</div>
+
+				{#if showConversationList}
+					<div class="conversation-list">
+						<button class="conv-list-item new" onclick={startNewConversation}>+ New conversation</button>
+						{#if isLoadingConversations}
+							<div class="conv-list-empty">Loading…</div>
+						{:else if conversations.length === 0}
+							<div class="conv-list-empty">No saved conversations yet</div>
+						{:else}
+							{#each conversations as conv}
+								<div class="conv-list-row {conv.conversation_id === currentConversationId ? 'active' : ''}">
+									<button
+										class="conv-list-item"
+										onclick={() => selectConversation(conv.conversation_id)}
+										title={conv.title}
+									>
+										{conv.title}
+									</button>
+									<button
+										class="conv-row-action"
+										onclick={() => renameConversation(conv.conversation_id)}
+										title="Rename"
+										aria-label="Rename conversation"
+									>
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+										</svg>
+									</button>
+									<button
+										class="conv-row-action danger"
+										onclick={() => deleteConversation(conv.conversation_id)}
+										title="Delete"
+										aria-label="Delete conversation"
+									>
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+										</svg>
+									</button>
+								</div>
+							{/each}
+						{/if}
+					</div>
+				{/if}
 			{/if}
 		</div>
 	{/if}
@@ -828,8 +863,76 @@
 	}
 
 	.conversation-toolbar.compact .conversation-header {
-		padding: 4px 0;
-		gap: 4px;
+		padding: 2px 0;
+		gap: 6px;
+	}
+
+	.conversation-header.sidebar-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 2px 0 4px;
+		border-bottom: 1px solid #e5e7eb;
+	}
+
+	.conv-dropdown-wrap {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.conv-dropdown-label {
+		font-size: 11px;
+		font-weight: 500;
+		color: #6b7280;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+
+	.conv-select {
+		flex: 1;
+		min-width: 0;
+		height: 24px;
+		padding: 0 6px;
+		font-size: 11px;
+		line-height: 1.2;
+		border: 1px solid #e5e7eb;
+		border-radius: 6px;
+		background: #fff;
+		color: #374151;
+		cursor: pointer;
+		outline: none;
+	}
+
+	.conv-select:focus {
+		border-color: #9ca3af;
+	}
+
+	.conv-select:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.conv-new-btn {
+		height: 24px;
+		padding: 0 10px;
+		font-size: 11px;
+		font-weight: 500;
+		line-height: 1;
+		border: 1px solid #e5e7eb;
+		border-radius: 6px;
+		background: #fff;
+		color: #374151;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: background 0.15s ease, border-color 0.15s ease;
+	}
+
+	.conv-new-btn:hover {
+		background: #f3f4f6;
+		border-color: #d1d5db;
 	}
 
 	.conv-title {
