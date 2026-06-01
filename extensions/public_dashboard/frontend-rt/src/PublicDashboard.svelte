@@ -5,10 +5,35 @@
 
 	let statusData: any = $state(null);
 	let realmData: any = $state(null);
+	let lifecycleData: any = $state({});
+	let lifecycleStageIndex = $state(0);
 	let zones: any[] = $state([]);
 	let latestUsers: any[] = $state([]);
 	let loading = $state(true);
 	let mapContainer: HTMLDivElement | undefined = $state();
+
+	const STAGES = ['alpha', 'beta', 'production', 'deprecation', 'terminated'] as const;
+	const STAGE_LABELS: Record<string, string> = {
+		alpha: 'Alpha',
+		beta: 'Beta',
+		production: 'Live',
+		deprecation: 'Winding Down',
+		terminated: 'Archived',
+	};
+	const STAGE_DESCRIPTIONS: Record<string, string> = {
+		alpha: 'Gathering founding members. Deposits are refundable while the community grows.',
+		beta: 'Critical mass reached. Infrastructure, land, and service providers are being prepared.',
+		production: 'Fully operational. Governance, services, and community life are active.',
+		deprecation: 'This realm is winding down. New members cannot join.',
+		terminated: 'This realm has closed. Records remain available as a read-only archive.',
+	};
+	const STAGE_THEMES: Record<string, { bg: string; border: string; accent: string; dot: string; text: string }> = {
+		alpha: { bg: '#eff6ff', border: '#bfdbfe', accent: '#2563eb', dot: '#3b82f6', text: '#1e40af' },
+		beta: { bg: '#fffbeb', border: '#fde68a', accent: '#d97706', dot: '#f59e0b', text: '#92400e' },
+		production: { bg: '#ecfdf5', border: '#a7f3d0', accent: '#059669', dot: '#10b981', text: '#065f46' },
+		deprecation: { bg: '#fff7ed', border: '#fed7aa', accent: '#ea580c', dot: '#f97316', text: '#9a3412' },
+		terminated: { bg: '#f9fafb', border: '#e5e7eb', accent: '#6b7280', dot: '#9ca3af', text: '#374151' },
+	};
 
 	function parseEntities(response: any): any[] {
 		if (response?.success && response?.data?.objectsListPaginated) {
@@ -41,7 +66,44 @@
 		zones = allZones.filter((z: any) => z.h3_index || (z.latitude && z.longitude));
 		latestUsers = parseEntities(latestResp);
 
+		await loadLifecycleData(backend);
+
 		loading = false;
+	}
+
+	function parseExtensionResponse(raw: any) {
+		const envelope = typeof raw === 'string' ? JSON.parse(raw) : raw;
+		return envelope?.response
+			? typeof envelope.response === 'string'
+				? JSON.parse(envelope.response)
+				: envelope.response
+			: envelope;
+	}
+
+	async function loadLifecycleData(backend: any) {
+		try {
+			const raw = await backend.extension_sync_call('realm_settings', 'get_realm_stage', '{}');
+			const res = parseExtensionResponse(raw);
+			if (res?.success && res?.data) {
+				lifecycleData = res.data.lifecycle || {};
+				lifecycleStageIndex = res.data.stage_index ?? Math.max(0, STAGES.indexOf(res.data.stage || 'alpha'));
+				return;
+			}
+		} catch (e) {
+			console.warn('get_realm_stage failed, using status fallback:', e);
+		}
+
+		const stage = statusData?.realm_stage || realmData?.status || 'alpha';
+		lifecycleStageIndex = Math.max(0, STAGES.indexOf(stage));
+		lifecycleData = {
+			critical_mass: 10000,
+			registered_users: Number(statusData?.users_count || 0),
+			deposits_locked: stage !== 'alpha',
+			land_acquired: ['production', 'deprecation', 'terminated'].includes(stage),
+			infrastructure_ready: ['production', 'deprecation', 'terminated'].includes(stage),
+			providers_ready: ['production', 'deprecation', 'terminated'].includes(stage),
+			history: [],
+		};
 	}
 
 	const INFLUENCE_RINGS = 3;
@@ -176,24 +238,17 @@
 			: [],
 	);
 
-	const STAGE_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-		alpha: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
-		beta: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-		production: { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-		deprecation: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
-		terminated: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
-	};
-	const STAGE_LABELS: Record<string, string> = {
-		alpha: 'Alpha',
-		beta: 'Beta',
-		production: 'Live',
-		deprecation: 'Winding Down',
-		terminated: 'Archived',
-	};
-
-	let realmStage = $derived(realmData?.status || 'alpha');
-	let stageStyle = $derived(STAGE_COLORS[realmStage] || STAGE_COLORS.alpha);
+	let realmStage = $derived(statusData?.realm_stage || realmData?.status || 'alpha');
+	let stageTheme = $derived(STAGE_THEMES[realmStage] || STAGE_THEMES.alpha);
 	let stageLabel = $derived(STAGE_LABELS[realmStage] || realmStage);
+	let stageDescription = $derived(STAGE_DESCRIPTIONS[realmStage] || '');
+	let stageProgressPct = $derived(
+		lifecycleData.critical_mass
+			? Math.min(100, Math.round((Number(lifecycleData.registered_users || statusData?.users_count || 0) / lifecycleData.critical_mass) * 100))
+			: 0,
+	);
+	let registrationOpen = $derived(Boolean(statusData?.open_registration ?? realmData?.open_registration));
+	let quarterCount = $derived(statusData?.quarters?.length || 0);
 
 	let kpiVisible = $state(false);
 	let animatedValues: number[] = $state([]);
@@ -278,51 +333,51 @@
 				use:fullBleed
 				style="height: 105vh; background: url('/custom/background.png') center/cover no-repeat; position: relative; display: flex; flex-direction: column; margin-top: -6rem; padding-top: 6rem;"
 			>
-				<!-- Gradient overlay that fades in -->
+				<!-- Gradient overlay in the bottom 30% band -->
 				<div
-					style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.85) 15%, rgba(255,255,255,0.4) 28%, transparent 40%); opacity: {showOverlay ? 1 : 0}; transition: opacity 3s cubic-bezier(0.25, 0.1, 0.25, 1); pointer-events: none;"
+					style="position: absolute; left: 0; right: 0; bottom: 64px; height: 30%; background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.85) 25%, rgba(255,255,255,0.4) 55%, transparent 100%); opacity: {showOverlay ? 1 : 0}; transition: opacity 3s cubic-bezier(0.25, 0.1, 0.25, 1); pointer-events: none;"
 				></div>
 
-				<!-- Top spacer: pushes content to the bottom -->
-				<div style="flex: 1;"></div>
+				<!-- Top area: upper 70% of the hero -->
+				<div style="flex: 1; min-height: 0;"></div>
 
-				<!-- Realm identity: fades in + slides up after 2s -->
+				<!-- Bottom 30%: logo, name, welcome message -->
 				<div
-					style="position: relative; padding: 0 24px; opacity: {showOverlay ? 1 : 0}; transform: translateY({showOverlay ? '0px' : '30px'}); transition: opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.5s, transform 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;"
+					style="height: 30%; flex-shrink: 0; display: flex; flex-direction: column; justify-content: flex-start; padding: 0 24px; position: relative;"
 				>
-					<div style="max-width: 700px; margin: 0 auto;">
-						<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-							<img
-								src="/custom/logo.png"
-								alt={realmData.name || 'Realm'}
-								style="width: 36px; height: 36px; object-fit: contain;"
-								onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
-							/>
-							<h1 style="font-size: 2rem; font-weight: 700; color: #111827; margin: 0;">{realmData.name || 'Realm'}</h1>
-							<span class="{stageStyle.bg} {stageStyle.text} inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold">
-								<span class="{stageStyle.dot} w-1.5 h-1.5 rounded-full inline-block"></span>
-								{stageLabel}
-							</span>
+					<div
+						style="opacity: {showOverlay ? 1 : 0}; transform: translateY({showOverlay ? '0px' : '30px'}); transition: opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.5s, transform 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;"
+					>
+						<div style="max-width: 700px; margin: 0 auto;">
+							<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+								<img
+									src="/custom/logo.png"
+									alt={realmData.name || 'Realm'}
+									style="width: 36px; height: 36px; object-fit: contain;"
+									onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
+								/>
+								<h1 style="font-size: 2rem; font-weight: 700; color: #111827; margin: 0;">{realmData.name || 'Realm'}</h1>
+							</div>
+							{#if realmData.welcome_message}
+								<p style="font-size: 0.95rem; color: #6b7280; font-style: italic; margin: 0;">
+									{realmData.welcome_message}
+								</p>
+							{/if}
 						</div>
-						{#if realmData.welcome_message}
-							<p style="font-size: 0.95rem; color: #6b7280; font-style: italic; margin: 0;">
-								{realmData.welcome_message}
-							</p>
-						{/if}
+					</div>
+
+					<!-- Scroll indicator: animated chevron -->
+					<div
+						style="margin-top: auto; display: flex; justify-content: center; padding: 12px 0 8px; opacity: {showOverlay ? 1 : 0}; transition: opacity 1.5s ease 0.5s;"
+					>
+						<svg style="width: 28px; height: 28px; animation: bounceDown 2s ease-in-out infinite;" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M6 9l6 6 6-6" />
+						</svg>
 					</div>
 				</div>
 
-				<!-- Scroll indicator: animated chevron -->
-				<div
-					style="position: relative; display: flex; justify-content: center; padding: 20px 0; opacity: {showOverlay ? 1 : 0}; transition: opacity 1.5s ease 0.5s;"
-				>
-					<svg style="width: 28px; height: 28px; animation: bounceDown 2s ease-in-out infinite;" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M6 9l6 6 6-6" />
-					</svg>
-				</div>
-
 				<!-- Bottom breathing room -->
-				<div style="height: 24px; flex-shrink: 0;"></div>
+				<div style="height: 64px; flex-shrink: 0;"></div>
 			</div>
 
 		<style>
@@ -386,6 +441,143 @@
 				line-height: 1.1;
 				font-variant-numeric: tabular-nums;
 			}
+			.realm-status-card {
+				background: #fff;
+				border-radius: 16px;
+				padding: 28px;
+				box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05);
+				border: 1px solid #e5e7eb;
+			}
+			.realm-status-header {
+				display: flex;
+				align-items: flex-start;
+				justify-content: space-between;
+				gap: 16px;
+				margin-bottom: 24px;
+				flex-wrap: wrap;
+			}
+			.realm-status-badge {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				padding: 8px 14px;
+				border-radius: 999px;
+				font-size: 0.85rem;
+				font-weight: 600;
+				border: 1px solid;
+			}
+			.realm-status-dot {
+				width: 8px;
+				height: 8px;
+				border-radius: 999px;
+				flex-shrink: 0;
+			}
+			.realm-stage-track {
+				position: relative;
+				margin-bottom: 24px;
+			}
+			.realm-stage-line {
+				position: absolute;
+				top: 18px;
+				left: 8%;
+				right: 8%;
+				height: 2px;
+				background: #e5e7eb;
+				z-index: 0;
+			}
+			.realm-stage-line-fill {
+				position: absolute;
+				top: 18px;
+				left: 8%;
+				height: 2px;
+				background: #10b981;
+				z-index: 0;
+				transition: width 0.5s ease;
+			}
+			.realm-stage-steps {
+				display: flex;
+				justify-content: space-between;
+				position: relative;
+				z-index: 1;
+			}
+			.realm-stage-step {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				flex: 1;
+				min-width: 0;
+			}
+			.realm-stage-circle {
+				width: 36px;
+				height: 36px;
+				border-radius: 999px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 0.75rem;
+				font-weight: 700;
+				border: 2px solid;
+			}
+			.realm-status-metrics {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 12px;
+			}
+			@media (min-width: 768px) {
+				.realm-status-metrics {
+					grid-template-columns: repeat(4, minmax(0, 1fr));
+				}
+			}
+			.realm-status-metric {
+				background: #f9fafb;
+				border: 1px solid #f3f4f6;
+				border-radius: 12px;
+				padding: 14px 16px;
+			}
+			.realm-status-metric-label {
+				font-size: 0.75rem;
+				color: #6b7280;
+				margin-bottom: 4px;
+			}
+			.realm-status-metric-value {
+				font-size: 1.05rem;
+				font-weight: 700;
+				color: #111827;
+			}
+			.realm-progress-bar {
+				height: 8px;
+				border-radius: 999px;
+				background: #e5e7eb;
+				overflow: hidden;
+				margin-top: 8px;
+			}
+			.realm-progress-fill {
+				height: 100%;
+				border-radius: 999px;
+				transition: width 0.8s ease;
+			}
+			.realm-checklist {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 10px;
+				margin-top: 16px;
+			}
+			@media (min-width: 768px) {
+				.realm-checklist {
+					grid-template-columns: repeat(4, minmax(0, 1fr));
+				}
+			}
+			.realm-check-item {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 10px 12px;
+				border-radius: 10px;
+				border: 1px solid #f3f4f6;
+				background: #fafafa;
+				font-size: 0.82rem;
+				color: #374151;
+			}
 		</style>
 
 			<!-- Manifesto -->
@@ -409,6 +601,128 @@
 					</svg>
 				</a>
 			</div>
+
+			<!-- Realm lifecycle status -->
+			{#if statusData}
+				<div class="px-4 pb-8">
+					<div class="realm-status-card max-w-5xl mx-auto">
+						<div class="realm-status-header">
+							<div style="flex: 1; min-width: 240px;">
+								<p style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; margin: 0 0 8px;">Realm Status</p>
+								<h2 style="font-size: 1.5rem; font-weight: 700; color: #111827; margin: 0 0 8px;">{stageLabel} Phase</h2>
+								<p style="font-size: 0.95rem; color: #4b5563; line-height: 1.6; margin: 0; max-width: 640px;">{stageDescription}</p>
+							</div>
+							<span
+								class="realm-status-badge"
+								style="background: {stageTheme.bg}; border-color: {stageTheme.border}; color: {stageTheme.text};"
+							>
+								<span class="realm-status-dot" style="background: {stageTheme.dot};"></span>
+								Currently {stageLabel}
+							</span>
+						</div>
+
+						<div class="realm-stage-track">
+							<div class="realm-stage-line"></div>
+							<div
+								class="realm-stage-line-fill"
+								style="width: {lifecycleStageIndex / (STAGES.length - 1) * 84}%;"
+							></div>
+							<div class="realm-stage-steps">
+								{#each STAGES as stage, i}
+									{@const isCurrent = i === lifecycleStageIndex}
+									{@const isPast = i < lifecycleStageIndex}
+									<div class="realm-stage-step">
+										<div
+											class="realm-stage-circle"
+											style="
+												background: {isCurrent ? stageTheme.accent : isPast ? '#10b981' : '#f3f4f6'};
+												border-color: {isCurrent ? stageTheme.accent : isPast ? '#10b981' : '#d1d5db'};
+												color: {isCurrent || isPast ? '#fff' : '#9ca3af'};
+											"
+										>
+											{#if isPast}
+												<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+											{:else}
+												{i + 1}
+											{/if}
+										</div>
+										<span
+											style="font-size: 0.72rem; font-weight: {isCurrent ? '700' : '500'}; margin-top: 8px; text-align: center; color: {isCurrent ? stageTheme.text : isPast ? '#059669' : '#9ca3af'};"
+										>
+											{STAGE_LABELS[stage]}
+										</span>
+									</div>
+								{/each}
+							</div>
+						</div>
+
+						<div class="realm-status-metrics">
+							<div class="realm-status-metric">
+								<div class="realm-status-metric-label">Registration</div>
+								<div class="realm-status-metric-value" style="color: {registrationOpen ? '#059669' : '#dc2626'};">
+									{registrationOpen ? 'Open' : 'Closed'}
+								</div>
+							</div>
+							<div class="realm-status-metric">
+								<div class="realm-status-metric-label">Members</div>
+								<div class="realm-status-metric-value">
+									{Number(lifecycleData.registered_users ?? statusData.users_count ?? 0).toLocaleString()}
+								</div>
+							</div>
+							<div class="realm-status-metric">
+								<div class="realm-status-metric-label">Governance Activity</div>
+								<div class="realm-status-metric-value">
+									{Number(statusData.proposals_count ?? 0).toLocaleString()} proposals · {Number(statusData.votes_count ?? 0).toLocaleString()} votes
+								</div>
+							</div>
+							<div class="realm-status-metric">
+								<div class="realm-status-metric-label">{quarterCount === 1 && statusData.quarters?.[0]?.is_capital ? 'Capital Quarter' : 'Quarters'}</div>
+								<div class="realm-status-metric-value">
+									{quarterCount > 0 ? quarterCount : 'Single realm'}
+								</div>
+							</div>
+						</div>
+
+						{#if realmStage === 'alpha' || realmStage === 'beta'}
+							<div style="margin-top: 20px; padding: 16px; border-radius: 12px; background: {stageTheme.bg}; border: 1px solid {stageTheme.border};">
+								<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+									<div>
+										<div style="font-size: 0.8rem; font-weight: 600; color: {stageTheme.text};">Path to next phase</div>
+										<div style="font-size: 0.85rem; color: #4b5563; margin-top: 4px;">
+											{Number(lifecycleData.registered_users ?? statusData.users_count ?? 0).toLocaleString()} of {Number(lifecycleData.critical_mass ?? 10000).toLocaleString()} members toward critical mass
+										</div>
+									</div>
+									<div style="font-size: 1.25rem; font-weight: 700; color: {stageTheme.accent};">{stageProgressPct}%</div>
+								</div>
+								<div class="realm-progress-bar">
+									<div class="realm-progress-fill" style="width: {stageProgressPct}%; background: {stageTheme.accent};"></div>
+								</div>
+							</div>
+						{/if}
+
+						{#if realmStage === 'beta' || realmStage === 'production'}
+							<div class="realm-checklist">
+								<div class="realm-check-item">
+									<span style="color: {lifecycleData.deposits_locked ? '#059669' : '#9ca3af'};">{lifecycleData.deposits_locked ? '✓' : '○'}</span>
+									Deposits {lifecycleData.deposits_locked ? 'locked' : 'refundable'}
+								</div>
+								<div class="realm-check-item">
+									<span style="color: {lifecycleData.land_acquired ? '#059669' : '#9ca3af'};">{lifecycleData.land_acquired ? '✓' : '○'}</span>
+									Land {lifecycleData.land_acquired ? 'secured' : 'pending'}
+								</div>
+								<div class="realm-check-item">
+									<span style="color: {lifecycleData.infrastructure_ready ? '#059669' : '#9ca3af'};">{lifecycleData.infrastructure_ready ? '✓' : '○'}</span>
+									Infrastructure {lifecycleData.infrastructure_ready ? 'ready' : 'in progress'}
+								</div>
+								<div class="realm-check-item">
+									<span style="color: {lifecycleData.providers_ready ? '#059669' : '#9ca3af'};">{lifecycleData.providers_ready ? '✓' : '○'}</span>
+									Providers {lifecycleData.providers_ready ? 'ready' : 'pending'}
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
 
 			<!-- KPI stats -->
 			{#if kpiCards.length > 0}
