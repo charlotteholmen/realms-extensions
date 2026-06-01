@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import MonacoPane from './MonacoPane.svelte';
 	let { ctx }: { ctx: any } = $props();
 
 	interface Codex {
@@ -43,8 +45,6 @@
 			? unescapeCode(selectedCodex.code || selectedCodex.source || selectedCodex.code_preview)
 			: '',
 	);
-
-	let MonacoEditor = $derived(ctx.ui?.MonacoEditor);
 
 	async function callExt(fn: string, args: Record<string, unknown> = {}) {
 		return await ctx.callSync(fn, args);
@@ -137,7 +137,7 @@
 		window.open(url, '_blank');
 	}
 
-	$effect(() => {
+	onMount(() => {
 		void loadCodexes();
 	});
 </script>
@@ -146,8 +146,7 @@
 	{#if accessDeniedOp}
 		<div class="codex-denied">
 			{#if ctx.ui?.AccessDenied}
-				{@const AccessDenied = ctx.ui.AccessDenied}
-				<AccessDenied operation={accessDeniedOp} />
+				<p class="access-denied-msg">You need additional permissions to view this page.</p>
 			{:else}
 				<p>You need additional permissions to view this page.</p>
 			{/if}
@@ -250,15 +249,15 @@
 				<div class="monaco-wrap">
 					{#if detailLoading}
 						<div class="monaco-loading">Loading code…</div>
-					{:else if MonacoEditor}
-						<MonacoEditor
-							code={editorCode}
-							language={MONACO_LANGUAGE}
-							theme={MONACO_THEME}
-							readOnly={true}
-						/>
 					{:else if editorCode}
-						<pre class="code-fallback"><code>{editorCode}</code></pre>
+						{#key getCodexId(selectedCodex)}
+							<MonacoPane
+								code={editorCode}
+								language={MONACO_LANGUAGE}
+								theme={MONACO_THEME}
+								readOnly={true}
+							/>
+						{/key}
 					{:else}
 						<div class="monaco-loading">No code available for this codex.</div>
 					{/if}
