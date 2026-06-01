@@ -42,27 +42,32 @@ from realm_client import (
     TestIdentity,
     call_backend,
     call_extension,
-    find_objects,
     resolve_user_id,
 )
 
 
 def _first_court():
-    """Return (_id, name) of the first active seeded court."""
-    courts = find_objects("Court")
-    active = [c for c in courts if c.get("status") == "active"]
-    if not active:
+    """Return (id, name) of the first active seeded court.
+
+    Uses the justice_litigation get_courts endpoint (an update call, 40B
+    instruction budget) rather than the generic find_objects query (5B budget):
+    on a long-lived realm the entity store grows large enough that a full-class
+    scan + cascade serialization exceeds the per-query instruction limit.
+    """
+    resp = call_extension("justice_litigation", "get_courts", {"status": "active"}, timeout=180)
+    courts = ((resp or {}).get("data") or {}).get("courts", [])
+    if not courts:
         raise RuntimeError("No active court found on realm")
-    return active[0]["_id"], active[0].get("name", "")
+    return courts[0]["id"], courts[0].get("name", "")
 
 
 def _first_judge():
-    """Return _id of the first active seeded judge."""
-    judges = find_objects("Judge")
-    active = [j for j in judges if j.get("status") == "active"]
-    if not active:
+    """Return id of the first active seeded judge (via get_judges update call)."""
+    resp = call_extension("justice_litigation", "get_judges", {"status": "active"}, timeout=180)
+    judges = ((resp or {}).get("data") or {}).get("judges", [])
+    if not judges:
         raise RuntimeError("No active judge found on realm")
-    return active[0]["_id"]
+    return judges[0]["id"]
 
 
 def run(sc: Scenario):

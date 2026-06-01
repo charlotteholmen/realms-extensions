@@ -154,10 +154,16 @@ else:
             # ------------------------------------------------------------------ #
             sc.step("5. Verify department in realm audience roster")
             audiences = call_backend("list_share_audiences")
-            all_audiences = audiences.get("audiences", []) if isinstance(audiences, dict) else []
+            # The payload is a JSON string nested under data.message.
+            msg = audiences.get("data", {}).get("message", "") if isinstance(audiences, dict) else ""
+            try:
+                parsed = json.loads(msg) if isinstance(msg, str) else (msg or {})
+            except (ValueError, TypeError):
+                parsed = {}
+            all_audiences = parsed.get("audiences", []) if isinstance(parsed, dict) else []
             dept_entries = [
                 a for a in all_audiences
-                if a.get("kind") == "department" and a.get("name") == dept_name
+                if a.get("type") == "department" and a.get("label") == dept_name
             ]
             sc.check(len(dept_entries) == 1, f"Department '{dept_name}' in share-audience list")
 
