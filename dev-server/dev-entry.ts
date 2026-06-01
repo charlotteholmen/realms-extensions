@@ -106,6 +106,8 @@ async function main() {
 		ui: {
 			AccessDenied: null as any,
 			accessDeniedOperation: () => null,
+			MonacoEditor: null as any,
+			MonacoDiffEditor: null as any,
 		},
 	};
 

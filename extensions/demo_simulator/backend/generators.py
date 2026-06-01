@@ -12,7 +12,9 @@ import time
 from .constants import (
     CASE_TITLES,
     CITY_COORDINATES,
+    CODEX_RAW_BASE,
     COURT_NAMES,
+    DEMO_CODEX_NAMES,
     DEPARTMENT_DEFINITIONS,
     EXPENSE_BUDGETS,
     FIRST_NAMES,
@@ -108,8 +110,30 @@ def generate_org_batch(state_data, count):
     return created
 
 
+def _demo_inline_new_codex(idx: int) -> str:
+    """Small inline Python for brand-new codex demo proposals."""
+    return (
+        f'"""Demo inline codex #{idx + 1}"""\n\n'
+        "def main():\n"
+        f'    return {{"demo": True, "proposal_index": {idx}}}\n'
+    )
+
+
+def _demo_inline_amendment(codex_name: str, idx: int) -> str:
+    """Proposed codex body for amendment demos (baseline comes from Codex on canister)."""
+    return (
+        f'"""Amended {codex_name} (demo proposal #{idx + 1})"""\n\n'
+        "# Demo amendment: extends realm codex with a tagged change.\n"
+        f"DEMO_AMENDMENT_TAG = 'demo_prop_{idx:04d}'\n\n"
+        "def main():\n"
+        f'    return {{"codex": "{codex_name}", "amendment": DEMO_AMENDMENT_TAG}}\n'
+    )
+
+
 def generate_proposal_batch(state_data, count):
-    """Generate a batch of proposals."""
+    """Generate proposals covering inline, URL, and codex-amendment patterns."""
+    import json
+
     from ggg import Proposal, User
 
     base_idx = state_data.get("total_proposals_created", 0)
@@ -124,12 +148,69 @@ def generate_proposal_batch(state_data, count):
         proposer = None
         if total_users > 0:
             proposer = User[f"demo_user_{rng.randint(0, total_users - 1):04d}"]
+
+        kind = idx % 4
+        metadata = {}
+        code_url = ""
+        code_checksum = ""
+
+        if kind == 0:
+            codex_name = f"demo_inline_{idx:04d}"
+            metadata = {
+                "proposal_type": "code_execution",
+                "codex_name": codex_name,
+                "code_inline": _demo_inline_new_codex(idx),
+            }
+            description = f"Auto-generated demo (inline new codex): {title}"
+        elif kind == 1:
+            codex_name = rng.choice(DEMO_CODEX_NAMES)
+            code_url = f"{CODEX_RAW_BASE}{codex_name}.py"
+            metadata = {
+                "proposal_type": "code_execution",
+                "codex_name": codex_name,
+            }
+            description = f"Auto-generated demo (remote URL codex): {title}"
+        elif kind == 2:
+            codex_name = rng.choice(DEMO_CODEX_NAMES)
+            metadata = {
+                "proposal_type": "codex_amendment",
+                "codex_name": codex_name,
+                "code_inline": _demo_inline_amendment(codex_name, idx),
+            }
+            description = f"Auto-generated demo (amend codex '{codex_name}'): {title}"
+        else:
+            names = list(DEMO_CODEX_NAMES)
+            if len(names) >= 2:
+                codex_entries = [
+                    {"name": names[0], "url": f"{CODEX_RAW_BASE}{names[0]}.py", "checksum": ""},
+                    {"name": names[1], "url": f"{CODEX_RAW_BASE}{names[1]}.py", "checksum": ""},
+                ]
+            else:
+                codex_entries = [
+                    {
+                        "name": names[0],
+                        "url": f"{CODEX_RAW_BASE}{names[0]}.py",
+                        "checksum": "",
+                    },
+                ]
+            code_url = codex_entries[0]["url"]
+            metadata = {
+                "proposal_type": "codex_amendment",
+                "codices": codex_entries,
+            }
+            description = (
+                f"Auto-generated demo (multi-codex, {len(codex_entries)} files): {title}"
+            )
+
         p = Proposal(
             proposal_id=f"demo_prop_{idx:04d}",
             title=f"{title} (#{idx + 1})",
-            description=f"Auto-generated demo proposal for: {title}",
+            description=description,
+            code_url=code_url,
+            code_checksum=code_checksum,
             status=rng.choice(["draft", "open", "voting", "approved", "rejected"]),
             proposer=proposer,
+            metadata=json.dumps(metadata),
         )
         p.votes_yes = float(rng.randint(0, 20))
         p.votes_no = float(rng.randint(0, 10))

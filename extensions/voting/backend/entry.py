@@ -583,6 +583,48 @@ def _load_metadata(proposal: Proposal) -> dict:
         return {}
 
 
+def _get_codex_baseline(codex_name: str) -> str:
+    """Return current codex source from the realm canister, if installed."""
+    if not codex_name:
+        return ""
+    try:
+        codex = Codex[codex_name]
+        if codex and getattr(codex, "code", None):
+            return codex.code or ""
+    except Exception:
+        pass
+    return ""
+
+
+def _checksum_for(content: str) -> str:
+    actual_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return f"sha256:{actual_hash}"
+
+
+def _build_file_preview(
+    name: str,
+    proposed: str,
+    code_url: str = "",
+    stored_checksum: str = "",
+) -> Dict[str, Any]:
+    """Build a single-file preview payload with optional diff against realm codex."""
+    original = _get_codex_baseline(name)
+    is_amendment = bool(original)
+    actual_checksum = _checksum_for(proposed)
+    checksum_match = None
+    if stored_checksum:
+        checksum_match = stored_checksum == actual_checksum
+    return {
+        "name": name,
+        "code": proposed,
+        "original": original if is_amendment else None,
+        "is_amendment": is_amendment,
+        "code_url": code_url or None,
+        "checksum": actual_checksum,
+        "checksum_match": checksum_match,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Extension API functions
 # ---------------------------------------------------------------------------
@@ -938,16 +980,17 @@ def execute_proposal(args: str) -> Async[str]:
 
 
 def fetch_proposal_code(args: str) -> Async[str]:
-    """Fetch and preview the code from a proposal's code_url (read-only).
+    """Fetch and preview proposal code (read-only).
 
-    Accepts either proposal_id (looks up the URL from the proposal) or
-    code_url directly (useful for checksum calculation before submission).
+    Accepts proposal_id (loads from proposal) or code_url (checksum helper).
+
+    For amendments, ``original`` is loaded from the matching ``Codex`` entity on
+    the realm canister. Multi-codex proposals return a ``files`` array.
     """
     try:
         args_dict = _parse_args(args)
         proposal_id = args_dict.get("proposal_id")
         code_url = args_dict.get("code_url")
-        stored_checksum = None
 
         if proposal_id:
             proposal = _find_proposal(proposal_id)
@@ -956,44 +999,99 @@ def fetch_proposal_code(args: str) -> Async[str]:
 
             metadata = _load_metadata(proposal)
             code_inline = metadata.get("code_inline")
-            if code_inline:
-                actual_hash = hashlib.sha256(code_inline.encode("utf-8")).hexdigest()
+            codices_list = metadata.get("codices") or []
+
+            if codices_list:
+                files = []
+                for entry in codices_list:
+                    name = entry.get("name", "")
+                    if not name:
+                        return json.dumps({"success": False, "error": "codices entry missing name"})
+                    entry_inline = entry.get("code_inline", "")
+                    entry_url = entry.get("url", "")
+                    if entry_inline:
+                        proposed = entry_inline
+                    elif entry_url:
+                        logger.info(f"Fetching codex preview for {name}: {entry_url}")
+                        proposed = yield from _http_download(entry_url)
+                    else:
+                        return json.dumps({
+                            "success": False,
+                            "error": f"codices entry '{name}' has no url or code_inline",
+                        })
+                    files.append(_build_file_preview(
+                        name,
+                        proposed,
+                        code_url=entry_url,
+                        stored_checksum=entry.get("checksum", ""),
+                    ))
+                primary = files[0]
                 return json.dumps({
                     "success": True,
                     "data": {
-                        "code": code_inline,
-                        "code_url": None,
-                        "checksum": f"sha256:{actual_hash}",
-                        "checksum_match": True,
+                        "mode": "multi",
+                        "files": files,
+                        "code": primary["code"],
+                        "original": primary.get("original"),
+                        "is_amendment": primary["is_amendment"],
+                        "codex_name": primary["name"],
+                        "checksum": primary["checksum"],
+                    },
+                })
+
+            if code_inline:
+                codex_name = metadata.get("codex_name", "")
+                file_preview = _build_file_preview(codex_name or "inline", code_inline)
+                return json.dumps({
+                    "success": True,
+                    "data": {
+                        "mode": "single",
                         "inline": True,
-                    }
+                        "codex_name": codex_name or None,
+                        **file_preview,
+                        "code_url": None,
+                        "checksum_match": True,
+                    },
                 })
 
             if not proposal.code_url:
-                return json.dumps({"success": False, "error": "Proposal has no code URL"})
+                return json.dumps({"success": False, "error": "Proposal has no code attached"})
+
             code_url = proposal.code_url
-            stored_checksum = proposal.code_checksum
-        elif not code_url:
+            logger.info(f"Fetching code preview from: {code_url}")
+            code_content = yield from _http_download(code_url)
+            codex_name = metadata.get("codex_name", "")
+            file_preview = _build_file_preview(
+                codex_name or "proposal",
+                code_content,
+                code_url=code_url,
+                stored_checksum=proposal.code_checksum or "",
+            )
+            return json.dumps({
+                "success": True,
+                "data": {
+                    "mode": "single",
+                    "codex_name": codex_name or None,
+                    **file_preview,
+                },
+            })
+
+        if not code_url:
             return json.dumps({"success": False, "error": "proposal_id or code_url is required"})
 
         logger.info(f"Fetching code preview from: {code_url}")
         code_content = yield from _http_download(code_url)
-
-        actual_hash = hashlib.sha256(code_content.encode("utf-8")).hexdigest()
-        actual_checksum = f"sha256:{actual_hash}"
-
-        checksum_match = None
-        if stored_checksum:
-            checksum_match = (stored_checksum == actual_checksum)
-
+        actual_checksum = _checksum_for(code_content)
         return json.dumps({
             "success": True,
             "data": {
+                "mode": "single",
                 "code": code_content,
                 "code_url": code_url,
                 "checksum": actual_checksum,
-                "checksum_match": checksum_match,
-            }
+                "is_amendment": False,
+                "original": None,
+            },
         })
     except Exception as e:
         logger.error(f"fetch_proposal_code error: {e}\n{traceback.format_exc()}")

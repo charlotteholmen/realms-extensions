@@ -33,6 +33,14 @@ ORG_NAMES = [
     "Community Development Trust", "Infrastructure Management", "Social Services Org",
 ]
 
+# Raw GitHub URLs for demo URL-based proposals (realms-codices agora codices)
+CODEX_RAW_BASE = (
+    "https://raw.githubusercontent.com/smart-social-contracts/realms-codices/"
+    "refs/heads/main/codices/agora/"
+)
+
+DEMO_CODEX_NAMES = ["tax_collection", "social_benefits"]
+
 PROPOSAL_TITLES = [
     "Increase public transport budget",
     "Create community garden in District 3",
