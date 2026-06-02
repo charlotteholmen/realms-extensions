@@ -11,6 +11,7 @@
 	interface ChatMessage {
 		text: string;
 		isUser: boolean;
+		timestamp?: number;
 	}
 
 	interface AssistantPersona {
@@ -193,8 +194,9 @@
 			const data = await response.json();
 			const loaded: ChatMessage[] = [];
 			for (const m of data.messages || []) {
-				if (m.question) loaded.push({ text: m.question, isUser: true });
-				if (m.response) loaded.push({ text: m.response, isUser: false });
+				const ts = parseMessageTimestamp(m.created_at) ?? Date.now();
+				if (m.question) loaded.push({ text: m.question, isUser: true, timestamp: ts });
+				if (m.response) loaded.push({ text: m.response, isUser: false, timestamp: ts });
 			}
 			messages = loaded;
 			currentConversationId = conversationId;
@@ -268,6 +270,37 @@
 			return;
 		}
 		selectConversation(id);
+	}
+
+	function parseMessageTimestamp(value: unknown): number | undefined {
+		if (value == null || value === '') return undefined;
+		const ms = Date.parse(String(value));
+		return Number.isNaN(ms) ? undefined : ms;
+	}
+
+	function formatTimeAgo(timestamp?: number): string {
+		if (!timestamp) return 'just now';
+		const seconds = Math.floor((Date.now() - timestamp) / 1000);
+		if (seconds < 10) return 'just now';
+		if (seconds < 60) return `${seconds}s ago`;
+		const minutes = Math.floor(seconds / 60);
+		if (minutes < 60) return minutes === 1 ? '1 min ago' : `${minutes} mins ago`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+		const days = Math.floor(hours / 24);
+		if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`;
+		const weeks = Math.floor(days / 7);
+		if (weeks < 5) return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+		return new Date(timestamp).toLocaleDateString();
+	}
+
+	async function copyMessageText(text: string): Promise<void> {
+		if (!text || typeof navigator === 'undefined') return;
+		try {
+			await navigator.clipboard.writeText(text);
+		} catch {
+			/* clipboard unavailable */
+		}
 	}
 
 	function handleExplainParam() {
@@ -373,7 +406,7 @@
 
 		error = '';
 		accessDeniedOp = '';
-		messages = [...messages, { text: newMessage, isUser: true }];
+		messages = [...messages, { text: newMessage, isUser: true, timestamp: Date.now() }];
 		const messageToSend = newMessage;
 		newMessage = '';
 		isLoading = true;
@@ -444,7 +477,10 @@
 						accumulatedText &&
 						(messages.length === 0 || messages[messages.length - 1].isUser)
 					) {
-						messages = [...messages, { text: accumulatedText, isUser: false }];
+						messages = [
+							...messages,
+							{ text: accumulatedText, isUser: false, timestamp: Date.now() },
+						];
 					} else if (accumulatedText) {
 						messages = messages.map((msg, index) =>
 							index === messages.length - 1 && !msg.isUser
@@ -465,7 +501,10 @@
 							: msg,
 					);
 				} else {
-					messages = [...messages, { text: 'No response from LLM', isUser: false }];
+					messages = [
+						...messages,
+						{ text: 'No response from LLM', isUser: false, timestamp: Date.now() },
+					];
 				}
 			}
 
@@ -716,15 +755,39 @@
 		{:else}
 			{#each messages as message}
 				{#if message.isUser}
-					<div class="message-row user-row">
+					<div class="message-group user-group">
 						<div class="bubble user-bubble">
 							{message.text}
 						</div>
+						<div class="message-meta">
+							<span class="message-time">{formatTimeAgo(message.timestamp)}</span>
+							<button
+								type="button"
+								class="copy-btn"
+								onclick={() => copyMessageText(message.text)}
+								title="Copy message"
+								aria-label="Copy message"
+							>
+								Copy
+							</button>
+						</div>
 					</div>
 				{:else}
-					<div class="message-row assistant-row">
+					<div class="message-group assistant-group">
 						<div class="bubble assistant-bubble markdown-content">
 							{@html renderMarkdown(message.text)}
+						</div>
+						<div class="message-meta">
+							<span class="message-time">{formatTimeAgo(message.timestamp)}</span>
+							<button
+								type="button"
+								class="copy-btn"
+								onclick={() => copyMessageText(message.text)}
+								title="Copy message"
+								aria-label="Copy message"
+							>
+								Copy
+							</button>
 						</div>
 					</div>
 				{/if}
@@ -1173,7 +1236,54 @@
 		margin-top: 20px;
 	}
 
-	/* Message rows */
+	/* Message groups */
+	.message-group {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		max-width: 80%;
+	}
+
+	.user-group {
+		align-self: flex-end;
+		align-items: flex-end;
+	}
+
+	.assistant-group {
+		align-self: flex-start;
+		align-items: flex-start;
+	}
+
+	.message-meta {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 2px;
+		font-size: 11px;
+		line-height: 1;
+		color: #9ca3af;
+	}
+
+	.message-time {
+		white-space: nowrap;
+	}
+
+	.copy-btn {
+		background: none;
+		border: none;
+		padding: 0;
+		font-size: 11px;
+		line-height: 1;
+		color: #9ca3af;
+		cursor: pointer;
+		transition: color 0.15s ease;
+	}
+
+	.copy-btn:hover {
+		color: #6b7280;
+	}
+
+	/* Message rows (typing indicator) */
 	.message-row {
 		display: flex;
 		gap: 10px;
@@ -1222,10 +1332,10 @@
 	}
 
 	.user-bubble {
-		background: #4f46e5;
+		background: #374151;
 		color: #fff;
 		border-bottom-right-radius: 4px;
-		box-shadow: 0 1px 3px rgba(79, 70, 229, 0.3);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 		white-space: pre-wrap;
 	}
 
