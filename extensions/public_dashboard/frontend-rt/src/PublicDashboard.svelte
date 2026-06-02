@@ -331,59 +331,130 @@
 		{#if realmData}
 			<div
 				use:fullBleed
-				style="height: 105vh; background: url('/custom/background.png') center/cover no-repeat; position: relative; display: flex; flex-direction: column; margin-top: -6rem; padding-top: 6rem;"
+				class="hero-screen"
+				style="background-image: url('/custom/background.png');"
 			>
-				<!-- Gradient overlay in the bottom 30% band -->
 				<div
-					style="position: absolute; left: 0; right: 0; bottom: 64px; height: 30%; background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.85) 25%, rgba(255,255,255,0.4) 55%, transparent 100%); opacity: {showOverlay ? 1 : 0}; transition: opacity 3s cubic-bezier(0.25, 0.1, 0.25, 1); pointer-events: none;"
+					class="hero-gradient"
+					style="opacity: {showOverlay ? 1 : 0};"
 				></div>
 
-				<!-- Top area: upper 70% of the hero -->
-				<div style="flex: 1; min-height: 0;"></div>
-
-				<!-- Bottom 30%: logo, name, welcome message -->
 				<div
-					style="height: 30%; flex-shrink: 0; display: flex; flex-direction: column; justify-content: flex-start; padding: 0 24px; position: relative;"
+					class="hero-bottom-zone"
+					style="opacity: {showOverlay ? 1 : 0}; transform: translateY({showOverlay ? '0px' : '24px'});"
 				>
-					<div
-						style="opacity: {showOverlay ? 1 : 0}; transform: translateY({showOverlay ? '0px' : '30px'}); transition: opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.5s, transform 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;"
-					>
-						<div style="max-width: 700px; margin: 0 auto;">
-							<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-								<img
-									src="/custom/logo.png"
-									alt={realmData.name || 'Realm'}
-									style="width: 36px; height: 36px; object-fit: contain;"
-									onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
-								/>
-								<h1 style="font-size: 2rem; font-weight: 700; color: #111827; margin: 0;">{realmData.name || 'Realm'}</h1>
-							</div>
-							{#if realmData.welcome_message}
-								<p style="font-size: 0.95rem; color: #6b7280; font-style: italic; margin: 0;">
-									{realmData.welcome_message}
-								</p>
-							{/if}
+					<div class="hero-identity">
+						<div class="hero-brand-row">
+							<img
+								src="/custom/logo.png"
+								alt={realmData.name || 'Realm'}
+								class="hero-logo"
+								onerror={(e) => { e.currentTarget.src = '/images/logo_sphere_only.svg'; }}
+							/>
+							<h1 class="hero-title">{realmData.name || 'Realm'}</h1>
 						</div>
+						{#if realmData.welcome_message}
+							<p class="hero-welcome">{realmData.welcome_message}</p>
+						{/if}
 					</div>
 
-					<!-- Scroll indicator: animated chevron -->
-					<div
-						style="margin-top: auto; display: flex; justify-content: center; padding: 12px 0 8px; opacity: {showOverlay ? 1 : 0}; transition: opacity 1.5s ease 0.5s;"
-					>
-						<svg style="width: 28px; height: 28px; animation: bounceDown 2s ease-in-out infinite;" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<div class="hero-chevron">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 							<path d="M6 9l6 6 6-6" />
 						</svg>
 					</div>
 				</div>
-
-				<!-- Bottom breathing room -->
-				<div style="height: 64px; flex-shrink: 0;"></div>
 			</div>
 
 		<style>
 			@keyframes bounceDown {
 				0%, 100% { transform: translateY(0); }
 				50% { transform: translateY(8px); }
+			}
+			.hero-screen {
+				height: 100vh;
+				min-height: 520px;
+				background: center / cover no-repeat;
+				position: relative;
+				margin-top: -6rem;
+				padding-top: 6rem;
+				overflow: hidden;
+			}
+			.hero-gradient {
+				position: absolute;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				/* Fade begins ~33% from bottom; solid white fills the branding band below */
+				height: 40%;
+				background: linear-gradient(
+					to top,
+					#ffffff 0%,
+					#ffffff 90%,
+					rgba(255, 255, 255, 0.7) 96%,
+					transparent 100%
+				);
+				pointer-events: none;
+				transition: opacity 3s cubic-bezier(0.25, 0.1, 0.25, 1);
+			}
+			.hero-bottom-zone {
+				position: absolute;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				height: 32%;
+				min-height: 200px;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				padding: 0 24px 28px;
+				z-index: 2;
+				transition: opacity 2.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.5s,
+					transform 3s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;
+			}
+			.hero-identity {
+				width: 100%;
+				max-width: 720px;
+				text-align: center;
+			}
+			.hero-brand-row {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 14px;
+				margin-bottom: 10px;
+			}
+			.hero-logo {
+				width: clamp(40px, 7vw, 52px);
+				height: clamp(40px, 7vw, 52px);
+				object-fit: contain;
+				flex-shrink: 0;
+			}
+			.hero-title {
+				font-size: clamp(1.75rem, 5vw, 2.35rem);
+				font-weight: 700;
+				color: #111827;
+				margin: 0;
+				line-height: 1.15;
+			}
+			.hero-welcome {
+				font-size: clamp(0.95rem, 2.8vw, 1.05rem);
+				color: #374151;
+				font-style: italic;
+				margin: 0 auto;
+				max-width: 540px;
+				line-height: 1.55;
+			}
+			.hero-chevron {
+				margin-top: 18px;
+				color: #111827;
+				opacity: 0.7;
+			}
+			.hero-chevron svg {
+				width: 28px;
+				height: 28px;
+				animation: bounceDown 2s ease-in-out infinite;
 			}
 			.join-btn {
 				display: inline-flex;
