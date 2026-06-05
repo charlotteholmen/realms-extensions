@@ -22,6 +22,7 @@ def extension_sync_call(method_name: str, args: dict):
         "health": (health, False),
         "get_realm_stage": (get_realm_stage, False),
         "set_realm_stage": (set_realm_stage, True),
+        "patch_manifest_data": (patch_manifest_data, True),
     }
 
     if method_name not in methods:
@@ -159,4 +160,49 @@ def set_realm_stage(args: dict):
         }
     except Exception as e:
         logger.error(f"set_realm_stage error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def patch_manifest_data(args: dict):
+    """Merge top-level keys into Realm.manifest_data. Admin only.
+
+    Args (JSON): {"fields": {"dashboard": {...}, "onboarding": {...}, ...}}
+    This is used to bootstrap codex-driven config when the codex is too large
+    to reinstall in a single IC message (instruction-limit workaround).
+    """
+    from ggg import Realm
+
+    try:
+        realm = Realm.load("1")
+        if not realm:
+            return {"success": False, "error": "Realm not found"}
+
+        fields = args.get("fields", {})
+        if not fields:
+            return {"success": False, "error": "fields is required"}
+
+        manifest_raw = getattr(realm, "manifest_data", "{}") or "{}"
+        try:
+            manifest = json.loads(manifest_raw)
+        except (json.JSONDecodeError, TypeError):
+            manifest = {}
+
+        manifest.update(fields)
+
+        serialized = json.dumps(manifest)
+        if len(serialized) > 4096:
+            return {
+                "success": False,
+                "error": f"manifest_data would exceed 4096 chars ({len(serialized)})",
+            }
+
+        realm.manifest_data = serialized
+        logger.info(f"patch_manifest_data: updated keys {list(fields.keys())}")
+
+        return {
+            "success": True,
+            "data": {"updated_keys": list(fields.keys()), "manifest_size": len(serialized)},
+        }
+    except Exception as e:
+        logger.error(f"patch_manifest_data error: {e}")
         return {"success": False, "error": str(e)}
