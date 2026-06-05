@@ -177,6 +177,13 @@ def patch_manifest_data(args: dict):
         if not realm:
             return {"success": False, "error": "Realm not found"}
 
+        # args may arrive as a raw JSON string (direct dfx call) or parsed dict
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                return {"success": False, "error": "args is not valid JSON"}
+
         fields = args.get("fields", {})
         if not fields:
             return {"success": False, "error": "fields is required"}
