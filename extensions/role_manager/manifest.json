@@ -1,0 +1,19 @@
+{
+  "name": "role_manager",
+  "version": "1.0.0",
+  "description": "Manage people, profiles, permissions, and invitations",
+  "author": "Smart Social Contracts",
+  "permissions": [],
+  "profiles": [
+    "admin",
+    "user_manager"
+  ],
+  "categories": [
+    "administration"
+  ],
+  "icon": "users",
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Users"
+  }
+}

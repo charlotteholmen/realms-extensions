@@ -16,6 +16,7 @@
 	let activeTab = $state<TabId>('balance');
 	let loading = $state(false);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	let currentPrincipal = $state('');
 	let vaultPrincipal = $state('');
@@ -134,6 +135,7 @@
 	async function loadBalance() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			if (!currentPrincipal) {
 				currentPrincipal = ctx.principal || '';
@@ -153,7 +155,14 @@
 				balanceObject = null;
 			}
 		} catch (e: any) {
-			error = e?.message || 'Failed to load balance';
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -162,6 +171,7 @@
 	async function loadTransactions(page: number = currentPage) {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			if (!vaultPrincipal) {
 				try {
@@ -183,7 +193,14 @@
 				transactions = [];
 			}
 		} catch (e: any) {
-			error = e?.message || 'Failed to load transactions';
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -213,6 +230,7 @@
 	async function refreshVaultBalance(token: string) {
 		vaultBalanceLoading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const data = await ctx.callAsync('refresh_vault_balance', { token });
 			if (data?.Balance) {
@@ -223,7 +241,14 @@
 				error = 'Failed to refresh vault balance';
 			}
 		} catch (e: any) {
-			error = e?.message || 'Failed to refresh vault balance';
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			vaultBalanceLoading = false;
 		}
@@ -241,6 +266,7 @@
 	async function refreshVault() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			await ctx.callAsync('refresh', {});
 			lastRefreshTime = new Date();
@@ -248,7 +274,14 @@
 			await loadAllVaultBalances();
 			await loadTransactions(0);
 		} catch (e: any) {
-			error = e?.message || 'Failed to refresh vault';
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -261,6 +294,7 @@
 		}
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const args: any = { to_principal: transferTo, amount: transferAmount };
 			if (transferToSubaccount.trim()) args.to_subaccount = transferToSubaccount.trim();
@@ -275,7 +309,14 @@
 			await loadBalance();
 			await loadTransactions();
 		} catch (e: any) {
-			error = e?.message || 'Failed to perform transfer';
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -285,6 +326,7 @@
 		lookupLoading = true;
 		lookupResult = null;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const lookupArgs: any = {};
 			if (lookupMode === 'user' && lookupPrincipal.trim()) {
@@ -306,7 +348,14 @@
 				error = 'Lookup failed';
 			}
 		} catch (e: any) {
-			error = e?.message || 'Failed to look up balance';
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			lookupLoading = false;
 		}
@@ -478,7 +527,13 @@
 	{/if}
 
 	<!-- Error -->
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class={cn('p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-300')}>
 			{error}
 		</div>

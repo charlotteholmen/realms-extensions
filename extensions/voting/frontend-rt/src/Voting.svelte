@@ -8,6 +8,7 @@
 	let proposals: any[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let view: View = $state('list');
 
 	let formTitle = $state('');
@@ -18,12 +19,33 @@
 	let submitting = $state(false);
 	let submitMsg = $state('');
 
+	type CodeFile = {
+		name: string;
+		code: string;
+		original?: string | null;
+		is_amendment: boolean;
+		checksum?: string;
+		code_url?: string | null;
+	};
+
+	const MONACO_THEME = 'vs';
+	const MONACO_LANGUAGE = 'python';
+
 	let selectedProposal: any = $state(null);
 	let detailLoading = $state(false);
 	let codeContent = $state('');
 	let codeChecksum = $state('');
+	let codeFiles: CodeFile[] = $state([]);
+	let selectedFileIndex = $state(0);
 	let codeLoading = $state(false);
 	let codeError = $state('');
+
+	let MonacoEditor = $derived(ctx.ui?.MonacoEditor);
+	let MonacoDiffEditor = $derived(ctx.ui?.MonacoDiffEditor);
+	let activeCodeFile = $derived(codeFiles[selectedFileIndex] ?? null);
+	let showCodeDiff = $derived(
+		!!activeCodeFile?.is_amendment && !!(activeCodeFile?.original ?? '').length,
+	);
 	let executing = $state(false);
 	let actionMsg = $state('');
 	let actionError = $state('');
@@ -58,6 +80,7 @@
 	async function loadProposals() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callSync('get_proposals');
 			if (res?.success) {
@@ -70,10 +93,45 @@
 				error = res?.error || 'Failed to load proposals';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
+	}
+
+	function applyCodePreview(data: any) {
+		if (data?.files?.length) {
+			codeFiles = data.files.map((f: any) => ({
+				name: f.name || 'codex',
+				code: f.code ?? '',
+				original: f.original ?? null,
+				is_amendment: !!f.is_amendment && !!(f.original ?? '').length,
+				checksum: f.checksum,
+				code_url: f.code_url,
+			}));
+		} else {
+			codeFiles = [
+				{
+					name: data?.codex_name || 'proposal',
+					code: data?.code ?? '',
+					original: data?.original ?? null,
+					is_amendment: !!data?.is_amendment && !!(data?.original ?? '').length,
+					checksum: data?.checksum,
+					code_url: data?.code_url,
+				},
+			];
+		}
+		selectedFileIndex = 0;
+		const primary = codeFiles[0];
+		codeContent = primary?.code ?? '';
+		codeChecksum = primary?.checksum ?? '';
 	}
 
 	async function viewProposal(proposal: any) {
@@ -81,10 +139,21 @@
 		view = 'detail';
 		codeContent = '';
 		codeChecksum = '';
+		codeFiles = [];
+		selectedFileIndex = 0;
 		codeError = '';
 		actionMsg = '';
 		actionError = '';
 		await fetchCode(proposal);
+	}
+
+	function selectCodeFile(index: number) {
+		selectedFileIndex = index;
+		const file = codeFiles[index];
+		if (file) {
+			codeContent = file.code;
+			codeChecksum = file.checksum ?? '';
+		}
 	}
 
 	async function fetchCode(proposal: any) {
@@ -93,12 +162,13 @@
 		try {
 			const res = await callAsync('fetch_proposal_code', { proposal_id: proposal.id });
 			if (res?.success) {
-				codeContent = res.data?.code ?? '';
-				codeChecksum = res.data?.checksum ?? '';
+				applyCodePreview(res.data ?? {});
 			} else {
+				codeFiles = [];
 				codeError = res?.error || 'Failed to fetch code';
 			}
 		} catch (e: any) {
+			codeFiles = [];
 			codeError = e?.message || String(e);
 		} finally {
 			codeLoading = false;
@@ -108,6 +178,7 @@
 	async function castVote(proposalId: string, vote: string) {
 		votingInProgress = proposalId + vote;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const voter = ctx.principal || 'anonymous';
 			const res = await callSync('cast_vote', { proposal_id: proposalId, vote, voter });
@@ -122,7 +193,14 @@
 				error = res?.error || 'Failed to cast vote';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			votingInProgress = '';
 		}
@@ -191,6 +269,7 @@
 		}
 		codexEntries[i].calculating = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callAsync('fetch_proposal_code', { code_url: entry.url.trim() });
 			if (res?.success) {
@@ -199,7 +278,14 @@
 				error = res?.error || 'Failed to fetch checksum';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			codexEntries[i].calculating = false;
 		}
@@ -227,6 +313,7 @@
 		}
 		submitting = true;
 		error = '';
+		accessDeniedOp = '';
 		submitMsg = '';
 		try {
 			const args: Record<string, any> = {
@@ -260,7 +347,14 @@
 				error = res?.error || 'Failed to submit proposal';
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			submitting = false;
 		}
@@ -271,6 +365,7 @@
 		formDescription = '';
 		codexEntries = [{ url: '', name: '', checksum: '', calculating: false }];
 		error = '';
+		accessDeniedOp = '';
 		submitMsg = '';
 		view = 'list';
 	}
@@ -324,6 +419,14 @@
 	});
 </script>
 
+<style>
+	:global(.monaco-host),
+	:global(.monaco-diff-host) {
+		min-height: 20rem;
+		height: 100%;
+	}
+</style>
+
 <div class="w-full px-6 pt-8 max-w-none">
 	<!-- Header -->
 	<div class="mb-6">
@@ -332,7 +435,13 @@
 	</div>
 
 	<!-- Error / Success banners -->
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
 			<svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
 			<span>{error}</span>
@@ -489,64 +598,87 @@
 				</div>
 			{/if}
 
-		<!-- Multi-codex list -->
-		{#if parseCodices(selectedProposal).length > 1}
-		{@const codicesList = parseCodices(selectedProposal)}
-				<div class="rounded-lg border border-gray-200 bg-white p-5">
-					<h3 class="text-base font-semibold text-gray-900 mb-3">Codices ({codicesList.length})</h3>
-					<div class="space-y-2">
-						{#each codicesList as entry, i}
-							<div class="flex items-center gap-3 p-2 bg-gray-50 rounded text-sm">
-								<span class="font-mono font-medium text-gray-800 min-w-[140px]">{entry.name}</span>
-								<a href={entry.url} target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline truncate flex-1 text-xs">
-									{entry.url.split('/').pop()}
-								</a>
-								{#if entry.checksum}
-									<code class="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{entry.checksum.slice(0, 20)}…</code>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				</div>
-			{/if}
-
-			<!-- Code Content -->
-			<div class="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
-				<div class="bg-gray-100 px-4 py-2.5 border-b flex items-center justify-between">
+			<!-- Proposal Code -->
+			<div class="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden flex flex-col min-h-[28rem]">
+				<div class="bg-gray-100 px-4 py-2.5 border-b flex items-center justify-between flex-wrap gap-2">
 					<div class="flex items-center gap-2">
 						<svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
 						<h3 class="font-semibold text-sm text-gray-800">Proposal Code</h3>
+						{#if showCodeDiff}
+							<span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">Diff vs realm codex</span>
+						{/if}
 					</div>
 					<div class="flex items-center gap-2">
-						{#if selectedProposal.code_url}
+						{#if activeCodeFile?.code_url}
+							<a href={activeCodeFile.code_url} target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-600 hover:underline">View source</a>
+						{:else if selectedProposal.code_url}
 							<a href={selectedProposal.code_url} target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-600 hover:underline">View source</a>
 						{/if}
-						<span class="bg-gray-200 text-gray-600 px-2 py-0.5 rounded text-xs">
-							{selectedProposal.code_url ? selectedProposal.code_url.split('/').pop() : 'proposal.py'}
+						<span class="bg-gray-200 text-gray-600 px-2 py-0.5 rounded text-xs font-mono">
+							{activeCodeFile?.name ?? 'proposal.py'}
 						</span>
 					</div>
 				</div>
-				<div class="p-4">
+
+				{#if codeFiles.length > 1}
+					<div class="flex flex-wrap gap-1 px-4 py-2 border-b border-gray-200 bg-white">
+						{#each codeFiles as file, i}
+							<button
+								type="button"
+								onclick={() => selectCodeFile(i)}
+								class="text-xs px-3 py-1.5 rounded-md font-mono transition-colors {selectedFileIndex === i
+									? 'bg-indigo-600 text-white'
+									: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+							>
+								{file.name}
+								{#if file.is_amendment}
+									<span class="opacity-75"> (Δ)</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				<div class="flex-1 min-h-[22rem] p-4 flex flex-col">
 					{#if codeLoading}
-						<div class="flex items-center justify-center py-8">
+						<div class="flex items-center justify-center flex-1 py-8">
 							<svg class="animate-spin h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
 							<span class="ml-3 text-gray-500 text-sm">Loading code…</span>
 						</div>
 					{:else if codeError}
 						<div class="text-sm text-red-600 mb-3">{codeError}</div>
 						<button onclick={() => fetchCode(selectedProposal)} class="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Retry</button>
-					{:else if codeContent}
-						<div class="bg-gray-900 rounded-lg overflow-hidden">
-							<pre class="p-4 overflow-x-auto text-sm"><code class="text-gray-100">{codeContent}</code></pre>
+					{:else if activeCodeFile?.code}
+						<div class="flex-1 min-h-[20rem] rounded-lg overflow-hidden border border-gray-200 bg-white">
+							{#if showCodeDiff && MonacoDiffEditor}
+								<MonacoDiffEditor
+									original={activeCodeFile.original ?? ''}
+									modified={activeCodeFile.code}
+									language={MONACO_LANGUAGE}
+									theme={MONACO_THEME}
+									readOnly={true}
+								/>
+							{:else if MonacoEditor}
+								<MonacoEditor
+									code={activeCodeFile.code}
+									language={MONACO_LANGUAGE}
+									theme={MONACO_THEME}
+									readOnly={true}
+								/>
+							{:else}
+								<pre class="p-4 overflow-x-auto text-sm h-full"><code>{activeCodeFile.code}</code></pre>
+							{/if}
 						</div>
 						{#if codeChecksum}
 							<div class="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center text-xs text-gray-500">
 								<span>Checksum: <code class="bg-gray-100 px-1.5 py-0.5 rounded">{codeChecksum}</code></span>
-								<span>{codeContent.split('\n').length} lines</span>
+								<span>{activeCodeFile.code.split('\n').length} lines</span>
 							</div>
 						{/if}
 					{:else}
-						<div class="text-center py-8 text-gray-400 text-sm">No code available for this proposal.</div>
+						<div class="text-center py-8 text-gray-400 text-sm flex-1 flex items-center justify-center">
+							No code available for this proposal.
+						</div>
 					{/if}
 				</div>
 			</div>

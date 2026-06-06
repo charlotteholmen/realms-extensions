@@ -1,11 +1,9 @@
 <script lang="ts">
-	import InvitationManager from './InvitationManager.svelte';
-
 	let { ctx }: { ctx: any } = $props();
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
 
-	type TabId = 'browse' | 'export' | 'import' | 'invitations';
+	type TabId = 'browse' | 'export' | 'import';
 
 	interface EntityType {
 		value: string;
@@ -45,6 +43,7 @@
 	let activeTab: TabId = $state('browse');
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 	let toasts: Toast[] = $state([]);
 	let toastCounter = $state(0);
 
@@ -74,16 +73,6 @@
 	let importResult: any | null = $state(null);
 	let fileInput: HTMLInputElement | undefined = $state();
 	let dragOver = $state(false);
-
-	// Packages widget
-	let pkgInstalledCount: number | null = $state(null);
-	let pkgUpdateCount = $state(0);
-	let pkgWidgetLoading = $state(true);
-	let pkgWidgetError = $state('');
-
-	// Extensions / codex counts for sidebar
-	let extensionCount = $state(0);
-	let codexCount = $state(0);
 
 	function addToast(message: string, type: 'success' | 'error' = 'success') {
 		const id = ++toastCounter;
@@ -122,6 +111,7 @@
 	async function loadEntityTypes() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const res = await callExt('get_entity_types');
 			const classes = res?.data ?? (Array.isArray(res) ? res : []);
@@ -134,85 +124,19 @@
 				selectedType = entityTypes[0].value;
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 			entityTypes = [{ value: 'User', label: '👤 User', className: 'User' }];
 			if (!selectedType) selectedType = 'User';
 		} finally {
 			loading = false;
 		}
-	}
-
-	async function loadPackagesWidget() {
-		pkgWidgetLoading = true;
-		pkgWidgetError = '';
-		try {
-			const [extRaw, codexRaw, statusResp] = await Promise.all([
-				ctx.backend.list_runtime_extensions().catch(() => '{}'),
-				ctx.backend.list_codex_packages().catch(() => '{}'),
-				ctx.backend.status().catch(() => null),
-			]);
-
-			const extParsed = typeof extRaw === 'string' ? JSON.parse(extRaw) : extRaw;
-			const codexParsed = typeof codexRaw === 'string' ? JSON.parse(codexRaw) : codexRaw;
-			const installedExt = extParsed?.success ? (extParsed.runtime_extensions ?? []) : [];
-			const installedCodex = codexParsed?.success ? (codexParsed.codex_packages ?? []) : [];
-			const extManifests = extParsed?.success ? (extParsed.all_manifests ?? {}) : {};
-			const codexManifests = codexParsed?.success ? (codexParsed.manifests ?? {}) : {};
-			extensionCount = Object.keys(extManifests).length || installedExt.length;
-			codexCount = Array.isArray(installedCodex) ? installedCodex.length : Object.keys(codexManifests).length;
-			pkgInstalledCount = extensionCount + codexCount;
-
-			const registries = (statusResp?.success && statusResp?.data?.status?.registries) || [];
-			let updates = 0;
-			for (const reg of registries) {
-				try {
-					const base = registryBaseUrl(reg.canister_id);
-					if (!base) continue;
-					const [extResp, codexResp] = await Promise.all([
-						fetch(`${base}/api/extensions`, { headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : []).catch(() => []),
-						fetch(`${base}/api/codices`, { headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : []).catch(() => []),
-					]);
-					for (const e of extResp) {
-						if (!installedExt.includes(e.ext_id)) continue;
-						const installedVersion = extManifests?.[e.ext_id]?.version;
-						if (installedVersion && e.latest && versionGreater(e.latest, installedVersion)) updates++;
-					}
-					for (const c of codexResp) {
-						if (!installedCodex.includes(c.codex_id)) continue;
-						const installedVersion = codexManifests?.[c.codex_id]?.version;
-						if (installedVersion && c.latest && versionGreater(c.latest, installedVersion)) updates++;
-					}
-				} catch { /* unreachable registry */ }
-			}
-			pkgUpdateCount = updates;
-		} catch (e: any) {
-			pkgWidgetError = e?.message ?? String(e);
-		} finally {
-			pkgWidgetLoading = false;
-		}
-	}
-
-	function registryBaseUrl(canisterId: string): string | null {
-		if (typeof window === 'undefined') return null;
-		const host = window.location.host;
-		const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
-		if (isLocal) {
-			const port = host.split(':')[1] ?? '4943';
-			return `http://${canisterId}.localhost:${port}`;
-		}
-		return `https://${canisterId}.icp0.io`;
-	}
-
-	function versionGreater(a: string, b: string): boolean {
-		const pa = (a || '').split('-', 1)[0].split('.').map(n => parseInt(n, 10) || 0);
-		const pb = (b || '').split('-', 1)[0].split('.').map(n => parseInt(n, 10) || 0);
-		const len = Math.max(pa.length, pb.length);
-		for (let i = 0; i < len; i++) {
-			const x = pa[i] ?? 0;
-			const y = pb[i] ?? 0;
-			if (x !== y) return x > y;
-		}
-		return false;
 	}
 
 	// ── Browse ──
@@ -233,7 +157,14 @@
 				totalPages = 1;
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 			items = [];
 		} finally {
 			objLoading = false;
@@ -442,14 +373,12 @@
 
 	$effect(() => {
 		loadEntityTypes();
-		loadPackagesWidget();
 	});
 
 	const TABS: { id: TabId; label: string }[] = [
 		{ id: 'browse', label: 'Browse' },
 		{ id: 'export', label: 'Export' },
 		{ id: 'import', label: 'Import' },
-		{ id: 'invitations', label: 'Invitations' },
 	];
 
 	let exportJson = $derived(exportResult ? JSON.stringify(exportResult, null, 2) : '');
@@ -499,11 +428,11 @@
 	<!-- Header -->
 	<div class="flex justify-between items-center mb-6">
 		<div>
-			<h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-			<p class="text-gray-600 mt-1">Manage realm entities</p>
+			<h1 class="text-3xl font-bold text-gray-900">Data Explorer</h1>
+			<p class="text-gray-600 mt-1">Browse, export, and import entities</p>
 		</div>
 		<button
-			onclick={() => { loadEntityTypes(); loadPackagesWidget(); }}
+			onclick={() => loadEntityTypes()}
 			disabled={loading}
 			class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
 			title="Refresh"
@@ -514,63 +443,16 @@
 		</button>
 	</div>
 
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
 			{error}
 			<button onclick={() => error = ''} class="ml-2 text-red-600 hover:text-red-800 font-bold">&times;</button>
-		</div>
-	{/if}
-
-	<!-- Packages widget -->
-	<button
-		onclick={() => ctx.navigate?.('/extensions/package_manager')}
-		class="block w-full mb-4 bg-white shadow-sm rounded-lg p-4 border border-gray-200 hover:border-blue-400 hover:shadow transition-all text-left cursor-pointer"
-	>
-		<div class="flex items-center justify-between gap-4">
-			<div class="flex items-center gap-3">
-				<div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xl">📦</div>
-				<div>
-					<div class="text-sm font-medium text-gray-700">Packages</div>
-					{#if pkgWidgetLoading}
-						<div class="text-xs text-gray-400">Loading…</div>
-					{:else if pkgWidgetError}
-						<div class="text-xs text-red-500">{pkgWidgetError}</div>
-					{:else}
-						<div class="text-xs text-gray-500">
-							{pkgInstalledCount ?? 0} installed
-							{#if pkgUpdateCount > 0}
-								<span class="mx-1">·</span>
-								<span class="text-yellow-600 font-medium">{pkgUpdateCount} update{pkgUpdateCount === 1 ? '' : 's'} available</span>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			</div>
-			<span class="text-blue-600 text-sm font-medium">Manage →</span>
-		</div>
-	</button>
-
-	<!-- Overview stats -->
-	{#if !loading}
-		<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Entity Types</div>
-				<div class="text-2xl font-bold text-gray-900 mt-1">{entityTypes.length}</div>
-			</div>
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Extensions</div>
-				<div class="text-2xl font-bold text-gray-900 mt-1">{extensionCount}</div>
-			</div>
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Codexes</div>
-				<div class="text-2xl font-bold text-gray-900 mt-1">{codexCount}</div>
-			</div>
-			<div class="bg-white shadow-sm rounded-lg p-4 border border-gray-200">
-				<div class="text-xs text-gray-500 uppercase tracking-wide">Updates</div>
-				<div class={cn('text-2xl font-bold mt-1', pkgUpdateCount > 0 ? 'text-yellow-600' : 'text-gray-900')}>
-					{pkgWidgetLoading ? '…' : pkgUpdateCount}
-				</div>
-			</div>
 		</div>
 	{/if}
 
@@ -795,9 +677,6 @@
 		</div>
 
 	<!-- ==================== IMPORT TAB ==================== -->
-	{:else if activeTab === 'invitations'}
-		<InvitationManager {ctx} />
-
 	{:else if activeTab === 'import'}
 		<div class="bg-white shadow-sm rounded-lg p-6">
 			<h2 class="text-lg font-semibold text-gray-900 mb-4">Import Entities</h2>

@@ -4,13 +4,17 @@
   "description": "Task monitoring and management dashboard for administrators",
   "author": "Realms Team",
   "categories": [
-    "other"
+    "developer"
   ],
   "permissions": [
     "admin"
   ],
   "profiles": [
-    "admin"
+    "developer"
   ],
-  "show_in_sidebar": true
+  "show_in_sidebar": true,
+  "icon": "activity",
+  "sidebar_label": {
+    "en": "Task Monitor"
+  }
 }

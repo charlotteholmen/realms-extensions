@@ -52,6 +52,7 @@ def extension_sync_call(method_name: str, args: dict):
         "get_execution_logs": get_execution_logs,
         "toggle_schedule": toggle_schedule,
         "run_task_now": run_task_now,
+        "stop_task": stop_task,
         "delete_task": delete_task,
         "get_task_logs": get_task_logs,
     }
@@ -577,6 +578,43 @@ if hasattr(_entry_result, '__next__'):
 
     except Exception as e:
         logger.error(f"Error running task: {str(e)}")
+        logger.error(traceback.format_exc())
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def stop_task(args):
+    """
+    Stop a running task by setting status to 'cancelled' and disabling schedules.
+    The timer callback checks for 'cancelled' status and skips execution.
+    """
+    try:
+        if isinstance(args, str):
+            args = json.loads(args)
+        task_id = args.get("task_id")
+
+        if not task_id:
+            return json.dumps({"success": False, "error": "task_id is required"})
+
+        task = Task.load(task_id)
+        if not task:
+            return json.dumps({"success": False, "error": f"Task {task_id} not found"})
+
+        task_name = task.name
+        task.status = "cancelled"
+
+        if hasattr(task, "schedules"):
+            for schedule in task.schedules:
+                schedule.disabled = True
+
+        logger.info(f"Task {task_name} stopped (status=cancelled, schedules disabled)")
+
+        return json.dumps({
+            "success": True,
+            "message": f"Task {task_name} stopped",
+            "task_id": str(task._id),
+        })
+    except Exception as e:
+        logger.error(f"Error stopping task: {str(e)}")
         logger.error(traceback.format_exc())
         return json.dumps({"success": False, "error": str(e)})
 

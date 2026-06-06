@@ -1,0 +1,19 @@
+{
+  "name": "access_manager",
+  "version": "1.0.0",
+  "description": "Manage departments and membership",
+  "author": "Smart Social Contracts",
+  "permissions": [],
+  "profiles": [
+    "admin",
+    "user_manager"
+  ],
+  "categories": [
+    "administration"
+  ],
+  "icon": "building",
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Departments"
+  }
+}

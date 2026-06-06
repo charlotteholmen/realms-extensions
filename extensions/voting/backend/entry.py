@@ -101,6 +101,80 @@ def _check_threshold(proposal: Proposal) -> bool:
     return (yes / decisive) >= threshold
 
 
+def _get_governance_params(proposal: Proposal) -> dict:
+    """Get governance parameters (quorum, threshold, notice) from codex policy.
+
+    The codex hook `get_governance_params` receives the proposal_type and
+    requested_permissions from the proposal metadata and returns realm-specific
+    governance rigor requirements.
+
+    Returns: {"quorum": <percent>, "threshold": <0-1>, "notice_hours": <int>}
+    """
+    defaults = {"quorum": 20, "threshold": 0.6, "notice_hours": 48}
+
+    metadata = _load_metadata(proposal)
+    proposal_type = metadata.get("proposal_type", "code_execution")
+    requested_permissions = metadata.get("requested_permissions", [])
+
+    try:
+        from ggg import Codex
+
+        _HOOK_NAMES = ("role_management_hook", "governance_policy_hook")
+        for codex in Codex.instances():
+            if codex.name in _HOOK_NAMES and codex.code:
+                import ggg as _ggg
+                ns = {"ic": ic, "ggg": _ggg, "__builtins__": __builtins__}
+                exec(compile(codex.code, f"{codex.name}.py", "exec"), ns)
+                if "get_governance_params" in ns:
+                    result = ns["get_governance_params"](proposal_type, requested_permissions)
+                    if isinstance(result, dict):
+                        return {**defaults, **result}
+    except Exception as e:
+        logger.warning(f"Could not load governance params from codex: {e}")
+
+    return defaults
+
+
+def _check_threshold_and_quorum(proposal: Proposal) -> bool:
+    """Check if both threshold and quorum are met for auto-approval.
+
+    Unlike _check_threshold alone, this enforces that enough members
+    have participated before auto-approving a proposal.
+    """
+    if not _check_threshold(proposal):
+        return False
+
+    # Quorum enforcement: ensure enough members voted
+    governance = _get_governance_params(proposal)
+    quorum_percent = governance.get("quorum", 20)
+
+    active_members = len(list(User.instances()))
+    if active_members <= 0:
+        return False
+
+    total_voters = int(proposal.total_voters or 0)
+    actual_participation = (total_voters / active_members) * 100
+
+    if actual_participation < quorum_percent:
+        logger.info(
+            f"Proposal {proposal.proposal_id}: threshold met but quorum not met "
+            f"({actual_participation:.1f}% < {quorum_percent}% required, "
+            f"{total_voters}/{active_members} members voted)"
+        )
+        return False
+
+    return True
+
+
+def _get_min_threshold(proposal: Proposal) -> float:
+    """Get the minimum threshold floor from codex governance policy.
+
+    Prevents proposers from setting arbitrarily low thresholds.
+    """
+    governance = _get_governance_params(proposal)
+    return governance.get("threshold", 0.6)
+
+
 def _http_download(url: str, max_bytes: int = 2_000_000, cycles: int = 30_000_000_000):
     """Generator: download a URL via IC HTTP outcall. Yields a _ServiceCall.
 
@@ -320,7 +394,63 @@ def _do_execute_proposal(proposal_id: str):
         return
 
     metadata = _load_metadata(proposal)
+    code_inline = metadata.get("code_inline")
     codices_list = metadata.get("codices")
+
+    # --- Inline code path: no download needed ---
+    if code_inline:
+        proposal.status = "executing"
+        codex_name = metadata.get("codex_name", f"proposal_{proposal_id}_inline")
+        logger.info(f"Executing inline-code proposal {proposal_id}")
+
+        existing_codex = Codex[codex_name]
+        if existing_codex:
+            existing_codex.code = code_inline
+            existing_codex.description = f"Updated by proposal {proposal_id}: {proposal.title}"
+            action = "updated"
+        else:
+            existing_codex = Codex(
+                name=codex_name,
+                description=f"Created by proposal {proposal_id}: {proposal.title}",
+                code=code_inline,
+            )
+            action = "created"
+
+        try:
+            from main import reload_entity_method_overrides
+            reload_entity_method_overrides()
+        except Exception:
+            pass
+
+        try:
+            from ggg import Transfer, Treasury, User, Budget, Fund, LedgerEntry, Realm
+            extra_globals = {
+                "Transfer": Transfer, "Treasury": Treasury, "User": User,
+                "Budget": Budget, "Fund": Fund, "LedgerEntry": LedgerEntry,
+                "Realm": Realm, "Proposal": Proposal, "Vote": Vote,
+            }
+        except ImportError:
+            extra_globals = {}
+        exec_globals = {"ic": ic, "logger": logger, "Codex": Codex, "json": json, **extra_globals}
+
+        try:
+            exec(code_inline, exec_globals)
+            main_fn = exec_globals.get("main")
+            if main_fn and callable(main_fn):
+                result = main_fn()
+                if hasattr(result, '__next__'):
+                    yield from result
+            logger.info(f"Inline code executed successfully for proposal {proposal_id}")
+        except Exception as e:
+            proposal.status = "failed"
+            proposal.metadata = json.dumps({**metadata, "error": f"Code execution failed: {e}"})
+            logger.error(f"Execute: inline code exec failed for {proposal_id}: {e}\n{traceback.format_exc()}")
+            return
+
+        proposal.status = "executed"
+        proposal.metadata = json.dumps({**metadata, "codex_name": codex_name, "codex_action": action})
+        logger.info(f"Proposal {proposal_id} fully executed (inline code)")
+        return
 
     # --- Multi-codex path: delegate to TaskManager ---
     if codices_list and len(codices_list) > 1:
@@ -453,6 +583,48 @@ def _load_metadata(proposal: Proposal) -> dict:
         return {}
 
 
+def _get_codex_baseline(codex_name: str) -> str:
+    """Return current codex source from the realm canister, if installed."""
+    if not codex_name:
+        return ""
+    try:
+        codex = Codex[codex_name]
+        if codex and getattr(codex, "code", None):
+            return codex.code or ""
+    except Exception:
+        pass
+    return ""
+
+
+def _checksum_for(content: str) -> str:
+    actual_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return f"sha256:{actual_hash}"
+
+
+def _build_file_preview(
+    name: str,
+    proposed: str,
+    code_url: str = "",
+    stored_checksum: str = "",
+) -> Dict[str, Any]:
+    """Build a single-file preview payload with optional diff against realm codex."""
+    original = _get_codex_baseline(name)
+    is_amendment = bool(original)
+    actual_checksum = _checksum_for(proposed)
+    checksum_match = None
+    if stored_checksum:
+        checksum_match = stored_checksum == actual_checksum
+    return {
+        "name": name,
+        "code": proposed,
+        "original": original if is_amendment else None,
+        "is_amendment": is_amendment,
+        "code_url": code_url or None,
+        "checksum": actual_checksum,
+        "checksum_match": checksum_match,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Extension API functions
 # ---------------------------------------------------------------------------
@@ -501,8 +673,8 @@ def submit_proposal(args: str) -> str:
     """Submit a new proposal.
 
     Required: title, description
-    Required (one of): code_url (single codex) OR codices (multi-codex array)
-    Optional: code_checksum (sha256:<hex>), codex_name, required_threshold
+    Required (one of): code_url (single codex) OR codices (multi-codex array) OR code_inline (inline Python)
+    Optional: code_checksum (sha256:<hex>), codex_name, required_threshold, auto_start_voting (bool)
 
     Multi-codex format:
       codices: [{"name": "...", "url": "...", "checksum": "..."}, ...]
@@ -517,8 +689,9 @@ def submit_proposal(args: str) -> str:
         # Validate that we have at least one codex source
         codices = args_dict.get("codices", [])
         code_url = args_dict.get("code_url", "")
-        if not codices and not code_url:
-            return json.dumps({"success": False, "error": "code_url or codices array is required"})
+        code_inline = args_dict.get("code_inline", "")
+        if not codices and not code_url and not code_inline:
+            return json.dumps({"success": False, "error": "code_url, codices array, or code_inline is required"})
 
         # Validate codices entries
         if codices:
@@ -541,14 +714,21 @@ def submit_proposal(args: str) -> str:
 
         # Build metadata
         metadata = {}
-        if codices:
+        if code_inline:
+            metadata["code_inline"] = code_inline
+            display_url = ""
+            codex_name = args_dict.get("codex_name", f"proposal_{proposal_id}_inline")
+            metadata["codex_name"] = codex_name
+        elif codices:
             metadata["codices"] = codices
-            # Use first URL as the primary code_url for display
             display_url = codices[0]["url"]
         else:
             display_url = code_url
             if args_dict.get("codex_name"):
                 metadata["codex_name"] = args_dict["codex_name"]
+
+        # Apply minimum threshold floor from governance policy
+        requested_threshold = args_dict.get("required_threshold", 0.6)
 
         proposal = Proposal(
             proposal_id=proposal_id,
@@ -563,12 +743,41 @@ def submit_proposal(args: str) -> str:
             votes_no=0.0,
             votes_abstain=0.0,
             total_voters=0.0,
-            required_threshold=args_dict.get("required_threshold", 0.6),
+            required_threshold=requested_threshold,
             metadata=json.dumps(metadata),
         )
 
+        # Enforce minimum threshold floor (codex-defined)
+        min_threshold = _get_min_threshold(proposal)
+        if proposal.required_threshold < min_threshold:
+            proposal.required_threshold = min_threshold
+            logger.info(
+                f"Proposal {proposal_id}: threshold raised from {requested_threshold} "
+                f"to minimum {min_threshold} (governance policy)"
+            )
+
         codex_count = len(codices) if codices else 1
-        logger.info(f"Proposal {proposal_id} submitted by {proposer_id} ({codex_count} codex(es))")
+        logger.info(f"Proposal {proposal_id} submitted by {proposer_id} ({codex_count} codex(es), inline={'yes' if code_inline else 'no'})")
+
+        # Auto-start voting if requested
+        if args_dict.get("auto_start_voting"):
+            voting_window = 604_800
+            try:
+                from ggg import Realm
+                realm = Realm[1]
+                if realm and realm.calendar:
+                    cal_window = realm.calendar.voting_window
+                    if cal_window:
+                        voting_window = int(cal_window)
+            except Exception:
+                pass
+            now_ns = ic.time()
+            now_s = now_ns // 1_000_000_000
+            deadline_s = now_s + voting_window
+            proposal.status = "voting"
+            proposal.voting_deadline = str(deadline_s)
+            logger.info(f"Auto-started voting for {proposal_id}, deadline in {voting_window}s")
+
         return json.dumps({"success": True, "data": _proposal_to_dict(proposal)})
     except Exception as e:
         logger.error(f"submit_proposal error: {e}\n{traceback.format_exc()}")
@@ -683,12 +892,12 @@ def cast_vote(args: str) -> str:
         elif vote_choice == "abstain":
             proposal.votes_abstain = (proposal.votes_abstain or 0.0) + 1.0
 
-        # Check threshold for auto-approval
+        # Check threshold AND quorum for auto-approval
         auto_approved = False
-        if _check_threshold(proposal):
+        if _check_threshold_and_quorum(proposal):
             proposal.status = "accepted"
             auto_approved = True
-            logger.info(f"Proposal {proposal_id} auto-approved (threshold met)")
+            logger.info(f"Proposal {proposal_id} auto-approved (threshold and quorum met)")
             _schedule_execution(proposal_id)
 
         return json.dumps({
@@ -771,46 +980,118 @@ def execute_proposal(args: str) -> Async[str]:
 
 
 def fetch_proposal_code(args: str) -> Async[str]:
-    """Fetch and preview the code from a proposal's code_url (read-only).
+    """Fetch and preview proposal code (read-only).
 
-    Accepts either proposal_id (looks up the URL from the proposal) or
-    code_url directly (useful for checksum calculation before submission).
+    Accepts proposal_id (loads from proposal) or code_url (checksum helper).
+
+    For amendments, ``original`` is loaded from the matching ``Codex`` entity on
+    the realm canister. Multi-codex proposals return a ``files`` array.
     """
     try:
         args_dict = _parse_args(args)
         proposal_id = args_dict.get("proposal_id")
         code_url = args_dict.get("code_url")
-        stored_checksum = None
 
         if proposal_id:
             proposal = _find_proposal(proposal_id)
             if not proposal:
                 return json.dumps({"success": False, "error": "Proposal not found"})
+
+            metadata = _load_metadata(proposal)
+            code_inline = metadata.get("code_inline")
+            codices_list = metadata.get("codices") or []
+
+            if codices_list:
+                files = []
+                for entry in codices_list:
+                    name = entry.get("name", "")
+                    if not name:
+                        return json.dumps({"success": False, "error": "codices entry missing name"})
+                    entry_inline = entry.get("code_inline", "")
+                    entry_url = entry.get("url", "")
+                    if entry_inline:
+                        proposed = entry_inline
+                    elif entry_url:
+                        logger.info(f"Fetching codex preview for {name}: {entry_url}")
+                        proposed = yield from _http_download(entry_url)
+                    else:
+                        return json.dumps({
+                            "success": False,
+                            "error": f"codices entry '{name}' has no url or code_inline",
+                        })
+                    files.append(_build_file_preview(
+                        name,
+                        proposed,
+                        code_url=entry_url,
+                        stored_checksum=entry.get("checksum", ""),
+                    ))
+                primary = files[0]
+                return json.dumps({
+                    "success": True,
+                    "data": {
+                        "mode": "multi",
+                        "files": files,
+                        "code": primary["code"],
+                        "original": primary.get("original"),
+                        "is_amendment": primary["is_amendment"],
+                        "codex_name": primary["name"],
+                        "checksum": primary["checksum"],
+                    },
+                })
+
+            if code_inline:
+                codex_name = metadata.get("codex_name", "")
+                file_preview = _build_file_preview(codex_name or "inline", code_inline)
+                return json.dumps({
+                    "success": True,
+                    "data": {
+                        "mode": "single",
+                        "inline": True,
+                        "codex_name": codex_name or None,
+                        **file_preview,
+                        "code_url": None,
+                        "checksum_match": True,
+                    },
+                })
+
             if not proposal.code_url:
-                return json.dumps({"success": False, "error": "Proposal has no code URL"})
+                return json.dumps({"success": False, "error": "Proposal has no code attached"})
+
             code_url = proposal.code_url
-            stored_checksum = proposal.code_checksum
-        elif not code_url:
+            logger.info(f"Fetching code preview from: {code_url}")
+            code_content = yield from _http_download(code_url)
+            codex_name = metadata.get("codex_name", "")
+            file_preview = _build_file_preview(
+                codex_name or "proposal",
+                code_content,
+                code_url=code_url,
+                stored_checksum=proposal.code_checksum or "",
+            )
+            return json.dumps({
+                "success": True,
+                "data": {
+                    "mode": "single",
+                    "codex_name": codex_name or None,
+                    **file_preview,
+                },
+            })
+
+        if not code_url:
             return json.dumps({"success": False, "error": "proposal_id or code_url is required"})
 
         logger.info(f"Fetching code preview from: {code_url}")
         code_content = yield from _http_download(code_url)
-
-        actual_hash = hashlib.sha256(code_content.encode("utf-8")).hexdigest()
-        actual_checksum = f"sha256:{actual_hash}"
-
-        checksum_match = None
-        if stored_checksum:
-            checksum_match = (stored_checksum == actual_checksum)
-
+        actual_checksum = _checksum_for(code_content)
         return json.dumps({
             "success": True,
             "data": {
+                "mode": "single",
                 "code": code_content,
                 "code_url": code_url,
                 "checksum": actual_checksum,
-                "checksum_match": checksum_match,
-            }
+                "is_amendment": False,
+                "original": None,
+            },
         })
     except Exception as e:
         logger.error(f"fetch_proposal_code error: {e}\n{traceback.format_exc()}")

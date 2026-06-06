@@ -1,0 +1,7 @@
+{
+  "network": "test",
+  "host": "https://icp0.io",
+  "canisterUrl": "https://pqwsi-vyaaa-aaaau-agrbq-cai.icp0.io",
+  "backendCanisterId": "rnghe-haaaa-aaaak-qyxyq-cai",
+  "fileRegistryCanisterId": "uq2mu-kaaaa-aaaah-avqcq-cai"
+}

@@ -13,5 +13,8 @@
   ],
   "icon": "home",
   "doc_url": null,
-  "show_in_sidebar": false
+  "show_in_sidebar": false,
+  "sidebar_label": {
+    "en": "Welcome"
+  }
 }

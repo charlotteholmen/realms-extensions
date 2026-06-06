@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { exportCsv } from '../../../_shared/frontend/csv-export';
+
 	let { ctx }: { ctx: Record<string, any> } = $props();
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
 
-	let tab = $state<'accounting' | 'visualizations'>('accounting');
+	let tab = $state<'accounting' | 'records' | 'visualizations'>('accounting');
 
 	let budgets: any[] = $state([]);
 	let ledgerEntries: any[] = $state([]);
@@ -11,6 +13,7 @@
 	let fiscalPeriods: any[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	const categoryColors: Record<string, string> = {
 		cash: '#1E40AF', receivable: '#1D4ED8', equipment: '#2563EB', land: '#3B82F6',
@@ -20,18 +23,39 @@
 		operating: '#93C5FD', general: '#1E40AF', special_revenue: '#2563EB', capital_projects: '#60A5FA',
 	};
 
+	const BATCH_SIZE = 50;
+
 	async function loadPaginated(entity: string, limit = 100, order = 'desc') {
-		const raw = await ctx.backend.get_objects_paginated(entity, 0, limit, order);
-		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-		if (parsed?.success && parsed?.data?.objectsListPaginated) {
-			return parsed.data.objectsListPaginated.objects.map((s: string) => JSON.parse(s));
+		const allItems: any[] = [];
+		let page = 0;
+		let totalPages = 1;
+
+		while (page < totalPages && allItems.length < limit) {
+			const batchLimit = Math.min(BATCH_SIZE, limit - allItems.length);
+			const raw = await ctx.backend.get_objects_paginated(entity, page, batchLimit, order);
+			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+			if (parsed?.success && parsed?.data?.objectsListPaginated) {
+				const batch = parsed.data.objectsListPaginated.objects.map((s: string) => JSON.parse(s));
+				allItems.push(...batch);
+				const pag = parsed.data.objectsListPaginated.pagination;
+				totalPages = Number(pag?.total_pages ?? 1);
+				if (batch.length < batchLimit) break;
+			} else {
+				const fallback = parsed?.data ?? (Array.isArray(parsed) ? parsed : []);
+				allItems.push(...fallback);
+				break;
+			}
+			page++;
 		}
-		return parsed?.data ?? (Array.isArray(parsed) ? parsed : []);
+
+		return allItems;
 	}
 
 	async function loadData() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const [b, l, f, fp] = await Promise.all([
 				loadPaginated('Budget', 100, 'asc'),
@@ -44,7 +68,14 @@
 			funds = f;
 			fiscalPeriods = fp;
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -179,6 +210,88 @@
 		if (max <= 0) return '0%';
 		return `${Math.min(100, (value / max) * 100).toFixed(1)}%`;
 	}
+
+	// --- Records tab ---
+	const ENTITY_TYPES = ['LedgerEntry', 'Budget', 'Fund', 'FiscalPeriod'] as const;
+	const PAGE_SIZE = 50;
+
+	let recEntity = $state<string>('LedgerEntry');
+	let recPage = $state(0);
+	let recItems: any[] = $state([]);
+	let recTotalPages = $state(0);
+	let recTotalItems = $state(0);
+	let recLoading = $state(false);
+	let recError = $state('');
+	let recColumns: string[] = $state([]);
+
+	let csvBusy = $state(false);
+	let csvProgress = $state('');
+
+	async function loadRecordsPage() {
+		recLoading = true;
+		recError = '';
+		try {
+			const raw = await ctx.backend.get_objects_paginated(recEntity, recPage, PAGE_SIZE, 'desc');
+			const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+			if (parsed?.success && parsed?.data?.objectsListPaginated) {
+				const objs = parsed.data.objectsListPaginated.objects.map((s: string) => JSON.parse(s));
+				const pag = parsed.data.objectsListPaginated.pagination;
+				recItems = objs;
+				recTotalItems = Number(pag?.total_items_count ?? 0);
+				recTotalPages = Number(pag?.total_pages ?? 1);
+				if (objs.length > 0) {
+					recColumns = Object.keys(objs[0]).filter(k => !k.startsWith('_'));
+				}
+			} else {
+				recItems = [];
+				recTotalItems = 0;
+				recTotalPages = 0;
+				recColumns = [];
+			}
+		} catch (e: any) {
+			recError = e?.message || String(e);
+		} finally {
+			recLoading = false;
+		}
+	}
+
+	function recGoTo(page: number) {
+		recPage = page;
+		loadRecordsPage();
+	}
+
+	function recChangeEntity(entity: string) {
+		recEntity = entity;
+		recPage = 0;
+		loadRecordsPage();
+	}
+
+	async function downloadCsv() {
+		csvBusy = true;
+		csvProgress = 'Starting...';
+		try {
+			const count = await exportCsv({
+				backend: ctx.backend,
+				entity: recEntity,
+				pageSize: PAGE_SIZE,
+				order: 'desc',
+				onProgress: (msg) => { csvProgress = msg; },
+			});
+			if (count === 0) csvProgress = 'No data to export.';
+		} catch (e: any) {
+			csvProgress = 'Error: ' + (e?.message || String(e));
+		} finally {
+			csvBusy = false;
+		}
+	}
+
+	let recTabInitialized = false;
+	$effect(() => {
+		if (tab === 'records' && !recTabInitialized) {
+			recTabInitialized = true;
+			loadRecordsPage();
+		}
+	});
 </script>
 
 <div class="w-full max-w-5xl mx-auto px-4 py-6 font-sans">
@@ -204,6 +317,15 @@
 				)}
 			>📈 Visualizations</button>
 			<button
+				onclick={() => tab = 'records'}
+				class={cn(
+					'py-3 px-1 border-b-2 font-medium text-sm transition-colors',
+					tab === 'records'
+						? 'border-blue-500 text-blue-600 dark:text-blue-400'
+						: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400'
+				)}
+			>📋 Records</button>
+			<button
 				onclick={loadData}
 				disabled={loading}
 				class="ml-auto py-3 px-3 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 disabled:opacity-50"
@@ -211,7 +333,13 @@
 		</nav>
 	</div>
 
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-300 mb-6">{error}</div>
 	{/if}
 
@@ -475,7 +603,104 @@
 			</div>
 		{/if}
 
-	{:else}
+	{:else if tab === 'records'}
+		<!-- ===== RECORDS TAB ===== -->
+		<div class="mb-4 flex flex-wrap items-center gap-4">
+			<div class="flex items-center gap-2">
+				<label for="entity-select" class="text-sm font-medium text-gray-700 dark:text-gray-300">Entity</label>
+				<select
+					id="entity-select"
+					onchange={(e) => recChangeEntity((e.target as HTMLSelectElement).value)}
+					class="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+				>
+					{#each ENTITY_TYPES as et}
+						<option value={et} selected={et === recEntity}>{et}</option>
+					{/each}
+				</select>
+			</div>
+			<button
+				onclick={downloadCsv}
+				disabled={csvBusy}
+				class="px-4 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+			>{csvBusy ? csvProgress : 'Download CSV'}</button>
+			{#if csvProgress && !csvBusy}
+				<span class="text-sm text-gray-500 dark:text-gray-400">{csvProgress}</span>
+			{/if}
+			<span class="ml-auto text-sm text-gray-500 dark:text-gray-400">{recTotalItems} total records</span>
+		</div>
+
+		{#if recError}
+			<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-300 mb-4">{recError}</div>
+		{/if}
+
+		{#if recLoading}
+			<div class="flex flex-col items-center justify-center py-12">
+				<div class="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600"></div>
+				<span class="mt-3 text-gray-500 dark:text-gray-400 text-sm">Loading page {recPage + 1}...</span>
+			</div>
+		{:else if recItems.length === 0}
+			<div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center">
+				<p class="text-gray-700 dark:text-gray-300 font-medium">No {recEntity} records found.</p>
+			</div>
+		{:else}
+			<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-4">
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-750">
+								{#each recColumns as col}
+									<th class="text-left py-2.5 px-3 font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">{col}</th>
+								{/each}
+							</tr>
+						</thead>
+						<tbody>
+							{#each recItems as row, i}
+								<tr class={cn('border-b border-gray-100 dark:border-gray-700', i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-750')}>
+									{#each recColumns as col}
+										<td class="py-2 px-3 text-gray-700 dark:text-gray-300 whitespace-nowrap max-w-xs truncate" title={typeof row[col] === 'object' ? JSON.stringify(row[col]) : String(row[col] ?? '')}>
+											{#if typeof row[col] === 'object' && row[col] !== null}
+												<span class="text-xs text-gray-500 dark:text-gray-400">{JSON.stringify(row[col])}</span>
+											{:else if typeof row[col] === 'number'}
+												{fmt(row[col])}
+											{:else}
+												{row[col] ?? '—'}
+											{/if}
+										</td>
+									{/each}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<!-- Pagination controls -->
+			<div class="flex items-center justify-center gap-2">
+				<button
+					onclick={() => recGoTo(0)}
+					disabled={recPage === 0}
+					class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+				>First</button>
+				<button
+					onclick={() => recGoTo(recPage - 1)}
+					disabled={recPage === 0}
+					class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+				>Prev</button>
+				<span class="text-sm text-gray-600 dark:text-gray-400 px-2">Page {recPage + 1} of {recTotalPages}</span>
+				<button
+					onclick={() => recGoTo(recPage + 1)}
+					disabled={recPage >= recTotalPages - 1}
+					class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+				>Next</button>
+				<button
+					onclick={() => recGoTo(recTotalPages - 1)}
+					disabled={recPage >= recTotalPages - 1}
+					class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+				>Last</button>
+			</div>
+		{/if}
+
+	{:else if tab === 'visualizations'}
 		<!-- ===== VISUALIZATIONS TAB ===== -->
 
 		{#if ledgerEntries.length === 0 && budgets.length === 0}

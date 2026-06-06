@@ -7,6 +7,7 @@
 	let entityData: Record<string, any> = $state({});
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	let selectedEntity = $state('');
 	let selectedRecord: any = $state(null);
@@ -38,6 +39,7 @@
 	async function loadEntitySchema() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
 			const response = await callExt('get_entity_schema');
 			const schema = response?.entities ?? response?.data?.entities ?? response?.data ?? response;
@@ -64,7 +66,14 @@
 				entities = newEntities;
 			}
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
@@ -181,7 +190,13 @@
 		<p class="text-gray-600 text-sm mt-1">Entity-Relationship diagram and data browser</p>
 	</div>
 
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="bg-red-50 border border-red-300 text-red-800 px-4 py-3 rounded-lg mb-4 text-sm">
 			{error}
 			<button class="ml-3 underline text-sm" onclick={loadEntitySchema}>Retry</button>

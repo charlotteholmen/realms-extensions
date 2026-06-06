@@ -12,7 +12,10 @@ import time
 from .constants import (
     CASE_TITLES,
     CITY_COORDINATES,
+    CODEX_RAW_BASE,
     COURT_NAMES,
+    DEMO_CODEX_NAMES,
+    DEPARTMENT_DEFINITIONS,
     EXPENSE_BUDGETS,
     FIRST_NAMES,
     FISCAL_PERIOD_DEFINITIONS,
@@ -21,6 +24,7 @@ from .constants import (
     LAND_TYPES,
     LAST_NAMES,
     LEDGER_TEMPLATES,
+    MESSAGE_TEMPLATES,
     ORG_NAMES,
     PROPOSAL_TITLES,
     REVENUE_BUDGETS,
@@ -106,8 +110,30 @@ def generate_org_batch(state_data, count):
     return created
 
 
+def _demo_inline_new_codex(idx: int) -> str:
+    """Small inline Python for brand-new codex demo proposals."""
+    return (
+        f'"""Demo inline codex #{idx + 1}"""\n\n'
+        "def main():\n"
+        f'    return {{"demo": True, "proposal_index": {idx}}}\n'
+    )
+
+
+def _demo_inline_amendment(codex_name: str, idx: int) -> str:
+    """Proposed codex body for amendment demos (baseline comes from Codex on canister)."""
+    return (
+        f'"""Amended {codex_name} (demo proposal #{idx + 1})"""\n\n'
+        "# Demo amendment: extends realm codex with a tagged change.\n"
+        f"DEMO_AMENDMENT_TAG = 'demo_prop_{idx:04d}'\n\n"
+        "def main():\n"
+        f'    return {{"codex": "{codex_name}", "amendment": DEMO_AMENDMENT_TAG}}\n'
+    )
+
+
 def generate_proposal_batch(state_data, count):
-    """Generate a batch of proposals."""
+    """Generate proposals covering inline, URL, and codex-amendment patterns."""
+    import json
+
     from ggg import Proposal, User
 
     base_idx = state_data.get("total_proposals_created", 0)
@@ -122,12 +148,69 @@ def generate_proposal_batch(state_data, count):
         proposer = None
         if total_users > 0:
             proposer = User[f"demo_user_{rng.randint(0, total_users - 1):04d}"]
+
+        kind = idx % 4
+        metadata = {}
+        code_url = ""
+        code_checksum = ""
+
+        if kind == 0:
+            codex_name = f"demo_inline_{idx:04d}"
+            metadata = {
+                "proposal_type": "code_execution",
+                "codex_name": codex_name,
+                "code_inline": _demo_inline_new_codex(idx),
+            }
+            description = f"Auto-generated demo (inline new codex): {title}"
+        elif kind == 1:
+            codex_name = rng.choice(DEMO_CODEX_NAMES)
+            code_url = f"{CODEX_RAW_BASE}{codex_name}.py"
+            metadata = {
+                "proposal_type": "code_execution",
+                "codex_name": codex_name,
+            }
+            description = f"Auto-generated demo (remote URL codex): {title}"
+        elif kind == 2:
+            codex_name = rng.choice(DEMO_CODEX_NAMES)
+            metadata = {
+                "proposal_type": "codex_amendment",
+                "codex_name": codex_name,
+                "code_inline": _demo_inline_amendment(codex_name, idx),
+            }
+            description = f"Auto-generated demo (amend codex '{codex_name}'): {title}"
+        else:
+            names = list(DEMO_CODEX_NAMES)
+            if len(names) >= 2:
+                codex_entries = [
+                    {"name": names[0], "url": f"{CODEX_RAW_BASE}{names[0]}.py", "checksum": ""},
+                    {"name": names[1], "url": f"{CODEX_RAW_BASE}{names[1]}.py", "checksum": ""},
+                ]
+            else:
+                codex_entries = [
+                    {
+                        "name": names[0],
+                        "url": f"{CODEX_RAW_BASE}{names[0]}.py",
+                        "checksum": "",
+                    },
+                ]
+            code_url = codex_entries[0]["url"]
+            metadata = {
+                "proposal_type": "codex_amendment",
+                "codices": codex_entries,
+            }
+            description = (
+                f"Auto-generated demo (multi-codex, {len(codex_entries)} files): {title}"
+            )
+
         p = Proposal(
             proposal_id=f"demo_prop_{idx:04d}",
             title=f"{title} (#{idx + 1})",
-            description=f"Auto-generated demo proposal for: {title}",
+            description=description,
+            code_url=code_url,
+            code_checksum=code_checksum,
             status=rng.choice(["draft", "open", "voting", "approved", "rejected"]),
             proposer=proposer,
+            metadata=json.dumps(metadata),
         )
         p.votes_yes = float(rng.randint(0, 20))
         p.votes_no = float(rng.randint(0, 10))
@@ -552,4 +635,93 @@ def generate_ledger_batch(state_data, count):
         created.append(tx_id)
 
     state_data["total_ledger_entries_created"] = base_idx + count
+    return created
+
+
+def generate_notification_batch(state_data, count):
+    """Generate notification messages for existing demo users."""
+    from ggg import Notification, User
+
+    total_users = state_data.get("total_users_created", 0)
+    if total_users < 1:
+        return []
+
+    base_idx = state_data.get("total_notifications_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 110000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        user_idx = rng.randint(0, total_users - 1)
+        user = User[f"demo_user_{user_idx:04d}"]
+        if not user:
+            continue
+
+        template = rng.choice(MESSAGE_TEMPLATES)
+        Notification(
+            topic=template["topic"],
+            title=template["title"],
+            message=template["message"],
+            sender="Realm System",
+            recipient=f"demo_user_{user_idx:04d}",
+            user=user,
+            read=rng.random() < 0.4,
+            icon="bell",
+            href="/messages",
+            color=rng.choice(["blue", "green", "amber", "red"]),
+        )
+        created.append(f"demo_notif_{idx:04d}")
+
+    state_data["total_notifications_created"] = base_idx + len(created)
+    return created
+
+
+def generate_department_batch(state_data, count):
+    """Generate departments and assign existing demo users to them."""
+    from ggg import Department, User
+
+    total_users = state_data.get("total_users_created", 0)
+    base_idx = state_data.get("total_departments_created", 0)
+    seed = state_data.get("seed", 42)
+    rng = random.Random(seed + base_idx + 120000)
+
+    created = []
+    for i in range(count):
+        idx = base_idx + i
+        if idx >= len(DEPARTMENT_DEFINITIONS):
+            break
+
+        defn = DEPARTMENT_DEFINITIONS[idx]
+        existing = Department[defn["name"]]
+        if existing:
+            continue
+
+        dept = Department(
+            name=defn["name"],
+            description=defn["description"],
+        )
+
+        if total_users > 0:
+            head_idx = rng.randint(0, total_users - 1)
+            head = User[f"demo_user_{head_idx:04d}"]
+            if head:
+                try:
+                    dept.head = head
+                except Exception:
+                    pass
+
+            member_count = rng.randint(2, min(8, total_users))
+            member_indices = rng.sample(range(total_users), member_count)
+            for m_idx in member_indices:
+                member = User[f"demo_user_{m_idx:04d}"]
+                if member:
+                    try:
+                        dept.members.add(member)
+                    except Exception:
+                        pass
+
+        created.append(dept.name)
+
+    state_data["total_departments_created"] = base_idx + len(created)
     return created

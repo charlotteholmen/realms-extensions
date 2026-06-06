@@ -15,11 +15,13 @@ from .generators import (
     generate_budget_batch,
     generate_case_batch,
     generate_court_batch,
+    generate_department_batch,
     generate_dispute_batch,
     generate_fiscal_period_batch,
     generate_fund_batch,
     generate_land_batch,
     generate_ledger_batch,
+    generate_notification_batch,
     generate_org_batch,
     generate_proposal_batch,
     generate_transfer_batch,
@@ -68,6 +70,8 @@ def run_batch(args: str = "{}"):
         state_data.get("total_fiscal_periods_created", 0),
         state_data.get("total_budgets_created", 0),
         state_data.get("total_ledger_entries_created", 0),
+        state_data.get("total_notifications_created", 0),
+        state_data.get("total_departments_created", 0),
     ])
 
     if max_entities and total_created >= max_entities:
@@ -77,7 +81,7 @@ def run_batch(args: str = "{}"):
             schedule.disabled = True
         return json.dumps({"status": "paused", "reason": "max_entities_reached", "total": total_created})
 
-    batch_type = batch_number % 13
+    batch_type = batch_number % 15
     results = {}
 
     try:
@@ -107,6 +111,10 @@ def run_batch(args: str = "{}"):
             results["budgets"] = generate_budget_batch(state_data, max(2, batch_size))
         elif batch_type == 12:
             results["ledger_entries"] = generate_ledger_batch(state_data, batch_size * 2)
+        elif batch_type == 13:
+            results["messages"] = generate_notification_batch(state_data, batch_size)
+        elif batch_type == 14:
+            results["departments"] = generate_department_batch(state_data, max(2, batch_size))
     except Exception as e:
         logger.error(f"Demo simulator batch {batch_number} failed: {e}")
         logger.error(traceback.format_exc())
@@ -145,54 +153,44 @@ def extension_sync_call(method_name: str, args: dict):
 
 
 def initialize(args):
-    """Called by the canister on every start/upgrade.
+    """Called by the canister on every start/upgrade and after extension install.
 
     Creates the TaskSchedule if needed and auto-enables it when
-    TEST_MODE + TEST_MODE_DEMO_DATA are both True.  Also restarts
-    the TaskManager so that IC timers are registered for the schedule
-    (timers are only set during canister init or explicit restart).
+    TEST_MODE + TEST_MODE_DEMO_DATA are both True — but only for a
+    *newly created* schedule.  If the schedule already exists (e.g.
+    extension re-install or upgrade), its disabled state is preserved
+    so that a user who manually stopped the simulator doesn't have it
+    re-enabled behind their back.
+
+    Calls TaskManager().run() to (re-)register IC timers for all
+    scheduled tasks. This handles both fresh installs and upgrades
+    (IC timers are lost on upgrade; TaskManager resets and reschedules).
     """
+    from ggg import TaskSchedule
+    from core.task_manager import TaskManager
+
+    already_existed = TaskSchedule[SCHEDULE_NAME] is not None
     schedule = get_or_create_schedule()
 
-    if is_demo_mode_active():
+    if not already_existed and is_demo_mode_active():
         schedule.disabled = False
-        logger.info("Demo simulator auto-activated (TEST_MODE + TEST_MODE_DEMO_DATA = true)")
+        logger.info("Demo simulator auto-activated (new schedule + TEST_MODE + TEST_MODE_DEMO_DATA)")
+    elif already_existed:
+        logger.info(f"Demo simulator schedule already exists (disabled={schedule.disabled}), preserving state")
     else:
         logger.info("Demo simulator initialized (schedule disabled — demo mode flags not set)")
 
-    _restart_task_manager()
+    try:
+        TaskManager().run()
+        logger.info("TaskManager started — schedules registered")
+    except Exception as e:
+        logger.error(f"Failed to start TaskManager: {e}\n{traceback.format_exc()}")
 
     return json.dumps({
         "success": True,
-        "auto_activated": is_demo_mode_active(),
+        "auto_activated": not already_existed and is_demo_mode_active(),
         "running": not schedule.disabled,
     })
-
-
-def _restart_task_manager():
-    """Re-initialize the TaskManager so IC timers are set for our schedule."""
-    try:
-        from ggg import Call, Task, TaskSchedule, TaskStep
-        from core.task_manager import TaskManager
-
-        list(Task.instances())
-        list(Call.instances())
-        list(TaskStep.instances())
-        list(TaskSchedule.instances())
-
-        manager = TaskManager()
-        for t in Task.instances():
-            if t.status and t.status != "completed":
-                t.status = "pending"
-                t.step_to_execute = 0
-                for step in t.steps:
-                    step.status = "pending"
-                    step.timer_id = None
-            manager.add_task(t)
-        manager.run()
-        logger.info("TaskManager restarted — demo_simulator schedule registered")
-    except Exception as e:
-        logger.error(f"Failed to restart TaskManager: {e}\n{traceback.format_exc()}")
 
 
 def get_status(args):
@@ -228,13 +226,20 @@ def get_status(args):
             "fiscal_periods": state_data.get("total_fiscal_periods_created", 0),
             "budgets": state_data.get("total_budgets_created", 0),
             "ledger_entries": state_data.get("total_ledger_entries_created", 0),
+            "messages": state_data.get("total_notifications_created", 0),
+            "departments": state_data.get("total_departments_created", 0),
         },
         "demo_mode_active": is_demo_mode_active(),
     })
 
 
 def toggle(args):
-    """Enable or disable the simulator schedule."""
+    """Enable or disable the simulator schedule.
+
+    When enabling, restarts the TaskManager so that an IC timer is
+    registered for the schedule.  Without this, the schedule flag
+    says "enabled" but no timer actually fires ``run_batch()``.
+    """
     from ggg import TaskSchedule
 
     if isinstance(args, str):
@@ -247,6 +252,9 @@ def toggle(args):
 
     schedule = get_or_create_schedule()
     schedule.disabled = not enabled
+
+    if enabled:
+        _restart_task_manager()
 
     action = "started" if enabled else "stopped"
     logger.info(f"Demo simulator {action}")
@@ -327,6 +335,8 @@ def reset(args):
     state_data["total_fiscal_periods_created"] = 0
     state_data["total_budgets_created"] = 0
     state_data["total_ledger_entries_created"] = 0
+    state_data["total_notifications_created"] = 0
+    state_data["total_departments_created"] = 0
 
     if not keep_seed:
         state_data["seed"] = random_seed()

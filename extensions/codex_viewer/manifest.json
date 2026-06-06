@@ -3,9 +3,21 @@
   "version": "1.0.0",
   "description": "View and browse Codex automation scripts",
   "author": "Realms Team",
-  "categories": ["other"],
-  "permissions": ["admin"],
-  "profiles": ["admin"],
+  "categories": [
+    "governance"
+  ],
+  "permissions": [
+    "admin"
+  ],
+  "profiles": [
+    "member",
+    "admin",
+    "developer"
+  ],
   "path": "codex_viewer",
-  "show_in_sidebar": true
+  "show_in_sidebar": true,
+  "icon": "file-code",
+  "sidebar_label": {
+    "en": "Codices"
+  }
 }

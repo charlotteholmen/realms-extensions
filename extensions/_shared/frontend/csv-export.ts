@@ -1,0 +1,120 @@
+/**
+ * Reusable CSV export utility for realm extensions.
+ *
+ * Usage:
+ *   import { exportCsv } from '../../../_shared/frontend/csv-export';
+ *   await exportCsv({ backend: ctx.backend, entity: 'LedgerEntry' });
+ */
+
+export interface ExportCsvOptions {
+	backend: any;
+	entity: string;
+	pageSize?: number;
+	order?: 'asc' | 'desc';
+	filter?: (record: Record<string, any>) => boolean;
+	columns?: string[];
+	excludeColumns?: string[];
+	filename?: string;
+	onProgress?: (message: string) => void;
+}
+
+function csvEscape(val: any): string {
+	if (val == null) return '';
+	const s = typeof val === 'object' ? JSON.stringify(val) : String(val);
+	if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+		return '"' + s.replace(/"/g, '""') + '"';
+	}
+	return s;
+}
+
+export async function fetchAllRecords(
+	backend: any,
+	entity: string,
+	pageSize: number,
+	order: string,
+	onProgress?: (message: string) => void,
+): Promise<any[]> {
+	const allRows: any[] = [];
+	let page = 0;
+	let totalPages = 1;
+
+	while (page < totalPages) {
+		onProgress?.(`Fetching page ${page + 1}${totalPages > 1 ? ' of ' + totalPages : ''}...`);
+		const raw = await backend.get_objects_paginated(entity, page, pageSize, order);
+		const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+		if (parsed?.success && parsed?.data?.objectsListPaginated) {
+			const batch = parsed.data.objectsListPaginated.objects.map((s: string) => JSON.parse(s));
+			allRows.push(...batch);
+			totalPages = Number(parsed.data.objectsListPaginated.pagination?.total_pages ?? 1);
+			if (batch.length < pageSize) break;
+		} else {
+			break;
+		}
+		page++;
+	}
+
+	return allRows;
+}
+
+export function buildCsvBlob(
+	records: Record<string, any>[],
+	columns?: string[],
+	excludeColumns?: string[],
+): Blob {
+	if (records.length === 0) {
+		return new Blob([''], { type: 'text/csv;charset=utf-8;' });
+	}
+
+	const exclude = new Set(excludeColumns ?? []);
+	const cols = columns ?? Object.keys(records[0]).filter(k => !k.startsWith('_') && !exclude.has(k));
+	const header = cols.map(csvEscape).join(',');
+	const rows = records.map(r => cols.map(c => csvEscape(r[c])).join(','));
+	const content = header + '\n' + rows.join('\n');
+
+	return new Blob([content], { type: 'text/csv;charset=utf-8;' });
+}
+
+export function triggerDownload(blob: Blob, filename: string): void {
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = filename;
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	URL.revokeObjectURL(url);
+}
+
+export async function exportCsv(opts: ExportCsvOptions): Promise<number> {
+	const {
+		backend,
+		entity,
+		pageSize = 50,
+		order = 'desc',
+		filter,
+		columns,
+		excludeColumns,
+		filename,
+		onProgress,
+	} = opts;
+
+	let records = await fetchAllRecords(backend, entity, pageSize, order, onProgress);
+
+	if (filter) {
+		records = records.filter(filter);
+	}
+
+	if (records.length === 0) {
+		onProgress?.('No records to export.');
+		return 0;
+	}
+
+	onProgress?.(`Building CSV (${records.length} records)...`);
+	const blob = buildCsvBlob(records, columns, excludeColumns);
+	const name = filename ?? `${entity}_${new Date().toISOString().slice(0, 10)}.csv`;
+	triggerDownload(blob, name);
+	onProgress?.(`Exported ${records.length} records.`);
+
+	return records.length;
+}

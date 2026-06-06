@@ -1,0 +1,20 @@
+{
+  "name": "census",
+  "version": "1.0.0",
+  "description": "User census and invitation management for the realm",
+  "author": "Realms Team",
+  "categories": [
+    "administration"
+  ],
+  "sidebar_label": {
+    "en": "Census"
+  },
+  "permissions": [
+    "admin"
+  ],
+  "profiles": [
+    "admin"
+  ],
+  "show_in_sidebar": false,
+  "icon": "users"
+}

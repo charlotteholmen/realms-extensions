@@ -1,6 +1,6 @@
 {
   "name": "land_registry",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Property registration and land ownership management",
   "permissions": [],
   "entry_points": [
@@ -14,12 +14,16 @@
     "update_land_nft_token"
   ],
   "profiles": [
+    "member",
     "admin"
   ],
   "categories": [
     "public_services"
   ],
-  "icon": "map_pin",
+  "icon": "map-2",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/land_registry",
-  "show_in_sidebar": true
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Land Registry"
+  }
 }

@@ -6,7 +6,7 @@
 	let loading = $state(true);
 
 	let realmName = $derived(realmData?.realm_name || realmData?.name || '');
-	let realmDescription = $derived(realmData?.realm_description || realmData?.description || '');
+	let realmManifesto = $derived(realmData?.realm_manifesto || realmData?.manifesto || '');
 	let welcomeMessage = $derived(realmData?.realm_welcome_message || realmData?.welcome_message || '');
 
 	$effect(() => {
@@ -83,11 +83,11 @@
 						</p>
 					{/if}
 
-					{#if realmDescription}
-						<p class="text-base text-white/75 leading-relaxed">
-							{realmDescription}
-						</p>
-					{/if}
+				{#if realmManifesto}
+					<p class="text-base text-white/75 leading-relaxed">
+						{realmManifesto}
+					</p>
+				{/if}
 				</div>
 
 				<div class="flex flex-col items-center md:items-center gap-3">

@@ -4,20 +4,20 @@
   "description": "Install, update and uninstall extensions and codex packages from connected file registries",
   "author": "Realms Team",
   "categories": [
-    "other"
+    "settings"
   ],
   "permissions": [
     "admin"
   ],
   "profiles": [
-    "admin"
+    "developer"
   ],
-  "icon": "layers",
+  "icon": "package",
   "show_in_sidebar": true,
   "sidebar_label": {
     "en": "Package Manager",
     "es": "Gestor de Paquetes",
     "de": "Paketverwaltung",
-    "zh-CN": "\u5305\u7ba1\u7406\u5668"
+    "zh-CN": "包管理器"
   }
 }

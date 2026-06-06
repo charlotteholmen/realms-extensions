@@ -8,6 +8,7 @@
 	let snapshotsData = $state('');
 	let loading = $state<Record<string, boolean>>({});
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	let principal = $state('');
 	let isAuthenticated = $state(false);
@@ -25,10 +26,18 @@
 	async function runTest(key: string, fn: () => Promise<void>) {
 		loading = { ...loading, [key]: true };
 		error = '';
+		accessDeniedOp = '';
 		try {
 			await fn();
 		} catch (e: any) {
-			error = `${key}: ${e?.message || String(e)}`;
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = `${key}: ${e?.message ?? String(e)}`;
+			}
 		} finally {
 			loading = { ...loading, [key]: false };
 		}
@@ -73,7 +82,13 @@
 		{/if}
 	</div>
 
-	{#if error}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error}
 		<div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
 	{/if}
 

@@ -9,6 +9,7 @@
 	let userProfile = $state('member');
 	let loading = $state(true);
 	let error = $state('');
+	let accessDeniedOp = $state('');
 
 	let principal = $state('');
 	$effect(() => {
@@ -29,6 +30,77 @@
 	let createError = $state('');
 	let createSuccess = $state(false);
 
+	// Defendant autocomplete — realm directory (users + departments) is fetched
+	// once from the host's `directory_list` query and filtered client-side.
+	let directory: any[] = $state([]);
+	let directoryLoaded = $state(false);
+	let directoryLoading = $state(false);
+	let showDefendantSuggestions = $state(false);
+
+	let defendantSuggestions = $derived.by(() => {
+		const q = formDefendant.trim().toLowerCase();
+		if (!q || !showDefendantSuggestions) return [];
+		return directory
+			.filter(
+				(e) =>
+					(e.label || '').toLowerCase().includes(q) ||
+					(e.principal || '').toLowerCase().includes(q) ||
+					(e.kind || '').toLowerCase().includes(q),
+			)
+			.slice(0, 8);
+	});
+
+	let selectedDefendantEntry: any = $state(null);
+	// The principal actually submitted. When the user picks a suggestion we show
+	// its friendly label in the input but keep the real principal here.
+	let defendantPrincipal = $state('');
+
+	let defendantLabel = $derived.by(() => {
+		if (selectedDefendantEntry) {
+			const e = selectedDefendantEntry;
+			// A department is filed against as a whole entity, so don't show its
+			// head's principal (that would imply the case targets one person).
+			if (e.kind === 'department') return `${e.label} (department)`;
+			const p = e.principal;
+			return `${e.label} (${e.kind})${p && p !== e.label ? ` — ${p}` : ''}`;
+		}
+		const v = formDefendant.trim();
+		if (!v) return '';
+		const hit = directory.find((e) => e.principal === v);
+		return hit ? `${hit.label} (${hit.kind})` : '';
+	});
+
+	// A defendant is valid if a directory entry was picked (user OR department)
+	// or the user typed a raw principal directly.
+	let hasDefendant = $derived(!!selectedDefendantEntry || !!defendantPrincipal.trim());
+
+	async function loadDirectory() {
+		if (directoryLoaded || directoryLoading || !ctx.backend?.directory_list) return;
+		directoryLoading = true;
+		try {
+			const resp: any = await ctx.backend.directory_list();
+			if (resp?.success && resp?.data?.message) {
+				const parsed = JSON.parse(resp.data.message);
+				directory = Array.isArray(parsed?.entries) ? parsed.entries : [];
+			}
+			directoryLoaded = true;
+		} catch (e) {
+			// Non-fatal: the user can still paste a raw principal.
+			console.warn('[justice_litigation] directory load failed', e);
+		} finally {
+			directoryLoading = false;
+		}
+	}
+
+	function selectDefendant(entry: any) {
+		if (!entry) return;
+		// Show the human-friendly label in the box, submit the real principal.
+		formDefendant = entry.label || entry.principal || '';
+		defendantPrincipal = entry.principal || '';
+		selectedDefendantEntry = entry;
+		showDefendantSuggestions = false;
+	}
+
 	// Verdict modal
 	let showVerdict = $state(false);
 	let verdictCase: any = $state(null);
@@ -48,67 +120,120 @@
 		return await ctx.callSync(fn, args);
 	}
 
-	/** Normalize GGG Case records to the litigation row shape used by this UI. */
-	function normalizeCase(raw: Record<string, unknown>) {
-		return {
-			id: raw.id as string,
-			case_number: (raw.case_number as string) ?? '',
-			case_title: (raw.title as string) ?? '',
-			description: (raw.description as string) ?? '',
-			status: (raw.status as string) ?? 'pending',
-			requester_principal: (raw.plaintiff_id as string) ?? '',
-			defendant_principal: (raw.defendant_id as string) ?? '',
-			requested_at: (raw.filed_date as string) ?? '',
-		};
+	// Decrypt a litigation row's title/description in the browser. Private rows
+	// carry an opaque ciphertext + scope; only principals holding a key (the
+	// submitter and the justice department) can decrypt. Rows we cannot decrypt
+	// are flagged `locked` so the UI shows a "no access" indicator. Legacy
+	// (plaintext) rows pass through unchanged.
+	async function decryptRow(row: any) {
+		if (!row?.is_private) {
+			return { ...row, locked: false };
+		}
+		const scope = row.content_scope;
+		const ciphertext = row.content_ciphertext;
+		if (!scope || !ciphertext || !ctx.crypto?.decryptScope) {
+			return { ...row, locked: true };
+		}
+		try {
+			const decrypted = await ctx.crypto.decryptScope(scope, ciphertext);
+			if (decrypted && (decrypted.title || decrypted.description)) {
+				return {
+					...row,
+					case_title: decrypted.title ?? '',
+					description: decrypted.description ?? '',
+					locked: false,
+				};
+			}
+		} catch (e) {
+			console.warn('[justice_litigation] decrypt failed', e);
+		}
+		return { ...row, locked: true };
 	}
 
 	async function loadLitigations() {
 		loading = true;
 		error = '';
+		accessDeniedOp = '';
 		try {
-			const params =
-				userProfile === 'admin'
-					? {}
-					: { user_id: principal };
-			const res = await callExt('get_cases', params);
+			const res = await callExt('get_litigations', {
+				user_principal: principal,
+				user_profile: userProfile,
+			});
 			const data = res?.data ?? res;
-			const rawCases = data?.cases ?? [];
-			litigations = Array.isArray(rawCases) ? rawCases.map(normalizeCase) : [];
+			const rows = data?.litigations ?? (Array.isArray(data) ? data : []);
+			litigations = await Promise.all(rows.map(decryptRow));
 			totalCount = data?.total_count ?? litigations.length;
+			if (data?.user_profile) userProfile = data.user_profile;
 		} catch (e: any) {
-			error = e?.message || String(e);
+			const op = ctx.ui?.accessDeniedOperation?.(e);
+			if (op != null) {
+				accessDeniedOp = op;
+				error = '';
+			} else {
+				accessDeniedOp = '';
+				error = e?.message ?? String(e);
+			}
 		} finally {
 			loading = false;
 		}
 	}
 
 	async function createLitigation() {
-		if (!formTitle.trim() || !formDescription.trim() || !formDefendant.trim()) {
+		if (!formTitle.trim() || !formDescription.trim() || !hasDefendant) {
 			createError = 'All fields are required';
+			return;
+		}
+		if (!ctx.crypto?.encryptForRecipients || !ctx.crypto?.grantScope) {
+			createError = 'Secure sharing is unavailable in this host version.';
 			return;
 		}
 		creating = true;
 		createError = '';
 		createSuccess = false;
 		try {
-			const courtsRes = await callExt('get_courts', {});
-			const courts = courtsRes?.data?.courts ?? courtsRes?.courts ?? [];
-			const courtId = courts[0]?.id;
-			if (!courtId) {
-				createError = 'No court available. Create or seed a court first.';
-				return;
-			}
-			await callExt('file_case', {
-				court_id: courtId,
-				plaintiff_id: principal.trim(),
-				defendant_id: formDefendant.trim(),
+			// 1. Open the case (no plaintext leaves the browser): reserve an id,
+			//    its sharing scope, and the recipient principals (justice dept).
+			// Build the defendant payload. A department is recorded by name/id
+			// (the host Case.defendant only holds a User); a person by principal.
+			const e = selectedDefendantEntry;
+			const defendantParams =
+				e && e.kind === 'department'
+					? {
+							defendant_kind: 'department',
+							defendant_department: e.label || '',
+							defendant_department_id: e.id || '',
+						}
+					: {
+							defendant_kind: 'user',
+							defendant_principal: (e?.principal || defendantPrincipal).trim(),
+						};
+			const created: any = await callExt('create_litigation', defendantParams);
+			const cdata = created?.data ?? created;
+			const id = cdata?.id;
+			const scope = cdata?.scope;
+			if (!id || !scope) throw new Error(cdata?.error || created?.error || 'Failed to open litigation');
+
+			// 2. Recipients = submitter + justice department members.
+			const recipients = Array.from(
+				new Set([...(cdata?.recipients ?? []), principal].filter(Boolean)),
+			);
+
+			// 3. Encrypt title + description locally (fresh DEK, IBE-wrapped per
+			//    recipient) and attach the ciphertext, then grant the wrapped DEKs.
+			const { ciphertext, wrappedDeks } = await ctx.crypto.encryptForRecipients(recipients, {
 				title: formTitle.trim(),
 				description: formDescription.trim(),
 			});
+			const setRes: any = await callExt('set_litigation_content', { id, ciphertext });
+			if (setRes?.success === false) throw new Error(setRes?.data?.error || setRes?.error || 'Failed to store litigation');
+			await ctx.crypto.grantScope(scope, wrappedDeks);
+
 			createSuccess = true;
 			formTitle = '';
 			formDescription = '';
 			formDefendant = '';
+			defendantPrincipal = '';
+			selectedDefendantEntry = null;
 			await loadLitigations();
 			setTimeout(() => {
 				createSuccess = false;
@@ -123,7 +248,7 @@
 
 	function openVerdict(litigation: any) {
 		verdictCase = litigation;
-		verdictCode = `Approved in favour of plaintiffs for case ${litigation.case_title || litigation.case_number || litigation.id}`;
+		verdictCode = `transfer("${litigation.defendant_principal || ''}", "${litigation.requester_principal || ''}", 1000, "Compensation for ${litigation.case_title || ''}")`;
 		verdictError = '';
 		verdictSuccess = false;
 		showVerdict = true;
@@ -139,26 +264,17 @@
 
 	async function executeVerdict() {
 		if (!verdictCase || !verdictCode.trim()) {
-			verdictError = 'Decision text is required';
+			verdictError = 'Verdict code is required';
 			return;
 		}
 		executingVerdict = true;
 		verdictError = '';
 		verdictSuccess = false;
 		try {
-			const judgesRes = await callExt('get_judges', {});
-			const judges = judgesRes?.data?.judges ?? judgesRes?.judges ?? [];
-			const judgeId = judges[0]?.id;
-			if (!judgeId) {
-				verdictError = 'No judge available. Assign a judge before issuing a verdict.';
-				return;
-			}
-			await callExt('issue_verdict', {
-				case_id: verdictCase.id,
-				judge_id: judgeId,
-				decision: verdictCode.trim(),
-				reasoning: '',
-				penalties: [],
+			await callExt('execute_verdict', {
+				litigation_id: verdictCase.id,
+				verdict_code: verdictCode.trim(),
+				executor_principal: principal,
 			});
 			verdictSuccess = true;
 			await loadLitigations();
@@ -174,6 +290,8 @@
 		formTitle = '';
 		formDescription = '';
 		formDefendant = '';
+		defendantPrincipal = '';
+		selectedDefendantEntry = null;
 		createError = '';
 		createSuccess = false;
 	}
@@ -214,6 +332,10 @@
 			loading = false;
 			error = 'User not authenticated';
 		}
+	});
+
+	$effect(() => {
+		if (tab === 'create' && !directoryLoaded) void loadDirectory();
 	});
 </script>
 
@@ -270,7 +392,13 @@
 		</button>
 	</div>
 
-	{#if error && !loading}
+	{#if accessDeniedOp}
+		{#if ctx.ui?.AccessDenied}
+			<svelte:component this={ctx.ui.AccessDenied} operation={accessDeniedOp} />
+		{:else}
+			<p class="text-sm text-gray-500">You need additional permissions to view this page.</p>
+		{/if}
+	{:else if error && !loading}
 		<div
 			class="mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg text-sm"
 		>
@@ -422,15 +550,27 @@
 										{lit.case_number || lit.id}
 									</td>
 										<td class="px-4 py-3">
-											<div class="font-medium text-gray-900 dark:text-white">
-												{lit.case_title}
-											</div>
-											{#if lit.description}
-												<div
-													class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs"
-												>
-													{lit.description}
+											{#if lit.locked}
+												<div class="flex items-center gap-1.5 font-medium text-gray-400 dark:text-gray-500 italic">
+													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+													</svg>
+													Encrypted — no access
 												</div>
+											{:else}
+												<div class="flex items-center gap-1.5 font-medium text-gray-900 dark:text-white">
+													{#if lit.is_private}
+														<svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Private">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+														</svg>
+													{/if}
+													{lit.case_title || '(untitled)'}
+												</div>
+												{#if lit.description}
+													<div class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
+														{lit.description}
+													</div>
+												{/if}
 											{/if}
 										</td>
 										<td class="px-4 py-3">
@@ -447,7 +587,16 @@
 											<td
 												class="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400"
 											>
-												{truncatePrincipal(lit.defendant_principal)}
+												{#if lit.defendant_kind === 'department'}
+													<span
+														class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 mr-1"
+													>
+														dept
+													</span>
+													<span class="font-sans">{lit.defendant_label}</span>
+												{:else}
+													{truncatePrincipal(lit.defendant_label || lit.defendant_principal)}
+												{/if}
 											</td>
 										{/if}
 										<td class="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
@@ -484,7 +633,9 @@
 						Create New Litigation Case
 					</h3>
 					<p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
-						Submit a new litigation request. All fields are required.
+						Submit a new litigation request. All fields are required. The title and
+						description are encrypted in your browser and shared only with you and the
+						justice department — no one else (not even the defendant) can read them.
 					</p>
 
 					<div class="space-y-4">
@@ -493,16 +644,73 @@
 								for="jl-defendant"
 								class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
 							>
-								Defendant Principal ID
+								Defendant
 							</label>
-							<input
-								id="jl-defendant"
-								type="text"
-								bind:value={formDefendant}
-								placeholder="Enter defendant's principal ID"
-								disabled={creating}
-								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50"
-							/>
+							<div class="relative">
+								<input
+									id="jl-defendant"
+									type="text"
+									bind:value={formDefendant}
+									oninput={() => {
+									selectedDefendantEntry = null;
+									defendantPrincipal = formDefendant.trim();
+									showDefendantSuggestions = true;
+								}}
+									onfocus={() => (showDefendantSuggestions = true)}
+									onblur={() => setTimeout(() => (showDefendantSuggestions = false), 250)}
+									autocomplete="off"
+									placeholder="Search by name, department, or principal…"
+									disabled={creating}
+									class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50"
+								/>
+								{#if defendantSuggestions.length > 0}
+									<ul
+										class="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1"
+									>
+										{#each defendantSuggestions as s (s.kind + ':' + s.principal + ':' + s.label)}
+											<li>
+												<button
+													type="button"
+													onmousedown={() => selectDefendant(s)}
+													class="w-full text-left flex items-center gap-2 px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors"
+												>
+													<span
+														class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide {s.kind ===
+														'department'
+															? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+															: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'}"
+													>
+														{s.kind}
+													</span>
+													<span class="flex-1 min-w-0">
+														<span class="block font-medium text-gray-900 dark:text-white truncate">
+															{s.label}
+														</span>
+														{#if s.kind === 'department'}
+															<span class="block text-xs text-gray-500 dark:text-gray-400 truncate">
+																whole department
+															</span>
+														{:else if s.principal && s.principal !== s.label}
+															<span class="block font-mono text-xs text-gray-500 dark:text-gray-400 truncate">
+																{s.principal}
+															</span>
+														{/if}
+													</span>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</div>
+							{#if defendantLabel}
+								<p class="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+									Selected: {defendantLabel}
+								</p>
+							{:else}
+								<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+									Start typing to pick a user or department, or paste a principal ID.
+								</p>
+							{/if}
 						</div>
 
 						<div>
@@ -571,7 +779,7 @@
 							disabled={creating ||
 								!formTitle.trim() ||
 								!formDescription.trim() ||
-								!formDefendant.trim()}
+								!hasDefendant}
 						>
 							{#if creating}
 								<svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
@@ -710,18 +918,18 @@
 								for="jl-verdict-code"
 								class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
 							>
-								Decision
+								Verdict Code (Python/Codex)
 							</label>
 							<textarea
 								id="jl-verdict-code"
 								bind:value={verdictCode}
 								rows="4"
 								disabled={executingVerdict}
-								placeholder="Enter the formal decision summary…"
-								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50 resize-y"
+								placeholder="Enter Python code for the verdict execution…"
+								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50 resize-y"
 							></textarea>
 							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-								Uses the first available judge with <code class="font-mono">issue_verdict</code>.
+								Example: transfer("from_principal", "to_principal", amount, "memo")
 							</p>
 						</div>
 

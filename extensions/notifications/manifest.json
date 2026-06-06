@@ -1,22 +1,23 @@
 {
   "name": "notifications",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Real-time notifications and alerts system",
   "permissions": [],
   "entry_points": [
     "get_notifications",
     "mark_as_read",
     "delete_notification",
-    "create_notification"
+    "create_notification",
+    "list_departments"
   ],
   "profiles": [
     "member",
     "admin"
   ],
   "categories": [
-    "other"
+    "profile"
   ],
   "icon": "bell",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/notifications",
-  "show_in_sidebar": true
+  "show_in_sidebar": false
 }

@@ -141,8 +141,8 @@
 <div class="p-6 max-w-2xl mx-auto space-y-6">
 	<!-- Header -->
 	<div class="flex items-center gap-3">
-		<div class="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-			<svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<div class="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+			<svg class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
 			</svg>
 		</div>
@@ -159,17 +159,17 @@
 				<div class="flex items-center {i < steps.length - 1 ? 'flex-1' : ''}">
 					<div class="flex flex-col items-center">
 						<div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold
-							{currentStepIndex >= stepIdx ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}">
+							{currentStepIndex >= stepIdx ? 'bg-gray-800 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}">
 							{#if currentStepIndex > stepIdx}
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
 							{:else}
 								{i + 1}
 							{/if}
 						</div>
-						<span class="text-xs mt-1 {currentStepIndex >= stepIdx ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-400 dark:text-gray-500'}">{label}</span>
+						<span class="text-xs mt-1 {currentStepIndex >= stepIdx ? 'text-gray-700 dark:text-gray-300 font-medium' : 'text-gray-400 dark:text-gray-500'}">{label}</span>
 					</div>
 					{#if i < steps.length - 1}
-						<div class="flex-1 h-0.5 mx-3 mb-5 {currentStepIndex > stepIdx ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}"></div>
+						<div class="flex-1 h-0.5 mx-3 mb-5 {currentStepIndex > stepIdx ? 'bg-gray-800' : 'bg-gray-200 dark:bg-gray-700'}"></div>
 					{/if}
 				</div>
 			{/each}
@@ -178,9 +178,9 @@
 
 	<!-- IDLE STATE -->
 	{#if step === 'idle'}
-		<div class="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-950 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-8 text-center">
+		<div class="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 border-2 border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center">
 			<div class="w-16 h-16 mx-auto mb-4 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-md">
-				<svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<svg class="w-8 h-8 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
 				</svg>
 			</div>
@@ -190,7 +190,7 @@
 			</p>
 			<button
 				onclick={generateVerificationLink}
-				class="px-8 py-3 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+				class="px-8 py-3 text-base font-medium text-white bg-gray-800 hover:bg-gray-900 rounded-lg transition-colors"
 			>
 				Start Verification
 			</button>
@@ -199,7 +199,7 @@
 	<!-- GENERATING STATE -->
 	{:else if step === 'generating'}
 		<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-12 text-center">
-			<svg class="animate-spin h-8 w-8 text-blue-600 mx-auto mb-4" viewBox="0 0 24 24">
+			<svg class="animate-spin h-8 w-8 text-gray-700 dark:text-gray-300 mx-auto mb-4" viewBox="0 0 24 24">
 				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
 				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
 			</svg>
@@ -227,7 +227,7 @@
 							href={verificationLink}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+							class="inline-flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 hover:underline"
 						>
 							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
 							Open verification link
@@ -237,7 +237,7 @@
 							class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
 						>
 							{#if copied}
-								<svg class="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+								<svg class="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
 								Copied!
 							{:else}
 								<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
@@ -247,8 +247,8 @@
 					</div>
 				{/if}
 
-				<div class="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4 text-left">
-					<p class="text-sm text-blue-800 dark:text-blue-300">
+				<div class="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4 text-left">
+					<p class="text-sm text-gray-700 dark:text-gray-300">
 						Open your RariMe app and scan the QR code above. Once you have submitted the proof from your phone, press <strong>Check Status</strong> below.
 					</p>
 				</div>
@@ -288,7 +288,7 @@
 				<button
 					onclick={checkVerificationStatus}
 					disabled={checkingStatus}
-					class="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg flex items-center gap-2 transition-colors"
+					class="px-6 py-2.5 text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 disabled:opacity-50 rounded-lg flex items-center gap-2 transition-colors"
 				>
 					{#if checkingStatus}
 						<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
@@ -308,9 +308,9 @@
 
 	<!-- VERIFIED STATE -->
 	{:else if step === 'verified'}
-		<div class="bg-gradient-to-br from-green-50 to-emerald-100 dark:from-green-950 dark:to-emerald-950 border-2 border-green-200 dark:border-green-800 rounded-xl p-8 text-center">
+		<div class="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 border-2 border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center">
 			<div class="w-16 h-16 mx-auto mb-4 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-md">
-				<svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+				<svg class="w-8 h-8 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
 			</div>
 			<h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Passport Verified Successfully!</h2>
 
@@ -346,7 +346,7 @@
 			<p class="text-gray-600 dark:text-gray-400 mb-6">Passport verification was not successful. Please try again.</p>
 			<button
 				onclick={resetVerification}
-				class="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+				class="px-6 py-2.5 text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 rounded-lg transition-colors"
 			>
 				Try Again
 			</button>
@@ -362,7 +362,7 @@
 			<p class="text-gray-600 dark:text-gray-400 mb-6">{errorMessage}</p>
 			<button
 				onclick={resetVerification}
-				class="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+				class="px-6 py-2.5 text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 rounded-lg transition-colors"
 			>
 				Try Again
 			</button>

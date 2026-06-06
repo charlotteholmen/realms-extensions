@@ -9,9 +9,12 @@
     "admin"
   ],
   "categories": [
-    "public_services"
+    "governance"
   ],
-  "icon": "users_group",
+  "icon": "ballpen",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/voting",
-  "show_in_sidebar": true
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "Voting"
+  }
 }

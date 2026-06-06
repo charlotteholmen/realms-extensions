@@ -9,13 +9,15 @@
     "get_entity_data"
   ],
   "profiles": [
-    "member",
-    "admin"
+    "developer"
   ],
   "categories": [
     "other"
   ],
-  "icon": "table",
+  "icon": "topology-star-3",
   "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/erd_explorer",
-  "show_in_sidebar": true
+  "show_in_sidebar": true,
+  "sidebar_label": {
+    "en": "ERD Explorer"
+  }
 }
