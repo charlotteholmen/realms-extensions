@@ -28,14 +28,65 @@
 	let availableAssistants: AssistantPersona[] = $state([]);
 	let selectedAssistant: AssistantPersona | null = $state(null);
 	let isLoadingAssistants = $state(false);
+	let copiedIndex: number | null = $state(null);
+	let chatHeight = $state('calc(100dvh - 102px)');
 
 	let pendingExplainCodexId: string | null = $state(null);
 	let isExplainMode = $state(false);
 
+	// Conversation history
+	interface Conversation {
+		conversation_id: string;
+		title: string;
+		persona: string;
+		message_count: number;
+		updated_at: string;
+	}
+	let conversationId: string | null = $state(null);
+	let conversations: Conversation[] = $state([]);
+	let showHistory = $state(false);
+	let isLoadingHistory = $state(false);
+
 	const PRODUCTION_API_HOST = 'https://geister-api.realmsgos.dev/';
+	const CHAT_REQUEST_TIMEOUT_MS = 90_000;
 	let API_URL = `${PRODUCTION_API_HOST}api/ask`;
 	let SUGGESTIONS_API_URL = `${PRODUCTION_API_HOST}suggestions`;
 	let ASSISTANTS_API_URL = `${PRODUCTION_API_HOST}api/personas/assistants`;
+	let CONVERSATIONS_API_URL = `${PRODUCTION_API_HOST}api/conversations`;
+
+	function classifyChatError(err: unknown, httpStatus?: number): string {
+		if (httpStatus === 502 || httpStatus === 530) {
+			return 'The AI backend is temporarily offline. Please try again in a few minutes.';
+		}
+		if (httpStatus === 504 || httpStatus === 524) {
+			return 'The request timed out before the server could respond. Please try again.';
+		}
+		if (httpStatus && httpStatus >= 500) {
+			return 'Server error. Please try again later.';
+		}
+		if (err instanceof DOMException && err.name === 'TimeoutError') {
+			return 'The request timed out before the server could respond. Please try again.';
+		}
+		if (err instanceof Error && err.name === 'AbortError') {
+			return 'The request timed out before the server could respond. Please try again.';
+		}
+		if (err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'))) {
+			return 'Could not reach the AI service. Check your network or try again shortly.';
+		}
+		if (err instanceof Error && err.message.includes('HTTP error')) {
+			return classifyChatError(err, Number(err.message.match(/Status:\s*(\d+)/)?.[1]));
+		}
+		return 'Failed to get a response. Please try again.';
+	}
+
+	function isLlmBackendError(text: string): boolean {
+		const normalized = text.toLowerCase();
+		return (
+			normalized.includes('llm backend') ||
+			normalized.includes('cannot reach ollama') ||
+			normalized.includes('ollama at')
+		);
+	}
 
 	let REALM_CANISTER_ID = '';
 	let userPrincipal = '';
@@ -43,6 +94,58 @@
 	let unsubPrincipal: (() => void) | undefined;
 	let unsubAuth: (() => void) | undefined;
 	let isAuthenticated = $state(false);
+
+	// Whether this instance is mounted in the sidebar panel or on the full extension page
+	// ctx is a prop object that doesn't change; reading sidebarPanel once at mount is intentional.
+	// eslint-disable-next-line svelte/reactivity
+	const isSidebarPanel = !!(ctx as any).sidebarPanel;
+
+	// Persisted user preferences
+	const PREFS_KEY = 'llm_chat_prefs';
+	function loadPrefs() {
+		try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch { return {}; }
+	}
+	function savePrefs(p: Record<string, any>) {
+		try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch {}
+	}
+
+	const _prefs = loadPrefs();
+	let prefDefaultAssistant: string = $state(_prefs.defaultAssistant || '');
+	let prefShowSuggestions: boolean = $state(_prefs.showSuggestions !== false);
+	let prefSharePageContext: boolean = $state(_prefs.sharePageContext !== false);
+
+	$effect(() => {
+		savePrefs({ defaultAssistant: prefDefaultAssistant, showSuggestions: prefShowSuggestions, sharePageContext: prefSharePageContext });
+	});
+
+	// Settings page state
+	let apiStatus: 'unknown' | 'online' | 'offline' = $state('unknown');
+	let clearingHistory = $state(false);
+	let historyCleared = $state(false);
+
+	async function checkApiStatus() {
+		try {
+			const res = await fetch(`${PRODUCTION_API_HOST}api/personas/assistants`, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+			apiStatus = res.ok ? 'online' : 'offline';
+		} catch { apiStatus = 'offline'; }
+	}
+
+	async function clearAllHistory() {
+		if (!userPrincipal || !isAuthenticated) return;
+		clearingHistory = true;
+		try {
+			await fetchConversations();
+			await Promise.all(conversations.map(c =>
+				fetch(`${CONVERSATIONS_API_URL}/${c.conversation_id}`, { method: 'DELETE' })
+			));
+			conversations = [];
+			messages = [];
+			conversationId = null;
+			historyCleared = true;
+			setTimeout(() => { historyCleared = false; }, 2000);
+		} catch {}
+		finally { clearingHistory = false; }
+	}
 
 	onMount(async () => {
 		REALM_CANISTER_ID =
@@ -56,10 +159,39 @@
 			isAuthenticated = v;
 		});
 
+		// On mobile, the virtual keyboard shrinks the visual viewport.
+		// Use visualViewport to keep the component anchored inside the visible area.
+		const vv = window.visualViewport;
+		if (vv) {
+			const updateHeight = () => {
+				// vv.height is the visible area above the keyboard.
+				// vv.offsetTop accounts for any vertical scroll of the visual viewport.
+				chatHeight = `${vv.height - vv.offsetTop}px`;
+			};
+			updateHeight();
+			vv.addEventListener('resize', updateHeight);
+			vv.addEventListener('scroll', updateHeight);
+			// Clean up inside onMount's return is not possible directly;
+			// we store the cleanup in the $effect below.
+			(window as any).__chatVpCleanup = () => {
+				vv.removeEventListener('resize', updateHeight);
+				vv.removeEventListener('scroll', updateHeight);
+			};
+		}
+
 		handleExplainParam();
 		await fetchAssistants();
-		if (!isExplainMode) {
+		// Apply saved default assistant preference
+		if (prefDefaultAssistant && availableAssistants.length > 0) {
+			const match = availableAssistants.find(a => a.id === prefDefaultAssistant);
+			if (match) selectedAssistant = match;
+		}
+		if (!isExplainMode && prefShowSuggestions) {
 			await fetchSuggestions();
+		}
+		if (!isSidebarPanel) {
+			checkApiStatus();
+			if (isAuthenticated) await fetchConversations();
 		}
 	});
 
@@ -171,12 +303,14 @@
 		isLoading = true;
 
 		try {
+			await ensureConversation();
 			const payload: Record<string, any> = {
 				question: messageToSend,
 				realm_principal: REALM_CANISTER_ID,
 				user_principal: userPrincipal,
 				stream: true,
 				persona: selectedAssistant?.id || 'ashoka',
+				...(conversationId ? { conversation_id: conversationId } : {}),
 			};
 
 			if (pendingExplainCodexId) {
@@ -188,9 +322,24 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
 				body: JSON.stringify(payload),
+				signal: AbortSignal.timeout(CHAT_REQUEST_TIMEOUT_MS),
 			});
 
-			if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+			if (!response.ok) {
+				let detail = '';
+				try {
+					const body = await response.json();
+					detail = typeof body?.error === 'string' ? body.error : '';
+				} catch {
+					// ignore non-JSON error bodies
+				}
+				if (detail && isLlmBackendError(detail)) {
+					throw Object.assign(new Error(detail), { httpStatus: response.status });
+				}
+				throw Object.assign(new Error(`HTTP error! Status: ${response.status}`), {
+					httpStatus: response.status,
+				});
+			}
 
 			const reader = response.body?.getReader();
 			if (!reader) throw new Error('Response body is not readable');
@@ -247,19 +396,15 @@
 				} else {
 					messages = [...messages, { text: 'No response from LLM', isUser: false }];
 				}
+			} else if (isLlmBackendError(accumulatedText)) {
+				error = 'The AI backend is temporarily offline. Please try again in a few minutes.';
 			}
 
 			isLoading = false;
 			await fetchSuggestions();
 		} catch (err: any) {
 			console.error('Error calling LLM:', err);
-			if (err instanceof TypeError || (err instanceof Error && err.message.includes('fetch'))) {
-				error = 'Connection error. Please check your network and try again.';
-			} else if (err instanceof Error && err.message.includes('HTTP error')) {
-				error = 'Server error. Please try again later.';
-			} else {
-				error = 'Failed to get a response. Please try again.';
-			}
+			error = classifyChatError(err, err?.httpStatus);
 			if (messages.length > 0 && !messages[messages.length - 1].isUser) {
 				messages = messages.slice(0, -1);
 			}
@@ -270,6 +415,109 @@
 
 	function dismissError() {
 		error = '';
+	}
+
+	async function fetchConversations(): Promise<void> {
+		if (!userPrincipal || !isAuthenticated) return;
+		isLoadingHistory = true;
+		try {
+			const params = new URLSearchParams({ user_principal: userPrincipal, realm_principal: REALM_CANISTER_ID });
+			const res = await fetch(`${CONVERSATIONS_API_URL}?${params}`, { headers: { 'Content-Type': 'application/json' } });
+			if (!res.ok) return;
+			const data = await res.json();
+			conversations = (data.conversations || []).sort((a: Conversation, b: Conversation) =>
+				new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+			);
+		} catch {}
+		finally { isLoadingHistory = false; }
+	}
+
+	async function loadConversation(conv: Conversation): Promise<void> {
+		showHistory = false;
+		messages = [];
+		conversationId = conv.conversation_id;
+		// Set matching assistant if known
+		const match = availableAssistants.find(a => a.id === conv.persona);
+		if (match) selectedAssistant = match;
+		try {
+			const res = await fetch(`${CONVERSATIONS_API_URL}/${conv.conversation_id}/messages`, { headers: { 'Content-Type': 'application/json' } });
+			if (!res.ok) return;
+			const data = await res.json();
+			messages = (data.messages || []).map((m: any) => ({ text: m.content, isUser: m.role === 'user' }));
+			await tick();
+			scrollToBottom();
+		} catch {}
+	}
+
+	async function startNewConversation(): Promise<void> {
+		showHistory = false;
+		messages = [];
+		conversationId = null;
+		error = '';
+		suggestions = [];
+		await fetchSuggestions();
+	}
+
+	async function deleteConversation(id: string, e: Event): Promise<void> {
+		e.stopPropagation();
+		try {
+			await fetch(`${CONVERSATIONS_API_URL}/${id}`, { method: 'DELETE' });
+			conversations = conversations.filter(c => c.conversation_id !== id);
+			if (conversationId === id) { messages = []; conversationId = null; }
+		} catch {}
+	}
+
+	async function openHistory(): Promise<void> {
+		showHistory = true;
+		await fetchConversations();
+	}
+
+	function formatDate(dateStr: string): string {
+		const d = new Date(dateStr);
+		const now = new Date();
+		const diffMs = now.getTime() - d.getTime();
+		const diffDays = Math.floor(diffMs / 86400000);
+		if (diffDays === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+		if (diffDays === 1) return 'Yesterday';
+		if (diffDays < 7) return d.toLocaleDateString([], { weekday: 'short' });
+		return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+	}
+
+	async function ensureConversation(): Promise<void> {
+		if (conversationId || !userPrincipal || !isAuthenticated) return;
+		try {
+			const res = await fetch(CONVERSATIONS_API_URL, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ user_principal: userPrincipal, realm_principal: REALM_CANISTER_ID, persona: selectedAssistant?.id || 'ashoka' })
+			});
+			if (res.ok) {
+				const data = await res.json();
+				conversationId = data.conversation_id || null;
+			}
+		} catch {}
+	}
+
+	function copyText(text: string, index: number) {
+		const markCopied = () => {
+			copiedIndex = index;
+			setTimeout(() => { copiedIndex = null; }, 1500);
+		};
+		const fallback = () => {
+			const ta = document.createElement('textarea');
+			ta.value = text;
+			ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+			document.body.appendChild(ta);
+			ta.focus();
+			ta.select();
+			try { document.execCommand('copy'); markCopied(); } catch {}
+			document.body.removeChild(ta);
+		};
+		if (navigator.clipboard) {
+			navigator.clipboard.writeText(text).then(markCopied).catch(fallback);
+		} else {
+			fallback();
+		}
 	}
 
 	function renderMarkdown(text: string): string {
@@ -326,11 +574,117 @@
 		return () => {
 			unsubPrincipal?.();
 			unsubAuth?.();
+			(window as any).__chatVpCleanup?.();
 		};
 	});
 </script>
 
-<div class="llm-chat-root">
+{#if !isSidebarPanel}
+<!-- ═══════════════════════════════════════════════════ SETTINGS PAGE ══ -->
+<div class="settings-page">
+	<h1 class="settings-title">AI Assistant — Settings</h1>
+
+	<!-- Default assistant -->
+	<section class="settings-section">
+		<h2 class="settings-section-title">Default assistant</h2>
+		<p class="settings-section-desc">Which persona opens when you start a new conversation.</p>
+		{#if availableAssistants.length > 0}
+			<div class="settings-assistant-grid">
+				{#each availableAssistants as a}
+					<button
+						class="settings-assistant-btn {prefDefaultAssistant === a.id || (!prefDefaultAssistant && availableAssistants[0].id === a.id) ? 'selected' : ''}"
+						onclick={() => prefDefaultAssistant = a.id}
+					>
+						<span class="settings-assistant-emoji">{a.emoji}</span>
+						<span class="settings-assistant-name">{a.name}</span>
+					</button>
+				{/each}
+			</div>
+		{:else}
+			<p class="settings-section-desc">Loading assistants…</p>
+		{/if}
+	</section>
+
+	<!-- Preferences -->
+	<section class="settings-section">
+		<h2 class="settings-section-title">Preferences</h2>
+		<div class="settings-toggle">
+			<div class="settings-toggle-info">
+				<span class="settings-toggle-label">Show suggestion chips</span>
+				<span class="settings-toggle-desc">Display quick-reply suggestions after each response.</span>
+			</div>
+			<button class="settings-switch {prefShowSuggestions ? 'on' : ''}" role="switch" aria-checked={prefShowSuggestions} onclick={() => prefShowSuggestions = !prefShowSuggestions} aria-label="Show suggestion chips"></button>
+		</div>
+		<div class="settings-toggle">
+			<div class="settings-toggle-info">
+				<span class="settings-toggle-label">Share page context</span>
+				<span class="settings-toggle-desc">Send the current page you're viewing as context to the assistant.</span>
+			</div>
+			<button class="settings-switch {prefSharePageContext ? 'on' : ''}" role="switch" aria-checked={prefSharePageContext} onclick={() => prefSharePageContext = !prefSharePageContext} aria-label="Share page context"></button>
+		</div>
+	</section>
+
+	<!-- Conversation history -->
+	{#if isAuthenticated}
+	<section class="settings-section">
+		<h2 class="settings-section-title">Conversation history</h2>
+		{#if conversations.length > 0}
+			<div class="settings-history-list">
+				{#each conversations as conv}
+					<div class="settings-history-item">
+						<div class="settings-history-body">
+							<div class="settings-history-title">{conv.title}</div>
+							<div class="settings-history-meta">{formatDate(conv.updated_at)} · {conv.message_count} message{conv.message_count === 1 ? '' : 's'}</div>
+						</div>
+						<button class="settings-history-delete" onclick={(e) => deleteConversation(conv.conversation_id, e)} title="Delete">
+							<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4h10M6 4V3h4v1M5 4v8h6V4H5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+						</button>
+					</div>
+				{/each}
+			</div>
+		{:else}
+			<p class="settings-section-desc">{isLoadingHistory ? 'Loading…' : 'No conversations yet.'}</p>
+		{/if}
+		<button class="settings-danger-btn" onclick={clearAllHistory} disabled={clearingHistory || conversations.length === 0}>
+			{#if historyCleared}✓ History cleared{:else if clearingHistory}Clearing…{:else}Clear all history{/if}
+		</button>
+	</section>
+	{/if}
+
+	<!-- About / status -->
+	<section class="settings-section">
+		<h2 class="settings-section-title">About</h2>
+		<div class="settings-about-row">
+			<span class="settings-about-label">Extension version</span>
+			<span class="settings-about-value">1.0.1</span>
+		</div>
+		<div class="settings-about-row">
+			<span class="settings-about-label">API status</span>
+			<span class="settings-api-status {apiStatus}">
+				{#if apiStatus === 'online'}● Online{:else if apiStatus === 'offline'}● Offline{:else}Checking…{/if}
+			</span>
+		</div>
+		<button class="settings-link-btn" onclick={checkApiStatus}>Check again</button>
+	</section>
+</div>
+
+{:else}
+<!-- ══════════════════════════════════════════════════════ CHAT PANEL ══ -->
+<div class="llm-chat-root" style="height: {chatHeight}">
+	<!-- Top toolbar: new chat + history (authenticated users only) -->
+	{#if isAuthenticated}
+		<div class="chat-toolbar">
+			<button class="toolbar-btn" onclick={startNewConversation} title="New conversation">
+				<svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+				<span>New chat</span>
+			</button>
+			<button class="toolbar-btn {showHistory ? 'active' : ''}" onclick={showHistory ? () => showHistory = false : openHistory} title="Conversation history">
+				<svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.5V10l2.5 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				<span>History</span>
+			</button>
+		</div>
+	{/if}
+
 	<!-- Assistant Selector -->
 	{#if availableAssistants.length > 1}
 		<div class="assistant-selector">
@@ -347,70 +701,91 @@
 		</div>
 	{/if}
 
+	<!-- History panel -->
+	{#if showHistory}
+		<div class="history-panel">
+			{#if isLoadingHistory}
+				<div class="history-loading">Loading conversations…</div>
+			{:else if conversations.length === 0}
+				<div class="history-empty">No past conversations yet. Start chatting!</div>
+			{:else}
+				{#each conversations as conv}
+					<div class="history-item" onclick={() => loadConversation(conv)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && loadConversation(conv)}>
+						<div class="history-item-body">
+							<div class="history-title">{conv.title}</div>
+							<div class="history-meta">{formatDate(conv.updated_at)} · {conv.message_count} msg{conv.message_count === 1 ? '' : 's'}</div>
+						</div>
+						<button class="history-delete" onclick={(e) => deleteConversation(conv.conversation_id, e)} title="Delete">
+							<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 4h10M6 4V3h4v1M5 4v8h6V4H5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+						</button>
+					</div>
+				{/each}
+			{/if}
+		</div>
+	{/if}
+
 	<!-- Messages area (scrollable) -->
 	<div
 		bind:this={messagesContainer}
 		class="messages-area"
+		style={showHistory ? 'display:none' : ''}
 	>
 		{#if messages.length === 0 && !isExplainMode}
-			<div class="welcome-message">
-				<div class="avatar">
-					{#if selectedAssistant}
-						<span>{selectedAssistant.emoji}</span>
-					{:else}
-						<span>🏛</span>
-					{/if}
-				</div>
-				<div class="bubble assistant-bubble">
-					{#if isAuthenticated}
-						<p>Welcome back! I'm your AI assistant. Ask me anything about this realm — governance, proposals, codices, or general questions.</p>
-					{:else}
-						<p>Hello! I'm the realm's AI assistant. Feel free to ask me about this realm, its governance structure, or anything you'd like to know.</p>
-					{/if}
-				</div>
+		<div class="welcome-message">
+			<div class="assistant-content markdown-content">
+				{#if isAuthenticated}
+					<p>Welcome back! I'm your AI assistant. Ask me anything about this realm — governance, proposals, codices, or general questions.</p>
+				{:else}
+					<p>Hello! I'm the realm's AI assistant. Feel free to ask me about this realm, its governance structure, or anything you'd like to know.</p>
+				{/if}
 			</div>
-		{:else}
-			{#each messages as message}
-				{#if message.isUser}
-					<div class="message-row user-row">
+		</div>
+	{:else}
+		{#each messages as message, i}
+			{#if message.isUser}
+				<div class="message-row user-row">
+					<div class="user-message-wrap">
+						<button class="copy-btn" onclick={() => copyText(message.text, i)} title="Copy">
+							{#if copiedIndex === i}
+								<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="#4f46e5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							{:else}
+								<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+							{/if}
+						</button>
 						<div class="bubble user-bubble">
 							{message.text}
 						</div>
 					</div>
-				{:else}
-					<div class="message-row assistant-row">
-						<div class="avatar small">
-							{#if selectedAssistant}
-								<span>{selectedAssistant.emoji}</span>
-							{:else}
-								<span>🏛</span>
-							{/if}
-						</div>
-						<div class="bubble assistant-bubble markdown-content">
+				</div>
+			{:else}
+				<div class="message-row assistant-row">
+					<div class="assistant-message-wrap">
+						<div class="assistant-content markdown-content">
 							{@html renderMarkdown(message.text)}
 						</div>
-					</div>
-				{/if}
-			{/each}
-
-			{#if isLoading}
-				<div class="message-row assistant-row">
-					<div class="avatar small">
-						{#if selectedAssistant}
-							<span>{selectedAssistant.emoji}</span>
-						{:else}
-							<span>🏛</span>
-						{/if}
-					</div>
-					<div class="bubble assistant-bubble">
-						<div class="typing-animation">
-							<span></span>
-							<span></span>
-							<span></span>
-						</div>
+						<button class="copy-btn copy-btn--assistant" onclick={() => copyText(message.text, i)} title="Copy">
+							{#if copiedIndex === i}
+								<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8l3.5 3.5L13 4.5" stroke="#4f46e5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							{:else}
+								<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+							{/if}
+						</button>
 					</div>
 				</div>
 			{/if}
+		{/each}
+
+		{#if isLoading}
+			<div class="message-row assistant-row">
+				<div class="assistant-content">
+					<div class="typing-animation">
+						<span></span>
+						<span></span>
+						<span></span>
+					</div>
+				</div>
+			</div>
+		{/if}
 
 			{#if error}
 				<div class="error-banner">
@@ -423,7 +798,7 @@
 
 	<!-- Input section (always visible at bottom) -->
 	<div class="input-section">
-		{#if suggestions.length > 0 || isLoadingSuggestions}
+		{#if prefShowSuggestions && (suggestions.length > 0 || isLoadingSuggestions)}
 			<div class="suggestions">
 				{#if isLoadingSuggestions}
 					<span class="suggestion-loading">Loading suggestions...</span>
@@ -470,16 +845,146 @@
 		</div>
 	</div>
 </div>
+{/if}
 
 <style>
 	.llm-chat-root {
 		display: flex;
 		flex-direction: column;
-		height: calc(100dvh - 102px);
-		max-height: calc(100dvh - 102px);
+		/* height is set via inline style driven by visualViewport on mobile;
+		   the fallback keeps it correct on desktop */
+		max-height: 100%;
 		min-height: 300px;
 		overflow: hidden;
 		background: transparent;
+		/* Prevent the component itself from scrolling — only messages-area scrolls */
+		overscroll-behavior: none;
+		/* Flush to the top of the sidebar panel — no stray gap */
+		margin-top: 0;
+		padding-top: 0;
+	}
+
+	/* Top toolbar */
+	.chat-toolbar {
+		display: flex;
+		gap: 6px;
+		padding: 6px 14px;
+		border-bottom: 1px solid #e5e7eb;
+		flex-shrink: 0;
+	}
+
+	.toolbar-btn {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		padding: 5px 10px;
+		border-radius: 8px;
+		border: 1px solid #e5e7eb;
+		background: #f9fafb;
+		color: #4b5563;
+		font-size: 13px;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.toolbar-btn svg {
+		width: 15px;
+		height: 15px;
+		flex-shrink: 0;
+	}
+
+	.toolbar-btn:hover {
+		background: #eef2ff;
+		border-color: #c7d2fe;
+		color: #4338ca;
+	}
+
+	.toolbar-btn.active {
+		background: #eef2ff;
+		border-color: #6366f1;
+		color: #4338ca;
+	}
+
+	/* History panel */
+	.history-panel {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 8px 14px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.history-loading,
+	.history-empty {
+		padding: 24px 0;
+		text-align: center;
+		color: #9ca3af;
+		font-size: 13px;
+	}
+
+	.history-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 12px;
+		border-radius: 10px;
+		border: 1px solid #f3f4f6;
+		background: #fafafa;
+		cursor: pointer;
+		transition: background 0.12s ease, border-color 0.12s ease;
+	}
+
+	.history-item:hover {
+		background: #eef2ff;
+		border-color: #c7d2fe;
+	}
+
+	.history-item-body {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.history-title {
+		font-size: 13px;
+		font-weight: 500;
+		color: #1f2937;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.history-meta {
+		font-size: 11px;
+		color: #9ca3af;
+		margin-top: 2px;
+	}
+
+	.history-delete {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border: none;
+		background: transparent;
+		color: #d1d5db;
+		cursor: pointer;
+		border-radius: 6px;
+		padding: 4px;
+		transition: color 0.15s ease, background 0.15s ease;
+	}
+
+	.history-delete svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	.history-delete:hover {
+		color: #ef4444;
+		background: #fef2f2;
 	}
 
 	/* Assistant selector */
@@ -521,7 +1026,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 16px 0;
+		padding: 8px 14px 16px;
 		background: transparent;
 		display: flex;
 		flex-direction: column;
@@ -533,7 +1038,7 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 12px;
-		margin-top: 20px;
+		margin-top: 4px;
 	}
 
 	/* Message rows */
@@ -573,13 +1078,61 @@
 		font-size: 16px;
 	}
 
+	/* User message wrapper (bubble + copy) */
+	.user-message-wrap {
+		display: flex;
+		align-items: flex-end;
+		gap: 6px;
+		max-width: 80%;
+	}
+
+	/* Assistant message wrapper (content + copy) */
+	.assistant-message-wrap {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+		gap: 4px;
+	}
+
+	/* Copy button */
+	.copy-btn {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border: none;
+		background: transparent;
+		color: #9ca3af;
+		cursor: pointer;
+		border-radius: 6px;
+		padding: 4px;
+		transition: color 0.15s ease, background 0.15s ease;
+	}
+
+	.copy-btn:hover {
+		color: #4f46e5;
+		background: #eef2ff;
+	}
+
+	.copy-btn svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	.copy-btn--assistant {
+		align-self: flex-start;
+		margin-left: 2px;
+	}
+
 	/* Bubbles */
 	.bubble {
-		padding: 12px 16px;
+		padding: 10px 14px;
 		border-radius: 16px;
 		line-height: 1.5;
 		font-size: 14px;
-		max-width: 80%;
 		word-wrap: break-word;
 		overflow-wrap: break-word;
 	}
@@ -592,15 +1145,19 @@
 		white-space: pre-wrap;
 	}
 
-	.assistant-bubble {
-		background: #fff;
+	/* Assistant content — no bubble, full width */
+	.assistant-content {
+		flex: 1;
+		min-width: 0;
+		line-height: 1.6;
+		font-size: 14px;
 		color: #1f2937;
-		border: 1px solid #e5e7eb;
-		border-bottom-left-radius: 4px;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+		word-wrap: break-word;
+		overflow-wrap: break-word;
+		padding: 2px 0;
 	}
 
-	/* Markdown content inside assistant bubbles */
+	/* Markdown content inside assistant messages */
 	.markdown-content :global(h1),
 	.markdown-content :global(h2),
 	.markdown-content :global(h3) {
@@ -694,7 +1251,7 @@
 	/* Input section */
 	.input-section {
 		flex-shrink: 0;
-		padding: 12px 0;
+		padding: 10px 14px;
 		border-top: 1px solid #e5e7eb;
 		background: transparent;
 	}
@@ -742,13 +1299,14 @@
 		padding: 10px 14px;
 		border-radius: 12px;
 		border: 1px solid #d1d5db;
-		font-size: 14px;
+		font-size: 16px; /* 16px prevents iOS auto-zoom on focus */
 		line-height: 1.4;
 		min-height: 42px;
 		max-height: 120px;
 		overflow-y: auto;
 		transition: border-color 0.15s ease, box-shadow 0.15s ease;
 		outline: none;
+		touch-action: manipulation;
 	}
 
 	.chat-input:focus {
@@ -782,5 +1340,269 @@
 	.send-btn:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	/* ══════════════════════ Settings page ══════════════════════ */
+	.settings-page {
+		max-width: 680px;
+		margin: 0 auto;
+		padding: 36px 24px 60px;
+		font-family: inherit;
+		color: #111;
+	}
+
+	.settings-title {
+		font-size: 1.35rem;
+		font-weight: 700;
+		margin: 0 0 32px;
+		color: #111;
+	}
+
+	.settings-section {
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-radius: 12px;
+		padding: 20px 22px;
+		margin-bottom: 18px;
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.settings-section-title {
+		font-size: 0.85rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #6b7280;
+		margin: 0;
+	}
+
+	.settings-section-desc {
+		font-size: 0.875rem;
+		color: #6b7280;
+		margin: -8px 0 0;
+	}
+
+	/* Default assistant grid */
+	.settings-assistant-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+
+	.settings-assistant-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 5px;
+		padding: 10px 16px;
+		border: 1.5px solid #e5e7eb;
+		border-radius: 10px;
+		background: #f9fafb;
+		cursor: pointer;
+		transition: border-color 0.15s, background 0.15s;
+		min-width: 80px;
+	}
+
+	.settings-assistant-btn.selected {
+		border-color: #4f46e5;
+		background: #eef2ff;
+	}
+
+	.settings-assistant-emoji {
+		font-size: 1.5rem;
+	}
+
+	.settings-assistant-name {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: #374151;
+	}
+
+	/* Toggle rows */
+	.settings-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		cursor: pointer;
+	}
+
+	.settings-toggle-info {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.settings-toggle-label {
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: #111;
+	}
+
+	.settings-toggle-desc {
+		font-size: 0.8rem;
+		color: #6b7280;
+	}
+
+	.settings-switch {
+		flex-shrink: 0;
+		width: 40px;
+		height: 22px;
+		border-radius: 11px;
+		background: #d1d5db;
+		border: none;
+		position: relative;
+		cursor: pointer;
+		transition: background 0.2s;
+		outline: none;
+		padding: 0;
+	}
+
+	.settings-switch::after {
+		content: '';
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		background: #fff;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+		transition: transform 0.2s;
+	}
+
+	.settings-switch.on {
+		background: #4f46e5;
+	}
+
+	.settings-switch.on::after {
+		transform: translateX(18px);
+	}
+
+	/* History list */
+	.settings-history-list {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		max-height: 260px;
+		overflow-y: auto;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		padding: 6px;
+	}
+
+	.settings-history-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 10px;
+		border-radius: 7px;
+		background: #f9fafb;
+	}
+
+	.settings-history-body {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.settings-history-title {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: #111;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.settings-history-meta {
+		font-size: 0.75rem;
+		color: #9ca3af;
+		margin-top: 2px;
+	}
+
+	.settings-history-delete {
+		flex-shrink: 0;
+		width: 28px;
+		height: 28px;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		border-radius: 6px;
+		color: #9ca3af;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.settings-history-delete:hover {
+		background: #fee2e2;
+		color: #dc2626;
+	}
+
+	.settings-danger-btn {
+		align-self: flex-start;
+		padding: 7px 14px;
+		border: 1.5px solid #fca5a5;
+		border-radius: 8px;
+		background: #fff;
+		color: #dc2626;
+		font-size: 0.85rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.settings-danger-btn:hover:not(:disabled) {
+		background: #fee2e2;
+	}
+
+	.settings-danger-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* About */
+	.settings-about-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 0.875rem;
+	}
+
+	.settings-about-label {
+		color: #6b7280;
+	}
+
+	.settings-about-value {
+		font-weight: 500;
+		color: #111;
+	}
+
+	.settings-api-status {
+		font-size: 0.85rem;
+		font-weight: 500;
+	}
+
+	.settings-api-status.online { color: #16a34a; }
+	.settings-api-status.offline { color: #dc2626; }
+	.settings-api-status.unknown { color: #9ca3af; }
+
+	.settings-link-btn {
+		align-self: flex-start;
+		padding: 6px 12px;
+		border: 1px solid #e5e7eb;
+		border-radius: 7px;
+		background: #f9fafb;
+		color: #4f46e5;
+		font-size: 0.8rem;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.settings-link-btn:hover {
+		background: #eef2ff;
 	}
 </style>

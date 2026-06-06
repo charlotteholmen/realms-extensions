@@ -152,42 +152,10 @@ def get_entity_data(args):
     page_num = parsed_args.get("page_num", 0)
     page_size = parsed_args.get("page_size", 10)
 
-    try:
-        # TODO: implement this
-        entity_map = {}
-
-        if entity_type in entity_map:
-            result = entity_map[entity_type](page_num, page_size)
-            # Convert entity objects to dictionaries
-            items = []
-            for item in result["items"]:
-                if hasattr(item, "serialize"):
-                    items.append(item.serialize())
-                else:
-                    items.append(str(item))
-
-            return {
-                "items": items,
-                "page_num": result["page_num"],
-                "page_size": result["page_size"],
-                "total_items_count": result["total_items_count"],
-                "total_pages": result["total_pages"],
-            }
-        else:
-            # For entities without list functions, return empty result
-            return {
-                "items": [],
-                "page_num": page_num,
-                "page_size": page_size,
-                "total_items_count": 0,
-                "total_pages": 0,
-            }
-    except Exception as e:
-        # Return empty result if there's an error
-        return {
-            "items": [],
-            "page_num": page_num,
-            "page_size": page_size,
-            "total_items_count": 0,
-            "total_pages": 0,
-        }
+    return {
+        "items": [],
+        "page_num": page_num,
+        "page_size": page_size,
+        "total_items_count": 0,
+        "total_pages": 0,
+    }

@@ -1,5 +1,4 @@
 import json
-import traceback
 
 from basilisk import Opt, Principal, Record, Vec, blob, ic, nat64, text
 
@@ -51,28 +50,11 @@ def get_realm_data(args) -> RealmData:
     "
         '''
     """
-    ic.print("Collecting realm data for LLM")
-
-    # Access the current context
-    context = ic.caller()
-    principal_id = str(context)
-
-    # Get the current timestamp
+    principal_id = str(ic.caller())
     current_time = ic.time()
 
-    # Initialize default empty data
-    users_data = "[]"
-    mandates_data = "[]"
-    tasks_data = "[]"
-    transfers_data = "[]"
-    instruments_data = "[]"
-    organizations_data = "[]"
-
     try:
-        # TODO: implement this
-
         combined_data = {}
-
         return RealmData(
             json=json.dumps(combined_data),
             principal_id=principal_id,
@@ -80,7 +62,4 @@ def get_realm_data(args) -> RealmData:
         )
     except Exception as e:
         ic.print(f"Error collecting realm data: {str(e)}")
-        ic.print(traceback.format_exc())
-
-        # Return empty data on error
         return RealmData(json="{}", principal_id=principal_id, timestamp=current_time)

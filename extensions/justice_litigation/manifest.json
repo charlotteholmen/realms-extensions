@@ -19,11 +19,7 @@
     "get_appeals",
     "file_appeal",
     "decide_appeal",
-    "get_statistics",
-    "get_litigations",
-    "create_litigation",
-    "execute_verdict",
-    "load_demo_litigations"
+    "get_statistics"
   ],
   "profiles": [
     "admin",

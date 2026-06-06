@@ -48,18 +48,33 @@
 		return await ctx.callSync(fn, args);
 	}
 
+	/** Normalize GGG Case records to the litigation row shape used by this UI. */
+	function normalizeCase(raw: Record<string, unknown>) {
+		return {
+			id: raw.id as string,
+			case_number: (raw.case_number as string) ?? '',
+			case_title: (raw.title as string) ?? '',
+			description: (raw.description as string) ?? '',
+			status: (raw.status as string) ?? 'pending',
+			requester_principal: (raw.plaintiff_id as string) ?? '',
+			defendant_principal: (raw.defendant_id as string) ?? '',
+			requested_at: (raw.filed_date as string) ?? '',
+		};
+	}
+
 	async function loadLitigations() {
 		loading = true;
 		error = '';
 		try {
-			const res = await callExt('get_litigations', {
-				user_principal: principal,
-				user_profile: userProfile,
-			});
+			const params =
+				userProfile === 'admin'
+					? {}
+					: { user_id: principal };
+			const res = await callExt('get_cases', params);
 			const data = res?.data ?? res;
-			litigations = data?.litigations ?? (Array.isArray(data) ? data : []);
+			const rawCases = data?.cases ?? [];
+			litigations = Array.isArray(rawCases) ? rawCases.map(normalizeCase) : [];
 			totalCount = data?.total_count ?? litigations.length;
-			if (data?.user_profile) userProfile = data.user_profile;
 		} catch (e: any) {
 			error = e?.message || String(e);
 		} finally {
@@ -76,10 +91,18 @@
 		createError = '';
 		createSuccess = false;
 		try {
-			await callExt('create_litigation', {
-				requester_principal: principal,
-				defendant_principal: formDefendant.trim(),
-				case_title: formTitle.trim(),
+			const courtsRes = await callExt('get_courts', {});
+			const courts = courtsRes?.data?.courts ?? courtsRes?.courts ?? [];
+			const courtId = courts[0]?.id;
+			if (!courtId) {
+				createError = 'No court available. Create or seed a court first.';
+				return;
+			}
+			await callExt('file_case', {
+				court_id: courtId,
+				plaintiff_id: principal.trim(),
+				defendant_id: formDefendant.trim(),
+				title: formTitle.trim(),
 				description: formDescription.trim(),
 			});
 			createSuccess = true;
@@ -100,7 +123,7 @@
 
 	function openVerdict(litigation: any) {
 		verdictCase = litigation;
-		verdictCode = `transfer("${litigation.defendant_principal || ''}", "${litigation.requester_principal || ''}", 1000, "Compensation for ${litigation.case_title || ''}")`;
+		verdictCode = `Approved in favour of plaintiffs for case ${litigation.case_title || litigation.case_number || litigation.id}`;
 		verdictError = '';
 		verdictSuccess = false;
 		showVerdict = true;
@@ -116,17 +139,26 @@
 
 	async function executeVerdict() {
 		if (!verdictCase || !verdictCode.trim()) {
-			verdictError = 'Verdict code is required';
+			verdictError = 'Decision text is required';
 			return;
 		}
 		executingVerdict = true;
 		verdictError = '';
 		verdictSuccess = false;
 		try {
-			await callExt('execute_verdict', {
-				litigation_id: verdictCase.id,
-				verdict_code: verdictCode.trim(),
-				executor_principal: principal,
+			const judgesRes = await callExt('get_judges', {});
+			const judges = judgesRes?.data?.judges ?? judgesRes?.judges ?? [];
+			const judgeId = judges[0]?.id;
+			if (!judgeId) {
+				verdictError = 'No judge available. Assign a judge before issuing a verdict.';
+				return;
+			}
+			await callExt('issue_verdict', {
+				case_id: verdictCase.id,
+				judge_id: judgeId,
+				decision: verdictCode.trim(),
+				reasoning: '',
+				penalties: [],
 			});
 			verdictSuccess = true;
 			await loadLitigations();
@@ -678,18 +710,18 @@
 								for="jl-verdict-code"
 								class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
 							>
-								Verdict Code (Python/Codex)
+								Decision
 							</label>
 							<textarea
 								id="jl-verdict-code"
 								bind:value={verdictCode}
 								rows="4"
 								disabled={executingVerdict}
-								placeholder="Enter Python code for the verdict execution…"
-								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50 resize-y"
+								placeholder="Enter the formal decision summary…"
+								class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none disabled:opacity-50 resize-y"
 							></textarea>
 							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-								Example: transfer("from_principal", "to_principal", amount, "memo")
+								Uses the first available judge with <code class="font-mono">issue_verdict</code>.
 							</p>
 						</div>
 

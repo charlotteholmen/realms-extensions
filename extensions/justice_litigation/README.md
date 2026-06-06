@@ -33,10 +33,9 @@ Comprehensive legal case management with courts, judges, verdicts, penalties, an
 | `decide_appeal` | Decide an appeal |
 | `get_statistics` | Get system statistics |
 
-### Legacy API (deprecated)
-- `get_litigations` → Use `get_cases`
-- `create_litigation` → Use `file_case`
-- `execute_verdict` → Use `issue_verdict`
+### Migrating older clients
+
+Older entry points (`get_litigations`, `create_litigation`, `execute_verdict`, `load_demo_litigations`) have been removed. Use `get_cases`, `file_case` (supply `court_id` from `get_courts`), and `issue_verdict` instead.
 
 ## Data Model
 
