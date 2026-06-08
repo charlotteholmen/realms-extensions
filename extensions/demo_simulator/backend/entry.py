@@ -155,8 +155,10 @@ def extension_sync_call(method_name: str, args: dict):
 def initialize(args):
     """Called by the canister on every start/upgrade and after extension install.
 
-    Creates the TaskSchedule if needed and auto-enables it when
-    TEST_MODE + TEST_MODE_DEMO_DATA are both True — but only for a
+    Creates the TaskSchedule if needed and auto-enables it when the
+    runtime Realm flags test_mode + test_mode_demo_data are both True
+    (read live via core.runtime_flags, so a Casals arrangement /
+    set_canister_config can flip it without a rebuild) — but only for a
     *newly created* schedule.  If the schedule already exists (e.g.
     extension re-install or upgrade), its disabled state is preserved
     so that a user who manually stopped the simulator doesn't have it
@@ -174,7 +176,7 @@ def initialize(args):
 
     if not already_existed and is_demo_mode_active():
         schedule.disabled = False
-        logger.info("Demo simulator auto-activated (new schedule + TEST_MODE + TEST_MODE_DEMO_DATA)")
+        logger.info("Demo simulator auto-activated (new schedule + runtime test_mode + test_mode_demo_data)")
     elif already_existed:
         logger.info(f"Demo simulator schedule already exists (disabled={schedule.disabled}), preserving state")
     else:

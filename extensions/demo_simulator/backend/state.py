@@ -75,13 +75,16 @@ def save_state_data(state, data):
 
 
 def is_demo_mode_active():
-    """Check if TEST_MODE and TEST_MODE_DEMO_DATA are both enabled in backend config."""
+    """Check if test_mode and test_mode_demo_data are both enabled.
+
+    Reads the runtime Realm entity flags (set via set_canister_config), not the
+    build-time config module — so a Casals arrangement / set_canister_config can
+    flip demo mode without rebuilding the WASM.
+    """
     try:
-        import config
-        test_mode = getattr(config, "TEST_MODE", False)
-        demo_data = getattr(config, "TEST_MODE_DEMO_DATA", False)
-        return bool(test_mode and demo_data)
-    except ImportError:
+        from core.runtime_flags import is_demo_data_active
+        return is_demo_data_active()
+    except Exception:
         return False
 
 

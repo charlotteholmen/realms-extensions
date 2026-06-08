@@ -101,8 +101,8 @@ def get_event_id(args: str) -> str:
 
 def get_verification_link(args: str):
     """Get the verification link -- bypasses Rarimo API in test mode."""
-    from config import TEST_MODE_SKIP_PASSPORT_ZKPROOF
-    if TEST_MODE_SKIP_PASSPORT_ZKPROOF:
+    from core.runtime_flags import skip_passport_zkproof
+    if skip_passport_zkproof():
         session_id = get_session_id(args)
         logger.info(f"🧪 TEST MODE: Returning mock verification link for {session_id}")
         return json.dumps({
@@ -188,8 +188,8 @@ def _get_verification_link_async(args: str) -> Async[str]:
 
 def check_verification_status(args: str):
     """Check verification status -- bypasses Rarimo API in test mode."""
-    from config import TEST_MODE_SKIP_PASSPORT_ZKPROOF
-    if TEST_MODE_SKIP_PASSPORT_ZKPROOF:
+    from core.runtime_flags import skip_passport_zkproof
+    if skip_passport_zkproof():
         session_id = get_session_id(args)
         logger.info(f"🧪 TEST MODE: Skipping Rarimo API, returning verified for {session_id}")
         return json.dumps({
