@@ -22,7 +22,7 @@ Requirements:
   - Realm must have test_mode_user_self_registration enabled (operator can
     self-register as admin with the admin test checksum).
   - Backend WASM must include the _now_dt() fix for RegistrationCode.create
-    (commit be6089ec on realms/main, deployed via deploy-mundus upgrade).
+    (commit be6089ec on realms/main, deployed via a Casals rollout upgrade).
 
 Run:
   python3 realm_foundation_scenario.py

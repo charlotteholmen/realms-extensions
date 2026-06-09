@@ -40,9 +40,10 @@ After testing locally, deploy with:
 # 1. Build the frontend
 cd extensions/<ext_id>/frontend-rt && npm run build && cd -
 
-# 2. Upload files + redeploy the realm
-realms deploy-files --network test
-realms deploy-mundus --descriptor deployment-descriptors/test-mundus-layered.yml --realm agora
+# 2. Publish the bundle to file_registry, then install it on the realm
+realms files publish --network test --extensions-only --extensions <ext_id>
+# then call install_extension_from_registry on the target realm backend
 ```
 
-See the root `AGENTS.md` for full deploy options.
+See the root `AGENTS.md` ("Fast Remote Extension Deploy") for the install call and full
+deploy options.
