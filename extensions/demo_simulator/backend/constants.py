@@ -54,6 +54,124 @@ PROPOSAL_TITLES = [
     "Fund education technology initiative",
 ]
 
+# Rich narrative + code themes for demo governance proposals.
+PROPOSAL_PROFILES = {
+    "Increase public transport budget": {
+        "description": (
+            "This proposal allocates an additional 12% of the municipal mobility fund to "
+            "expand bus and tram service frequency in underserved districts. It authorizes "
+            "the Transport Authority to renegotiate operator contracts, subsidize off-peak "
+            "fares for students and seniors, and publish monthly ridership dashboards. "
+            "Funding is phased over two fiscal years with quarterly performance reviews."
+        ),
+        "codex_name": "transport_subsidy",
+        "amend_target": "social_benefits",
+    },
+    "Create community garden in District 3": {
+        "description": (
+            "District 3 residents request a 2,400 m² community garden on the vacant lot at "
+            "Maple & 5th. The plan includes raised beds, composting, a rainwater collection "
+            "system, and a shared tool library. A neighborhood cooperative will manage day-to-day "
+            "operations; the realm grants a 10-year land-use license and seed funding for "
+            "infrastructure and insurance."
+        ),
+        "codex_name": "community_garden_d3",
+        "amend_target": "tax_collection",
+    },
+    "Establish digital identity standards": {
+        "description": (
+            "Members propose a realm-wide digital identity standard so citizens can prove "
+            "membership, sign documents, and access services without repeated KYC. The standard "
+            "must be open, auditable, and interoperable with Internet Identity. A technical "
+            "working group will publish reference implementations and a 90-day migration path "
+            "for existing integrations."
+        ),
+        "codex_name": "digital_identity_standard",
+        "amend_target": "tax_collection",
+    },
+    "Fund renewable energy research": {
+        "description": (
+            "The Green Energy Solutions cooperative seeks 500,000 realm tokens over three years "
+            "to pilot solar micro-grids on public buildings and publish open datasets on "
+            "generation and consumption. Milestones tie disbursements to installed capacity, "
+            "peer-reviewed reports, and citizen-accessible monitoring dashboards."
+        ),
+        "codex_name": "renewable_energy_grants",
+        "amend_target": "social_benefits",
+    },
+    "Build new community center": {
+        "description": (
+            "This capital project constructs a multi-purpose community center with meeting "
+            "rooms, a childcare co-op space, and a public library annex. Construction follows "
+            "green-building guidelines; 30% of subcontracting is reserved for local worker "
+            "cooperatives. The center will be governed by a mixed board of residents and "
+            "elected delegates."
+        ),
+        "codex_name": "community_center_capital",
+        "amend_target": "tax_collection",
+    },
+    "Implement universal basic income pilot": {
+        "description": (
+            "A 18-month UBI pilot will provide a fixed monthly transfer to 500 randomly "
+            "selected verified members in Districts 1–3. Researchers will measure effects on "
+            "employment, health outcomes, and local commerce. Transfers are funded from the "
+            "general treasury with independent audit and public anonymized reporting."
+        ),
+        "codex_name": "ubi_pilot",
+        "amend_target": "social_benefits",
+    },
+    "Expand healthcare coverage": {
+        "description": (
+            "Healthcare Partners proposes extending preventive care coverage to all verified "
+            "members, including dental screenings, mental-health counseling sessions, and "
+            "telemedicine. Premiums are capped as a percentage of income; a public formulary "
+            "committee reviews drug pricing quarterly."
+        ),
+        "codex_name": "healthcare_coverage_expansion",
+        "amend_target": "social_benefits",
+    },
+    "Create open-source governance tools": {
+        "description": (
+            "Fund development of open-source tooling for proposal drafting, deliberation "
+            "threads, and vote auditing on the Internet Computer. Deliverables include APIs, "
+            "documentation, and reference UIs that any realm can fork. All code is MIT-licensed "
+            "and maintained by a contributor guild with transparent treasury reporting."
+        ),
+        "codex_name": "governance_toolkit",
+        "amend_target": "tax_collection",
+    },
+    "Establish data privacy framework": {
+        "description": (
+            "This codex defines how member data may be collected, stored, shared, and deleted "
+            "across realm services. It mandates purpose limitation, encryption at rest, breach "
+            "notification within 72 hours, and a citizen data-rights portal. Departments must "
+            "publish data inventories and obtain opt-in consent for non-essential processing."
+        ),
+        "codex_name": "data_privacy_framework",
+        "amend_target": "tax_collection",
+    },
+    "Fund education technology initiative": {
+        "description": (
+            "The Education Foundation requests funding for tablets, offline-capable learning "
+            "content, and teacher training in rural districts. The program targets grades 6–12, "
+            "emphasizes digital literacy and civic education, and requires open licensing of "
+            "curriculum materials produced with public funds."
+        ),
+        "codex_name": "edtech_initiative",
+        "amend_target": "social_benefits",
+    },
+}
+
+DEFAULT_PROPOSAL_PROFILE = {
+    "description": (
+        "This governance proposal authorizes a targeted policy change developed through "
+        "community deliberation. If approved, the attached codex will execute on the realm "
+        "canister, updating configuration and publishing an audit trail for members to review."
+    ),
+    "codex_name": "demo_policy_codex",
+    "amend_target": "tax_collection",
+}
+
 DISPUTE_DESCRIPTIONS = [
     "Contract breach in service agreement",
     "Property boundary disagreement",

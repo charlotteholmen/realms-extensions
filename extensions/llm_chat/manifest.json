@@ -9,7 +9,7 @@
     "oversight"
   ],
   "icon": "brain",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/llm_chat",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/llm_chat",
   "show_in_sidebar": true,
   "hideFooter": true
 }

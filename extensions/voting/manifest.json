@@ -1,6 +1,6 @@
 {
   "name": "voting",
-  "version": "1.0.5",
+  "version": "1.0.13",
   "description": "Governance voting system for submitting and voting on proposals to execute Python code",
   "author": "Smart Social Contracts",
   "permissions": [],
@@ -12,7 +12,7 @@
     "governance"
   ],
   "icon": "ballpen",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/voting",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/voting",
   "show_in_sidebar": true,
   "sidebar_label": {
     "en": "Voting"

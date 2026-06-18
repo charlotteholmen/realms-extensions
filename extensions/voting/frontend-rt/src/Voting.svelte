@@ -1,15 +1,48 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import MonacoDiffPane from './MonacoDiffPane.svelte';
+	import MonacoPane from './MonacoPane.svelte';
 
 	let { ctx }: { ctx: any } = $props();
 
 	type View = 'list' | 'form' | 'detail';
 
+	function getExtensionBasePath(): string {
+		if (typeof window === 'undefined') return '/extensions/voting';
+		const match = window.location.pathname.match(/^(.*\/extensions\/[^/]+)/);
+		return match ? match[1] : window.location.pathname;
+	}
+
+	function parseProposalIdFromUrl(): string | null {
+		if (typeof window === 'undefined') return null;
+		const params = new URLSearchParams(window.location.search);
+		const queryId = params.get('proposal');
+		if (queryId) return decodeURIComponent(queryId);
+
+		const base = getExtensionBasePath();
+		const rest = window.location.pathname.slice(base.length).replace(/^\//, '');
+		if (!rest) return null;
+		if (rest.startsWith('proposal=')) {
+			return decodeURIComponent(rest.slice('proposal='.length));
+		}
+		if (rest.startsWith('proposal/')) {
+			return decodeURIComponent(rest.slice('proposal/'.length));
+		}
+		return null;
+	}
+
+	const initialProposalId =
+		typeof window !== 'undefined' ? parseProposalIdFromUrl() : null;
+
 	let proposals: any[] = $state([]);
-	let loading = $state(true);
+	let listLoading = $state(!initialProposalId);
+	let listLoadingMore = $state(false);
+	let listHasMore = $state(false);
+	let listNextFromId = $state(1);
+	const LIST_FETCH_SIZE = 30;
 	let error = $state('');
 	let accessDeniedOp = $state('');
-	let view: View = $state('list');
+	let view: View = $state(initialProposalId ? 'detail' : 'list');
 
 	let formTitle = $state('');
 	let formDescription = $state('');
@@ -28,11 +61,8 @@
 		code_url?: string | null;
 	};
 
-	const MONACO_THEME = 'vs';
-	const MONACO_LANGUAGE = 'python';
-
 	let selectedProposal: any = $state(null);
-	let detailLoading = $state(false);
+	let detailLoading = $state(!!initialProposalId);
 	let codeContent = $state('');
 	let codeChecksum = $state('');
 	let codeFiles: CodeFile[] = $state([]);
@@ -40,8 +70,6 @@
 	let codeLoading = $state(false);
 	let codeError = $state('');
 
-	let MonacoEditor = $derived(ctx.ui?.MonacoEditor);
-	let MonacoDiffEditor = $derived(ctx.ui?.MonacoDiffEditor);
 	let activeCodeFile = $derived(codeFiles[selectedFileIndex] ?? null);
 	let showCodeDiff = $derived(
 		!!activeCodeFile?.is_amendment && !!(activeCodeFile?.original ?? '').length,
@@ -51,6 +79,9 @@
 	let actionError = $state('');
 
 	let votingInProgress = $state('');
+
+	let nowMs = $state(Date.now());
+	let countdownTimer: ReturnType<typeof setInterval> | undefined;
 
 	let currentPage = $state(1);
 	const pageSize = 10;
@@ -63,10 +94,6 @@
 		sortedProposals.slice((currentPage - 1) * pageSize, currentPage * pageSize),
 	);
 
-	$effect(() => {
-		if (proposals.length >= 0) currentPage = 1;
-	});
-
 	async function callSync(fn: string, args: Record<string, any> = {}) {
 		const raw = await ctx.callSync(fn, args);
 		return typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -77,21 +104,63 @@
 		return typeof raw === 'string' ? JSON.parse(raw) : raw;
 	}
 
-	async function loadProposals() {
-		loading = true;
+	async function fetchProposalsPage(fromId: number) {
+		const res = await callSync('get_proposals', { from_id: fromId, page_size: LIST_FETCH_SIZE });
+		if (res?.success) {
+			const batch = res.data?.proposals ?? res.data ?? [];
+			return {
+				proposals: Array.isArray(batch) ? batch : [],
+				hasMore: !!res.data?.has_more,
+				nextFromId: res.data?.next_from_id ?? null,
+			};
+		}
+		if (res?.data) {
+			const batch = Array.isArray(res.data) ? res.data : res.data.proposals ?? [];
+			return { proposals: batch, hasMore: false, nextFromId: null };
+		}
+		if (Array.isArray(res)) {
+			return { proposals: res, hasMore: false, nextFromId: null };
+		}
+		throw new Error(res?.error || 'Failed to load proposals');
+	}
+
+	function mergeProposals(existing: any[], batch: any[]) {
+		const seen = new Set(existing.map((p) => p.id));
+		const merged = [...existing];
+		for (const proposal of batch) {
+			if (!seen.has(proposal.id)) {
+				merged.push(proposal);
+				seen.add(proposal.id);
+			}
+		}
+		return merged;
+	}
+
+	function upsertProposal(proposal: any) {
+		const idx = proposals.findIndex((p) => p.id === proposal.id);
+		if (idx >= 0) {
+			proposals[idx] = { ...proposals[idx], ...proposal };
+			proposals = [...proposals];
+		} else {
+			proposals = [proposal, ...proposals];
+		}
+	}
+
+	async function loadProposals(opts: { reset?: boolean; background?: boolean } = {}) {
+		const reset = opts.reset !== false;
+		const background = opts.background === true;
+		if (reset && !background) {
+			listLoading = true;
+			listNextFromId = 1;
+		}
 		error = '';
 		accessDeniedOp = '';
 		try {
-			const res = await callSync('get_proposals');
-			if (res?.success) {
-				proposals = res.data?.proposals ?? res.data ?? [];
-			} else if (res?.data) {
-				proposals = Array.isArray(res.data) ? res.data : res.data.proposals ?? [];
-			} else if (Array.isArray(res)) {
-				proposals = res;
-			} else {
-				error = res?.error || 'Failed to load proposals';
-			}
+			const page = await fetchProposalsPage(1);
+			proposals = page.proposals;
+			currentPage = 1;
+			listHasMore = page.hasMore;
+			listNextFromId = page.nextFromId ?? 1;
 		} catch (e: any) {
 			const op = ctx.ui?.accessDeniedOperation?.(e);
 			if (op != null) {
@@ -102,7 +171,26 @@
 				error = e?.message ?? String(e);
 			}
 		} finally {
-			loading = false;
+			if (!background) {
+				listLoading = false;
+			}
+		}
+	}
+
+	async function loadMoreProposals() {
+		if (listLoadingMore || !listHasMore) return;
+		listLoadingMore = true;
+		error = '';
+		try {
+			const fromId = listNextFromId || 1;
+			const page = await fetchProposalsPage(fromId);
+			proposals = mergeProposals(proposals, page.proposals);
+			listHasMore = page.hasMore;
+			listNextFromId = page.nextFromId ?? fromId;
+		} catch (e: any) {
+			error = e?.message ?? String(e);
+		} finally {
+			listLoadingMore = false;
 		}
 	}
 
@@ -134,7 +222,81 @@
 		codeChecksum = primary?.checksum ?? '';
 	}
 
-	async function viewProposal(proposal: any) {
+	function buildProposalUrl(proposalId: string): string {
+		const base = getExtensionBasePath();
+		return `${window.location.origin}${base}/proposal=${encodeURIComponent(proposalId)}`;
+	}
+
+	function buildListUrl(): string {
+		const base = getExtensionBasePath();
+		return `${window.location.origin}${base}`;
+	}
+
+	function syncProposalUrl(proposalId: string | null) {
+		if (typeof window === 'undefined') return;
+		const next = proposalId ? buildProposalUrl(proposalId) : buildListUrl();
+		if (window.location.href !== next) {
+			history.replaceState({ view: proposalId ? 'detail' : 'list', proposalId }, '', next);
+		}
+	}
+
+	function goBackToList(opts?: { skipUrlSync?: boolean }) {
+		view = 'list';
+		selectedProposal = null;
+		if (!opts?.skipUrlSync) syncProposalUrl(null);
+		if (proposals.length === 0 && !listLoading) {
+			void loadProposals();
+		}
+	}
+
+	async function openProposalById(proposalId: string, opts?: { skipUrlSync?: boolean }) {
+		view = 'detail';
+		detailLoading = true;
+		error = '';
+		try {
+			let proposal: any =
+				proposals.find((p) => p.id === proposalId) ??
+				proposals.find((p) => String(p._id) === proposalId);
+			if (!proposal) {
+				selectedProposal = null;
+				const res = await callSync('get_proposal', { proposal_id: proposalId });
+				if (res?.success && res.data) proposal = res.data;
+				else if (res?.id) proposal = res;
+			}
+			if (proposal) {
+				upsertProposal(proposal);
+				await viewProposal(proposal, opts);
+			} else {
+				error = `Proposal "${proposalId}" not found`;
+				goBackToList({ skipUrlSync: true });
+			}
+		} catch (e: any) {
+			error = e?.message ?? String(e);
+			goBackToList({ skipUrlSync: true });
+		} finally {
+			detailLoading = false;
+		}
+	}
+
+	async function applyUrlState() {
+		const proposalId = parseProposalIdFromUrl();
+		if (proposalId) {
+			await openProposalById(proposalId, { skipUrlSync: true });
+		} else if (view === 'detail') {
+			goBackToList({ skipUrlSync: true });
+		}
+	}
+
+	function handlePopState() {
+		const proposalId = parseProposalIdFromUrl();
+		if (proposalId) {
+			openProposalById(proposalId, { skipUrlSync: true });
+		} else {
+			goBackToList({ skipUrlSync: true });
+		}
+	}
+
+	async function viewProposal(proposal: any, opts?: { skipUrlSync?: boolean }) {
 		selectedProposal = proposal;
 		view = 'detail';
 		codeContent = '';
@@ -144,6 +306,9 @@
 		codeError = '';
 		actionMsg = '';
 		actionError = '';
+		if (!opts?.skipUrlSync && proposal?.id) {
+			syncProposalUrl(proposal.id);
+		}
 		await fetchCode(proposal);
 	}
 
@@ -160,7 +325,10 @@
 		codeLoading = true;
 		codeError = '';
 		try {
-			const res = await callAsync('fetch_proposal_code', { proposal_id: proposal.id });
+			let res = await callSync('fetch_proposal_code', { proposal_id: proposal.id });
+			if (res?.needs_remote) {
+				res = await callAsync('fetch_proposal_code_remote', { proposal_id: proposal.id });
+			}
 			if (res?.success) {
 				applyCodePreview(res.data ?? {});
 			} else {
@@ -271,7 +439,10 @@
 		error = '';
 		accessDeniedOp = '';
 		try {
-			const res = await callAsync('fetch_proposal_code', { code_url: entry.url.trim() });
+			let res = await callSync('fetch_proposal_code', { code_url: entry.url.trim() });
+			if (res?.needs_remote) {
+				res = await callAsync('fetch_proposal_code_remote', { code_url: entry.url.trim() });
+			}
 			if (res?.success) {
 				codexEntries[i].checksum = res.data?.checksum ?? '';
 			} else {
@@ -400,6 +571,42 @@
 		return date.toLocaleString();
 	}
 
+	function parseEpochSeconds(value: any): number | null {
+		if (value == null || value === '') return null;
+		const n = typeof value === 'number' ? value : parseFloat(String(value));
+		if (!Number.isFinite(n)) return null;
+		return n > 1e12 ? Math.floor(n / 1000) : n;
+	}
+
+	function voteTally(proposal: any) {
+		const yes = Number(proposal?.votes?.yes ?? 0);
+		const no = Number(proposal?.votes?.no ?? 0);
+		const abstain = Number(proposal?.votes?.abstain ?? 0);
+		const total = yes + no + abstain;
+		return { yes, no, abstain, total };
+	}
+
+	function votePercent(count: number, total: number): string {
+		if (total <= 0) return '0%';
+		return `${((count / total) * 100).toFixed(1)}%`;
+	}
+
+	function formatTimeRemaining(deadline: any, now = Date.now()): string {
+		const epoch = parseEpochSeconds(deadline);
+		if (epoch == null) return '';
+		const diffMs = epoch * 1000 - now;
+		if (diffMs <= 0) return 'Voting closed';
+		const sec = Math.floor(diffMs / 1000);
+		const days = Math.floor(sec / 86400);
+		const hours = Math.floor((sec % 86400) / 3600);
+		const mins = Math.floor((sec % 3600) / 60);
+		const secs = sec % 60;
+		if (days > 0) return `${days}d ${hours}h ${mins}m left`;
+		if (hours > 0) return `${hours}h ${mins}m ${secs}s left`;
+		if (mins > 0) return `${mins}m ${secs}s left`;
+		return `${secs}s left`;
+	}
+
 	function truncatePrincipal(id: string): string {
 		if (!id || id.length <= 16) return id || 'unknown';
 		return id.slice(0, 8) + '...' + id.slice(-6);
@@ -415,15 +622,29 @@
 	}
 
 	onMount(() => {
-		loadProposals();
+		countdownTimer = setInterval(() => {
+			nowMs = Date.now();
+		}, 1000);
+		const proposalId = parseProposalIdFromUrl();
+		if (proposalId) {
+			void openProposalById(proposalId, { skipUrlSync: true });
+		} else {
+			void loadProposals();
+		}
+		window.addEventListener('popstate', handlePopState);
+	});
+
+	onDestroy(() => {
+		clearInterval(countdownTimer);
+		window.removeEventListener('popstate', handlePopState);
 	});
 </script>
 
 <style>
-	:global(.monaco-host),
-	:global(.monaco-diff-host) {
-		min-height: 20rem;
-		height: 100%;
+	:global(.voting-monaco-wrap) {
+		height: 28rem;
+		min-height: 28rem;
+		overflow: hidden;
 	}
 </style>
 
@@ -456,8 +677,18 @@
 	{/if}
 
 	<!-- Proposal Detail View -->
-	{#if view === 'detail' && selectedProposal}
-		<button onclick={() => { view = 'list'; selectedProposal = null; }} class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1">
+	{#if view === 'detail'}
+		{#if detailLoading && !selectedProposal}
+			<button onclick={() => goBackToList()} class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+				Back to proposals
+			</button>
+			<div class="flex items-center justify-center py-16">
+				<svg class="animate-spin h-7 w-7 text-gray-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+				<span class="ml-3 text-gray-500 text-sm">Loading proposal…</span>
+			</div>
+		{:else if selectedProposal}
+		<button onclick={() => goBackToList()} class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1">
 			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
 			Back to proposals
 		</button>
@@ -487,38 +718,63 @@
 			</div>
 
 			<!-- Voting Info -->
-			{#if selectedProposal.status === 'voting' || selectedProposal.total_voters > 0}
+			{#if selectedProposal.status === 'voting' || voteTally(selectedProposal).total > 0}
+				{@const tally = voteTally(selectedProposal)}
 				<div class="rounded-lg border border-gray-200 bg-white p-5">
-					<h3 class="text-base font-semibold text-gray-900 mb-3">Voting Results</h3>
+					<div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+						<h3 class="text-base font-semibold text-gray-900">Voting Results</h3>
+						{#if selectedProposal.status === 'voting'}
+							{#if selectedProposal.voting_deadline}
+								<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+									{formatTimeRemaining(selectedProposal.voting_deadline, nowMs)}
+								</span>
+							{:else}
+								<span class="text-xs text-gray-400">No voting deadline set</span>
+							{/if}
+						{/if}
+					</div>
 					<div class="grid grid-cols-4 gap-4 mb-4">
 						<div class="text-center">
-							<div class="text-2xl font-bold text-green-600">{selectedProposal.votes?.yes ?? 0}</div>
+							<div class="text-2xl font-bold text-green-600">{tally.yes}</div>
 							<div class="text-xs text-gray-500">Yes</div>
+							<div class="text-xs font-medium text-green-600 mt-0.5">{votePercent(tally.yes, tally.total)}</div>
 						</div>
 						<div class="text-center">
-							<div class="text-2xl font-bold text-red-600">{selectedProposal.votes?.no ?? 0}</div>
+							<div class="text-2xl font-bold text-red-600">{tally.no}</div>
 							<div class="text-xs text-gray-500">No</div>
+							<div class="text-xs font-medium text-red-600 mt-0.5">{votePercent(tally.no, tally.total)}</div>
 						</div>
 						<div class="text-center">
-							<div class="text-2xl font-bold text-gray-500">{selectedProposal.votes?.abstain ?? 0}</div>
+							<div class="text-2xl font-bold text-gray-500">{tally.abstain}</div>
 							<div class="text-xs text-gray-500">Abstain</div>
+							<div class="text-xs font-medium text-gray-600 mt-0.5">{votePercent(tally.abstain, tally.total)}</div>
 						</div>
 						<div class="text-center">
-							<div class="text-2xl font-bold text-gray-900">{selectedProposal.total_voters ?? 0}</div>
+							<div class="text-2xl font-bold text-gray-900">{tally.total}</div>
 							<div class="text-xs text-gray-500">Total</div>
+							<div class="text-xs font-medium text-gray-400 mt-0.5">100%</div>
 						</div>
 					</div>
 
-					{#if selectedProposal.total_voters > 0}
+					{#if tally.total > 0}
 						<div class="mb-4">
 							<div class="flex justify-between text-xs text-gray-500 mb-1">
-								<span>Approval</span>
-								<span>{((selectedProposal.votes?.yes ?? 0) / Math.max(selectedProposal.total_voters, 1) * 100).toFixed(1)}%</span>
+								<span>Approval (yes / decisive votes)</span>
+								<span>{votePercent(tally.yes, Math.max(tally.yes + tally.no, 1))}</span>
 							</div>
-							<div class="w-full bg-gray-200 rounded-full h-2.5">
+							<div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden flex">
 								<div
-									class="bg-green-500 h-2.5 rounded-full transition-all duration-300"
-									style="width: {((selectedProposal.votes?.yes ?? 0) / Math.max(selectedProposal.total_voters, 1)) * 100}%"
+									class="bg-green-500 h-2.5 transition-all duration-300"
+									style="width: {tally.total > 0 ? (tally.yes / tally.total) * 100 : 0}%"
+								></div>
+								<div
+									class="bg-red-500 h-2.5 transition-all duration-300"
+									style="width: {tally.total > 0 ? (tally.no / tally.total) * 100 : 0}%"
+								></div>
+								<div
+									class="bg-gray-400 h-2.5 transition-all duration-300"
+									style="width: {tally.total > 0 ? (tally.abstain / tally.total) * 100 : 0}%"
 								></div>
 							</div>
 							{#if selectedProposal.required_threshold}
@@ -639,7 +895,7 @@
 					</div>
 				{/if}
 
-				<div class="flex-1 min-h-[22rem] p-4 flex flex-col">
+				<div class="flex-1 p-4 flex flex-col min-h-0">
 					{#if codeLoading}
 						<div class="flex items-center justify-center flex-1 py-8">
 							<svg class="animate-spin h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -649,25 +905,19 @@
 						<div class="text-sm text-red-600 mb-3">{codeError}</div>
 						<button onclick={() => fetchCode(selectedProposal)} class="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100">Retry</button>
 					{:else if activeCodeFile?.code}
-						<div class="flex-1 min-h-[20rem] rounded-lg overflow-hidden border border-gray-200 bg-white">
-							{#if showCodeDiff && MonacoDiffEditor}
-								<MonacoDiffEditor
-									original={activeCodeFile.original ?? ''}
-									modified={activeCodeFile.code}
-									language={MONACO_LANGUAGE}
-									theme={MONACO_THEME}
-									readOnly={true}
-								/>
-							{:else if MonacoEditor}
-								<MonacoEditor
-									code={activeCodeFile.code}
-									language={MONACO_LANGUAGE}
-									theme={MONACO_THEME}
-									readOnly={true}
-								/>
-							{:else}
-								<pre class="p-4 overflow-x-auto text-sm h-full"><code>{activeCodeFile.code}</code></pre>
-							{/if}
+						<div class="voting-monaco-wrap rounded-lg overflow-hidden border border-gray-200 bg-white">
+							{#key `${activeCodeFile.name}-${codeChecksum}`}
+								{#if showCodeDiff}
+									<MonacoDiffPane
+										original={activeCodeFile.original ?? ''}
+										modified={activeCodeFile.code}
+										language="python"
+										readOnly={true}
+									/>
+								{:else}
+									<MonacoPane code={activeCodeFile.code} language="python" readOnly={true} />
+								{/if}
+							{/key}
 						</div>
 						{#if codeChecksum}
 							<div class="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center text-xs text-gray-500">
@@ -687,6 +937,7 @@
 				<span class="font-medium">Security note:</span> Always review proposal code carefully before voting.
 			</div>
 		</div>
+		{/if}
 
 	<!-- Submit Proposal Form View -->
 	{:else if view === 'form'}
@@ -859,11 +1110,11 @@
 					</button>
 				</div>
 				<button
-					onclick={loadProposals}
-					disabled={loading}
+					onclick={() => loadProposals()}
+					disabled={listLoading}
 					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
 				>
-					{#if loading}
+					{#if listLoading}
 						<div class="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
 						Loading…
 					{:else}
@@ -874,12 +1125,12 @@
 			</div>
 
 			<!-- Content -->
-			{#if loading}
+			{#if listLoading && proposals.length === 0}
 				<div class="flex items-center justify-center py-12">
 					<svg class="animate-spin h-7 w-7 text-gray-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
 					<span class="ml-3 text-gray-500 text-sm">Loading proposals…</span>
 				</div>
-			{:else if proposals.length === 0}
+			{:else if !listLoading && proposals.length === 0}
 				<div class="text-center py-12">
 					<svg class="mx-auto h-10 w-10 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
 					<p class="text-gray-500 text-sm">No proposals yet</p>
@@ -909,16 +1160,22 @@
 								<span>{formatDate(proposal.created_at)}</span>
 							</div>
 							{#if proposal.status === 'voting'}
+								{@const tally = voteTally(proposal)}
 								<div class="pt-2 border-t border-gray-100">
-									<div class="flex justify-between items-center mb-2">
+									<div class="flex justify-between items-center mb-2 gap-2">
 										<div class="flex gap-3 text-xs">
-											<span class="text-green-600">Y:{proposal.votes?.yes ?? 0}</span>
-											<span class="text-red-600">N:{proposal.votes?.no ?? 0}</span>
-											<span class="text-gray-500">A:{proposal.votes?.abstain ?? 0}</span>
+											<span class="text-green-600">Y:{tally.yes} ({votePercent(tally.yes, tally.total)})</span>
+											<span class="text-red-600">N:{tally.no} ({votePercent(tally.no, tally.total)})</span>
+											<span class="text-gray-500">A:{tally.abstain} ({votePercent(tally.abstain, tally.total)})</span>
 										</div>
+										{#if proposal.voting_deadline}
+											<span class="text-xs text-emerald-600 whitespace-nowrap">{formatTimeRemaining(proposal.voting_deadline, nowMs)}</span>
+										{/if}
 									</div>
-									<div class="w-full bg-gray-200 rounded-full h-1.5 mb-2">
-										<div class="bg-green-500 h-1.5 rounded-full" style="width: {((proposal.votes?.yes ?? 0) / Math.max(proposal.total_voters, 1)) * 100}%"></div>
+									<div class="w-full bg-gray-200 rounded-full h-1.5 mb-2 overflow-hidden flex">
+										<div class="bg-green-500 h-1.5" style="width: {tally.total > 0 ? (tally.yes / tally.total) * 100 : 0}%"></div>
+										<div class="bg-red-500 h-1.5" style="width: {tally.total > 0 ? (tally.no / tally.total) * 100 : 0}%"></div>
+										<div class="bg-gray-400 h-1.5" style="width: {tally.total > 0 ? (tally.abstain / tally.total) * 100 : 0}%"></div>
 									</div>
 									<div class="flex gap-1">
 										<button onclick={() => castVote(proposal.id, 'yes')} disabled={!!votingInProgress} class="flex-1 py-1.5 rounded border border-green-300 text-xs text-green-700 hover:bg-green-50 disabled:opacity-50">Yes</button>
@@ -935,7 +1192,7 @@
 				{#if totalPages > 1}
 					<div class="flex items-center justify-between px-5 py-3 border-t border-gray-200">
 						<span class="text-xs text-gray-500">
-							{(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, sortedProposals.length)} of {sortedProposals.length}
+							{(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, sortedProposals.length)} of {sortedProposals.length} loaded
 						</span>
 						<div class="flex items-center gap-2">
 							<button
@@ -956,6 +1213,23 @@
 								<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
 							</button>
 						</div>
+					</div>
+				{/if}
+
+				{#if listHasMore}
+					<div class="flex justify-center px-5 py-4 border-t border-gray-200">
+						<button
+							onclick={() => loadMoreProposals()}
+							disabled={listLoadingMore}
+							class="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+						>
+							{#if listLoadingMore}
+								<div class="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+								Loading more…
+							{:else}
+								Load more proposals
+							{/if}
+						</button>
 					</div>
 				{/if}
 			{/if}

@@ -12,6 +12,6 @@
     "en": "My Realm"
   },
   "icon": "world",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/public_dashboard",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/public_dashboard",
   "show_in_sidebar": true
 }

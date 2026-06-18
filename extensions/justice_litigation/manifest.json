@@ -38,6 +38,6 @@
     "en": "Justice"
   },
   "icon": "gavel",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/justice_litigation",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/justice_litigation",
   "show_in_sidebar": true
 }

@@ -21,7 +21,7 @@
     "en": "Passport Verification"
   },
   "icon": "id-badge",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/passport_verification",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/passport_verification",
   "show_in_sidebar": true,
   "identity_provider": {
     "name": "RariMe Passport",

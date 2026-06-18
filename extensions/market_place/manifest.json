@@ -13,7 +13,7 @@
     "settings"
   ],
   "icon": "building-store",
-  "doc_url": "https://github.com/smart-social-contracts/extensions/market_place",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/market_place",
   "path": "extensions",
   "sidebar_label": {
     "en": "Marketplace"

@@ -14,6 +14,7 @@ from .constants import (
     CITY_COORDINATES,
     CODEX_RAW_BASE,
     COURT_NAMES,
+    DEFAULT_PROPOSAL_PROFILE,
     DEMO_CODEX_NAMES,
     DEPARTMENT_DEFINITIONS,
     EXPENSE_BUDGETS,
@@ -26,6 +27,7 @@ from .constants import (
     LEDGER_TEMPLATES,
     MESSAGE_TEMPLATES,
     ORG_NAMES,
+    PROPOSAL_PROFILES,
     PROPOSAL_TITLES,
     REVENUE_BUDGETS,
     VERDICT_DECISIONS,
@@ -110,24 +112,199 @@ def generate_org_batch(state_data, count):
     return created
 
 
-def _demo_inline_new_codex(idx: int) -> str:
-    """Small inline Python for brand-new codex demo proposals."""
+def _extract_proposal_title_base(title: str) -> str:
+    """Strip the trailing ' (#N)' suffix from demo proposal titles."""
+    if not title:
+        return ""
+    marker = " (#"
+    if marker in title:
+        return title.rsplit(marker, 1)[0].strip()
+    return title.strip()
+
+
+def _proposal_profile(title_base: str) -> dict:
+    return PROPOSAL_PROFILES.get(title_base, DEFAULT_PROPOSAL_PROFILE)
+
+
+def _is_legacy_proposal_description(description: str) -> bool:
+    if not description:
+        return True
+    return description.startswith("Auto-generated demo")
+
+
+def _escape_codex_string(value: str) -> str:
+    return (value or "").replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+
+
+def _demo_inline_new_codex(title_base: str, idx: int, codex_name: str) -> str:
+    """Inline Python codex tailored to the proposal theme."""
+    profile = _proposal_profile(title_base)
+    summary = _escape_codex_string(profile["description"][:120])
     return (
-        f'"""Demo inline codex #{idx + 1}"""\n\n'
+        f'"""{title_base} — proposed codex ({codex_name})."""\n\n'
+        f'PROPOSAL_ID = "demo_prop_{idx:04d}"\n'
+        f'POLICY_TITLE = "{_escape_codex_string(title_base)}"\n'
+        f'CODEX_NAME = "{codex_name}"\n\n'
+        "def configure():\n"
+        '    """Apply policy parameters when this proposal is executed."""\n'
+        "    return {\n"
+        '        "proposal_id": PROPOSAL_ID,\n'
+        '        "codex": CODEX_NAME,\n'
+        '        "policy": POLICY_TITLE,\n'
+        f'        "summary": "{summary}...",\n'
+        "    }\n\n"
         "def main():\n"
-        f'    return {{"demo": True, "proposal_index": {idx}}}\n'
+        '    logger.info("Executing demo codex for %s", POLICY_TITLE)\n'
+        "    result = configure()\n"
+        "    return result\n"
     )
 
 
-def _demo_inline_amendment(codex_name: str, idx: int) -> str:
-    """Proposed codex body for amendment demos (baseline comes from Codex on canister)."""
+def _demo_inline_amendment(title_base: str, codex_name: str, idx: int) -> str:
+    """Amendment codex that references the realm baseline and the proposal theme."""
+    profile = _proposal_profile(title_base)
+    amend_target = profile.get("amend_target", codex_name)
+    rationale = _escape_codex_string(profile["description"][:160])
     return (
-        f'"""Amended {codex_name} (demo proposal #{idx + 1})"""\n\n'
-        "# Demo amendment: extends realm codex with a tagged change.\n"
+        f'"""Amend {amend_target} — {title_base}."""\n\n'
+        f'PROPOSAL_ID = "demo_prop_{idx:04d}"\n'
+        f'BASELINE_CODEX = "{amend_target}"\n'
+        f'POLICY_TITLE = "{_escape_codex_string(title_base)}"\n'
         f"DEMO_AMENDMENT_TAG = 'demo_prop_{idx:04d}'\n\n"
+        "def apply_amendment():\n"
+        '    """Describe the amendment applied on execution."""\n'
+        "    return {\n"
+        '        "proposal_id": PROPOSAL_ID,\n'
+        '        "baseline_codex": BASELINE_CODEX,\n'
+        '        "policy": POLICY_TITLE,\n'
+        '        "amendment_tag": DEMO_AMENDMENT_TAG,\n'
+        f'        "rationale": "{rationale}",\n'
+        "    }\n\n"
         "def main():\n"
-        f'    return {{"codex": "{codex_name}", "amendment": DEMO_AMENDMENT_TAG}}\n'
+        f'    logger.info("Applying amendment to %s for %s", BASELINE_CODEX, POLICY_TITLE)\n'
+        "    return apply_amendment()\n"
     )
+
+
+def _build_demo_proposal_payload(title_base: str, idx: int, rng: random.Random):
+    """Build description, metadata, and code_url for a demo proposal."""
+    profile = _proposal_profile(title_base)
+    description = profile["description"]
+    kind = idx % 4
+    metadata = {}
+    code_url = ""
+    code_checksum = ""
+
+    if kind == 0:
+        codex_name = profile.get("codex_name", f"demo_inline_{idx:04d}")
+        metadata = {
+            "proposal_type": "code_execution",
+            "codex_name": codex_name,
+            "code_inline": _demo_inline_new_codex(title_base, idx, codex_name),
+        }
+    elif kind == 1:
+        codex_name = profile.get("amend_target") or rng.choice(DEMO_CODEX_NAMES)
+        code_url = f"{CODEX_RAW_BASE}{codex_name}.py"
+        metadata = {
+            "proposal_type": "code_execution",
+            "codex_name": codex_name,
+            "policy_title": title_base,
+        }
+    elif kind == 2:
+        codex_name = profile.get("amend_target") or rng.choice(DEMO_CODEX_NAMES)
+        metadata = {
+            "proposal_type": "codex_amendment",
+            "codex_name": codex_name,
+            "code_inline": _demo_inline_amendment(title_base, codex_name, idx),
+        }
+    else:
+        names = list(DEMO_CODEX_NAMES)
+        codex_entries = [
+            {"name": names[0], "url": f"{CODEX_RAW_BASE}{names[0]}.py", "checksum": ""},
+            {"name": names[1], "url": f"{CODEX_RAW_BASE}{names[1]}.py", "checksum": ""},
+        ] if len(names) >= 2 else [
+            {"name": names[0], "url": f"{CODEX_RAW_BASE}{names[0]}.py", "checksum": ""},
+        ]
+        code_url = codex_entries[0]["url"]
+        metadata = {
+            "proposal_type": "codex_amendment",
+            "codices": codex_entries,
+            "policy_title": title_base,
+        }
+
+    return description, metadata, code_url, code_checksum
+
+
+def _proposal_needs_content_backfill(proposal) -> bool:
+    import json
+
+    if not (proposal.proposal_id or "").startswith("demo_prop_"):
+        return False
+    if _is_legacy_proposal_description(proposal.description or ""):
+        return True
+    meta = {}
+    try:
+        meta = json.loads(proposal.metadata) if proposal.metadata else {}
+    except Exception:
+        return True
+    has_code = bool(
+        meta.get("code_inline")
+        or meta.get("codices")
+        or (proposal.code_url and str(proposal.code_url) not in ("None", ""))
+    )
+    return not has_code
+
+
+def backfill_proposal_content(page_size: int = 20, max_pages: int = 50):
+    """Attach meaningful descriptions and code to legacy demo proposals."""
+    import json
+
+    from ggg import Proposal
+
+    rng = random.Random(42)
+    updated = []
+    from_id = 1
+    pages = 0
+    max_id = Proposal.max_id()
+
+    while from_id <= max_id and pages < max_pages:
+        batch = Proposal.load_some(from_id=from_id, count=page_size)
+        if not batch:
+            break
+        pages += 1
+
+        for proposal in batch:
+            entity_id = int(getattr(proposal, "_id", 0) or 0)
+            if entity_id:
+                from_id = entity_id + 1
+            else:
+                from_id += 1
+
+            if not _proposal_needs_content_backfill(proposal):
+                continue
+
+            try:
+                idx = int(proposal.proposal_id.split("_")[-1])
+            except (ValueError, AttributeError):
+                continue
+
+            title_base = _extract_proposal_title_base(proposal.title or "")
+            if not title_base:
+                continue
+
+            description, metadata, code_url, code_checksum = _build_demo_proposal_payload(
+                title_base, idx, rng
+            )
+            proposal.description = description
+            proposal.metadata = json.dumps(metadata)
+            proposal.code_url = code_url or ""
+            proposal.code_checksum = code_checksum or ""
+            updated.append(proposal.proposal_id)
+
+        if len(batch) < page_size:
+            break
+
+    return updated
 
 
 def generate_proposal_batch(state_data, count):
@@ -149,58 +326,9 @@ def generate_proposal_batch(state_data, count):
         if total_users > 0:
             proposer = User[f"demo_user_{rng.randint(0, total_users - 1):04d}"]
 
-        kind = idx % 4
-        metadata = {}
-        code_url = ""
-        code_checksum = ""
-
-        if kind == 0:
-            codex_name = f"demo_inline_{idx:04d}"
-            metadata = {
-                "proposal_type": "code_execution",
-                "codex_name": codex_name,
-                "code_inline": _demo_inline_new_codex(idx),
-            }
-            description = f"Auto-generated demo (inline new codex): {title}"
-        elif kind == 1:
-            codex_name = rng.choice(DEMO_CODEX_NAMES)
-            code_url = f"{CODEX_RAW_BASE}{codex_name}.py"
-            metadata = {
-                "proposal_type": "code_execution",
-                "codex_name": codex_name,
-            }
-            description = f"Auto-generated demo (remote URL codex): {title}"
-        elif kind == 2:
-            codex_name = rng.choice(DEMO_CODEX_NAMES)
-            metadata = {
-                "proposal_type": "codex_amendment",
-                "codex_name": codex_name,
-                "code_inline": _demo_inline_amendment(codex_name, idx),
-            }
-            description = f"Auto-generated demo (amend codex '{codex_name}'): {title}"
-        else:
-            names = list(DEMO_CODEX_NAMES)
-            if len(names) >= 2:
-                codex_entries = [
-                    {"name": names[0], "url": f"{CODEX_RAW_BASE}{names[0]}.py", "checksum": ""},
-                    {"name": names[1], "url": f"{CODEX_RAW_BASE}{names[1]}.py", "checksum": ""},
-                ]
-            else:
-                codex_entries = [
-                    {
-                        "name": names[0],
-                        "url": f"{CODEX_RAW_BASE}{names[0]}.py",
-                        "checksum": "",
-                    },
-                ]
-            code_url = codex_entries[0]["url"]
-            metadata = {
-                "proposal_type": "codex_amendment",
-                "codices": codex_entries,
-            }
-            description = (
-                f"Auto-generated demo (multi-codex, {len(codex_entries)} files): {title}"
-            )
+        description, metadata, code_url, code_checksum = _build_demo_proposal_payload(
+            title, idx, rng
+        )
 
         p = Proposal(
             proposal_id=f"demo_prop_{idx:04d}",

@@ -19,6 +19,6 @@
     "en": "Zones"
   },
   "icon": "layers-subtract",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/zone_selector",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/zone_selector",
   "show_in_sidebar": true
 }

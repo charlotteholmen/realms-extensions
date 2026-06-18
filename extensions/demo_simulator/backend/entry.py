@@ -12,6 +12,7 @@ from ic_python_logging import get_logger
 
 from .constants import DEFAULT_BATCH_SIZE, DEFAULT_INTERVAL_SECONDS, MAX_ENTITIES_TOTAL, SCHEDULE_NAME
 from .generators import (
+    backfill_proposal_content,
     generate_budget_batch,
     generate_case_batch,
     generate_court_batch,
@@ -139,6 +140,7 @@ def extension_sync_call(method_name: str, args: dict):
         "set_seed": set_seed,
         "reset": reset,
         "run_once": run_once,
+        "backfill_proposals": backfill_proposals,
     }
 
     if method_name not in methods:
@@ -350,3 +352,18 @@ def reset(args):
 def run_once(args):
     """Manually trigger a single batch (regardless of schedule state)."""
     return run_batch(json.dumps(args) if isinstance(args, dict) else args or "{}")
+
+
+def backfill_proposals(args):
+    """Backfill meaningful descriptions and proposal code on legacy demo proposals."""
+    if isinstance(args, str):
+        args = json.loads(args) if args else {}
+
+    page_size = int(args.get("page_size", 20))
+    max_pages = int(args.get("max_pages", 50))
+    updated = backfill_proposal_content(page_size=page_size, max_pages=max_pages)
+    return json.dumps({
+        "success": True,
+        "count": len(updated),
+        "updated": updated,
+    })

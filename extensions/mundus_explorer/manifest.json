@@ -20,6 +20,6 @@
     "en": "Realms Network"
   },
   "icon": "world",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/mundus_explorer",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/mundus_explorer",
   "show_in_sidebar": true
 }

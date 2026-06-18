@@ -21,7 +21,7 @@
     "public_services"
   ],
   "icon": "map-2",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/land_registry",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/land_registry",
   "show_in_sidebar": true,
   "sidebar_label": {
     "en": "Land Registry"

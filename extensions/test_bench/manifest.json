@@ -15,7 +15,7 @@
     "other"
   ],
   "icon": "bug",
-  "doc_url": "https://github.com/smart-social-contracts/realms/tree/main/extensions/test_bench",
+  "doc_url": "https://github.com/smart-social-contracts/realms-extensions/tree/main/extensions/test_bench",
   "show_in_sidebar": false,
   "sidebar_label": {
     "en": "Test Bench"

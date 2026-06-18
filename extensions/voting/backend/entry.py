@@ -23,6 +23,24 @@ from ic_python_logging import get_logger
 
 logger = get_logger("extensions.voting")
 
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 50
+
+# Large metadata keys omitted from list responses.
+_HEAVY_METADATA_KEYS = frozenset({"code_inline", "details"})
+
+# Non-governance Proposal records created by other Agora codices.
+_NON_VOTING_METADATA_TYPES = frozenset({
+    "justice_case",
+    "procurement_tender",
+    "procurement",
+    "violation_report",
+    "defense_enlistment",
+    "defense_mission",
+    "registration",
+    "warning",
+})
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,17 +55,69 @@ def _parse_args(args):
     return {}
 
 
-def _proposal_to_dict(proposal: Proposal) -> Dict[str, Any]:
-    """Convert Proposal entity to dictionary."""
-    timestamps = proposal.serialize() if hasattr(proposal, 'serialize') else {}
-    # Return epoch seconds as numbers — frontend handles formatting
-    raw_created = timestamps.get("timestamp_created", "")
-    created_at = None
-    if raw_created and str(raw_created) not in ("None", ""):
+def _proposal_created_at(proposal: Proposal):
+    """Return created_at as epoch seconds without calling serialize()."""
+    ts_ms = getattr(proposal, "_timestamp_created", 0) or 0
+    if ts_ms:
+        return ts_ms / 1000.0
+    raw = getattr(proposal, "timestamp_created", "") or ""
+    if raw and str(raw) not in ("None", ""):
         try:
-            created_at = float(raw_created)
+            return float(raw)
         except (ValueError, TypeError):
-            created_at = None
+            pass
+    if hasattr(proposal, "serialize"):
+        try:
+            timestamps = proposal.serialize()
+            raw_created = timestamps.get("timestamp_created", "")
+            if raw_created and str(raw_created) not in ("None", ""):
+                return float(raw_created)
+        except Exception:
+            pass
+    return None
+
+
+def _metadata_for_list(raw_metadata: str) -> str:
+    """Strip heavy metadata fields for list responses."""
+    if not raw_metadata:
+        return "{}"
+    try:
+        meta = json.loads(raw_metadata)
+    except Exception:
+        return raw_metadata[:200] if len(raw_metadata) > 200 else raw_metadata
+    if not isinstance(meta, dict):
+        return raw_metadata
+    summary = {k: v for k, v in meta.items() if k not in _HEAVY_METADATA_KEYS}
+    if "codices" in meta and isinstance(meta["codices"], list):
+        summary["codices"] = [
+            {"name": c.get("name", ""), "url": c.get("url", "")}
+            for c in meta["codices"]
+            if isinstance(c, dict)
+        ]
+        summary["codices_count"] = len(meta["codices"])
+    if "code_inline" in meta:
+        summary["has_inline_code"] = True
+    return json.dumps(summary)
+
+
+def _is_voting_proposal(proposal: Proposal) -> bool:
+    """True when the proposal belongs in the Voting extension UI."""
+    if proposal.proposal_id:
+        return True
+    meta = _load_metadata(proposal)
+    if meta.get("proposal_type"):
+        return True
+    meta_type = meta.get("type", "")
+    if meta_type in _NON_VOTING_METADATA_TYPES:
+        return False
+    if meta_type:
+        return True
+    return False
+
+
+def _proposal_to_dict(proposal: Proposal, *, summary: bool = False) -> Dict[str, Any]:
+    """Convert Proposal entity to dictionary."""
+    created_at = _proposal_created_at(proposal)
     deadline_str = proposal.voting_deadline or ""
     voting_deadline = None
     if deadline_str and str(deadline_str) not in ("None", ""):
@@ -55,8 +125,14 @@ def _proposal_to_dict(proposal: Proposal) -> Dict[str, Any]:
             voting_deadline = float(deadline_str)
         except (ValueError, TypeError):
             voting_deadline = None
+    proposal_key = proposal.proposal_id or str(getattr(proposal, "_id", "") or "")
+    metadata = (
+        _metadata_for_list(proposal.metadata or "{}")
+        if summary
+        else (proposal.metadata or "{}")
+    )
     return {
-        "id": proposal.proposal_id,
+        "id": proposal_key,
         "title": proposal.title,
         "description": proposal.description,
         "code_url": proposal.code_url,
@@ -72,7 +148,7 @@ def _proposal_to_dict(proposal: Proposal) -> Dict[str, Any]:
         },
         "total_voters": int(proposal.total_voters or 0),
         "required_threshold": proposal.required_threshold,
-        "metadata": proposal.metadata or "{}",
+        "metadata": metadata,
     }
 
 
@@ -630,20 +706,78 @@ def _build_file_preview(
 # ---------------------------------------------------------------------------
 
 def get_proposals(args: str) -> str:
-    """Get all proposals with optional status filtering."""
+    """Get proposals with optional status filtering and pagination.
+
+    Uses ``Proposal.load_some`` so large realms (demo data, justice cases,
+    procurement tenders sharing the Proposal entity) stay under the IC
+    per-message instruction limit.
+    """
     try:
         args_dict = _parse_args(args)
         status_filter = args_dict.get("status")
+        include_non_voting = bool(args_dict.get("include_non_voting", False))
+        from_id = max(1, int(args_dict.get("from_id", 1)))
+        page_size = min(
+            max(1, int(args_dict.get("page_size", DEFAULT_PAGE_SIZE))),
+            MAX_PAGE_SIZE,
+        )
 
-        all_proposals = Proposal.instances()
-        if status_filter:
-            all_proposals = [p for p in all_proposals if p.status == status_filter]
+        max_id = Proposal.max_id()
+        proposals: List[Dict[str, Any]] = []
+        current_from = from_id
+        next_from_id = from_id
+        attempts = 0
+
+        while len(proposals) < page_size and current_from <= max_id and attempts < 20:
+            try:
+                batch = Proposal.load_some(from_id=current_from, count=page_size)
+            except Exception as batch_err:
+                logger.warning(
+                    f"get_proposals: batch load failed at from_id={current_from}: {batch_err}"
+                )
+                batch = []
+                for eid in range(current_from, min(current_from + page_size, max_id + 1)):
+                    try:
+                        entity = Proposal.load(str(eid))
+                        if entity:
+                            batch.append(entity)
+                    except Exception:
+                        pass
+
+            if not batch:
+                break
+
+            for proposal in batch:
+                entity_id = int(getattr(proposal, "_id", 0) or 0)
+                if entity_id:
+                    next_from_id = entity_id + 1
+                    current_from = next_from_id
+                else:
+                    current_from += 1
+
+                if not include_non_voting and not _is_voting_proposal(proposal):
+                    continue
+                if status_filter and proposal.status != status_filter:
+                    continue
+
+                proposals.append(_proposal_to_dict(proposal, summary=True))
+                if len(proposals) >= page_size:
+                    break
+
+            attempts += 1
+            if len(batch) < page_size:
+                break
+
+        has_more = next_from_id <= max_id
 
         return json.dumps({
             "success": True,
             "data": {
-                "proposals": [_proposal_to_dict(p) for p in all_proposals],
-                "total": len(all_proposals),
+                "proposals": proposals,
+                "total": len(proposals),
+                "from_id": from_id,
+                "next_from_id": next_from_id if has_more else None,
+                "has_more": has_more,
             }
         })
     except Exception as e:
@@ -979,13 +1113,13 @@ def execute_proposal(args: str) -> Async[str]:
         return json.dumps({"success": False, "error": str(e)})
 
 
-def fetch_proposal_code(args: str) -> Async[str]:
-    """Fetch and preview proposal code (read-only).
+def fetch_proposal_code(args: str) -> str:
+    """Fetch and preview proposal code when content is already on-canister (read-only).
 
     Accepts proposal_id (loads from proposal) or code_url (checksum helper).
 
-    For amendments, ``original`` is loaded from the matching ``Codex`` entity on
-    the realm canister. Multi-codex proposals return a ``files`` array.
+    Returns ``needs_remote: true`` when the code must be downloaded via HTTP;
+    call ``fetch_proposal_code_remote`` for those cases.
     """
     try:
         args_dict = _parse_args(args)
@@ -1012,8 +1146,7 @@ def fetch_proposal_code(args: str) -> Async[str]:
                     if entry_inline:
                         proposed = entry_inline
                     elif entry_url:
-                        logger.info(f"Fetching codex preview for {name}: {entry_url}")
-                        proposed = yield from _http_download(entry_url)
+                        return json.dumps({"success": False, "needs_remote": True})
                     else:
                         return json.dumps({
                             "success": False,
@@ -1057,7 +1190,74 @@ def fetch_proposal_code(args: str) -> Async[str]:
             if not proposal.code_url:
                 return json.dumps({"success": False, "error": "Proposal has no code attached"})
 
+            return json.dumps({"success": False, "needs_remote": True})
+
+        if not code_url:
+            return json.dumps({"success": False, "error": "proposal_id or code_url is required"})
+
+        return json.dumps({"success": False, "needs_remote": True})
+    except Exception as e:
+        logger.error(f"fetch_proposal_code error: {e}\n{traceback.format_exc()}")
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def fetch_proposal_code_remote(args: str) -> Async[str]:
+    """Fetch proposal code that requires an HTTP outcall (read-only)."""
+    try:
+        args_dict = _parse_args(args)
+        proposal_id = args_dict.get("proposal_id")
+        code_url = args_dict.get("code_url")
+
+        if proposal_id:
+            proposal = _find_proposal(proposal_id)
+            if not proposal:
+                return json.dumps({"success": False, "error": "Proposal not found"})
+
+            metadata = _load_metadata(proposal)
+            codices_list = metadata.get("codices") or []
+
+            if codices_list:
+                files = []
+                for entry in codices_list:
+                    name = entry.get("name", "")
+                    if not name:
+                        return json.dumps({"success": False, "error": "codices entry missing name"})
+                    entry_inline = entry.get("code_inline", "")
+                    entry_url = entry.get("url", "")
+                    if entry_inline:
+                        proposed = entry_inline
+                    elif entry_url:
+                        logger.info(f"Fetching codex preview for {name}: {entry_url}")
+                        proposed = yield from _http_download(entry_url)
+                    else:
+                        return json.dumps({
+                            "success": False,
+                            "error": f"codices entry '{name}' has no url or code_inline",
+                        })
+                    files.append(_build_file_preview(
+                        name,
+                        proposed,
+                        code_url=entry_url,
+                        stored_checksum=entry.get("checksum", ""),
+                    ))
+                primary = files[0]
+                return json.dumps({
+                    "success": True,
+                    "data": {
+                        "mode": "multi",
+                        "files": files,
+                        "code": primary["code"],
+                        "original": primary.get("original"),
+                        "is_amendment": primary["is_amendment"],
+                        "codex_name": primary["name"],
+                        "checksum": primary["checksum"],
+                    },
+                })
+
             code_url = proposal.code_url
+            if not code_url:
+                return json.dumps({"success": False, "error": "Proposal has no remote code URL"})
+
             logger.info(f"Fetching code preview from: {code_url}")
             code_content = yield from _http_download(code_url)
             codex_name = metadata.get("codex_name", "")
@@ -1094,7 +1294,7 @@ def fetch_proposal_code(args: str) -> Async[str]:
             },
         })
     except Exception as e:
-        logger.error(f"fetch_proposal_code error: {e}\n{traceback.format_exc()}")
+        logger.error(f"fetch_proposal_code_remote error: {e}\n{traceback.format_exc()}")
         return json.dumps({"success": False, "error": str(e)})
 
 
@@ -1186,6 +1386,7 @@ EXTENSION_FUNCTIONS = {
     "approve_proposal": approve_proposal,
     "execute_proposal": execute_proposal,
     "fetch_proposal_code": fetch_proposal_code,
+    "fetch_proposal_code_remote": fetch_proposal_code_remote,
     "get_user_vote": get_user_vote,
     "demo_approve_and_execute": demo_approve_and_execute,
 }
