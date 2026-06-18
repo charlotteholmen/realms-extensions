@@ -292,8 +292,8 @@
 				</div>
 			</div>
 
-			<!-- Manage button -->
-			<div class="mb-6">
+			<!-- Quick links -->
+			<div class={cn('flex flex-wrap gap-3 mb-6')}>
 				<button
 					onclick={() => ctx.navigate?.('/extensions/package_manager')}
 					class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
@@ -303,63 +303,18 @@
 					</svg>
 					Manage Packages
 				</button>
+				<button
+					onclick={() => ctx.navigate?.('/extensions/market_place')}
+					class="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+				>
+					Browse Marketplace
+				</button>
 			</div>
 
-			<!-- Installed extensions list -->
-			{#if Object.keys(extensionManifests).length > 0}
-				<div class="bg-white shadow-sm rounded-lg border border-gray-200 mb-6">
-					<div class="px-6 py-4 border-b border-gray-200">
-						<h2 class="text-lg font-semibold text-gray-900">Installed Extensions</h2>
-					</div>
-					<div class="divide-y divide-gray-100">
-						{#each Object.entries(extensionManifests) as [id, manifest]}
-							<div class="px-6 py-3 flex items-center justify-between">
-								<div class="flex items-center gap-3 min-w-0">
-									<div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-sm font-bold shrink-0">
-										{(manifest.name || id).charAt(0).toUpperCase()}
-									</div>
-									<div class="min-w-0">
-										<div class="text-sm font-medium text-gray-900 truncate">{manifest.name || id}</div>
-										{#if manifest.description}
-											<div class="text-xs text-gray-500 truncate">{manifest.description}</div>
-										{/if}
-									</div>
-								</div>
-								<span class="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded shrink-0">
-									v{manifest.version || '?'}
-								</span>
-							</div>
-						{/each}
-					</div>
-				</div>
-			{/if}
-
-			<!-- Installed codexes list -->
-			{#if Object.keys(codexManifests).length > 0}
-				<div class="bg-white shadow-sm rounded-lg border border-gray-200">
-					<div class="px-6 py-4 border-b border-gray-200">
-						<h2 class="text-lg font-semibold text-gray-900">Installed Codexes</h2>
-					</div>
-					<div class="divide-y divide-gray-100">
-						{#each Object.entries(codexManifests) as [id, manifest]}
-							<div class="px-6 py-3 flex items-center justify-between">
-								<div class="flex items-center gap-3 min-w-0">
-									<div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-sm shrink-0">📜</div>
-									<div class="min-w-0">
-										<div class="text-sm font-medium text-gray-900 truncate">{manifest.name || id}</div>
-										{#if manifest.description}
-											<div class="text-xs text-gray-500 truncate">{manifest.description}</div>
-										{/if}
-									</div>
-								</div>
-								<span class="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded shrink-0">
-									v{manifest.version || '?'}
-								</span>
-							</div>
-						{/each}
-					</div>
-				</div>
-			{/if}
+			<p class="text-sm text-gray-500 mb-6">
+				Use Package Manager to install, update, or remove packages on this realm.
+				Use the Access Control tab to manage who can see each extension in the sidebar.
+			</p>
 		{/if}
 
 	{:else if activeTab === 'access'}

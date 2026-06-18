@@ -1,7 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import MonacoPane from './MonacoPane.svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import MonacoPane, { type LineRange, type SelectionInfo } from './MonacoPane.svelte';
+
 	let { ctx }: { ctx: any } = $props();
+
+	let aiAssistantEnabled = $derived(ctx.config?.aiAssistantEnabled !== false);
 
 	interface Codex {
 		_id: string;
@@ -18,6 +21,7 @@
 
 	const MONACO_THEME = 'vs';
 	const MONACO_LANGUAGE = 'python';
+	const EXTENSION_ID = 'codex_viewer';
 
 	let codexes: Codex[] = $state([]);
 	let loading = $state(true);
@@ -27,6 +31,11 @@
 	let selectedCodex: Codex | null = $state(null);
 	let detailLoading = $state(false);
 	let copied = $state(false);
+	let linkCopied = $state(false);
+	let currentSelection: SelectionInfo | null = $state(null);
+	let initialRange: LineRange | null = $state(null);
+	let pendingExplainOnLoad = $state(false);
+	let urlSyncTimer: ReturnType<typeof setTimeout> | undefined;
 
 	let filteredCodexes = $derived(
 		searchTerm.trim()
@@ -46,8 +55,128 @@
 			: '',
 	);
 
+	let explainButtonLabel = $derived(
+		currentSelection?.text?.trim() ? 'Explain selection' : 'Explain codex',
+	);
+
 	async function callExt(fn: string, args: Record<string, unknown> = {}) {
 		return await ctx.callSync(fn, args);
+	}
+
+	function getCodexId(codex: Codex): string {
+		return codex._id || codex.id || codex.name || '';
+	}
+
+	function parseLinesParam(lines: string | null): LineRange | null {
+		if (!lines) return null;
+		const match = lines.match(/^(\d+)(?:-(\d+))?$/);
+		if (!match) return null;
+		const start = parseInt(match[1], 10);
+		const end = match[2] ? parseInt(match[2], 10) : start;
+		if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+		return {
+			startLine: Math.min(start, end),
+			endLine: Math.max(start, end),
+		};
+	}
+
+	function buildFocusUri(codexId: string, range?: LineRange | null): string {
+		const base = `realms://${EXTENSION_ID}/codex/${encodeURIComponent(codexId)}`;
+		if (!range) return base;
+		if (range.startLine === range.endLine) {
+			return `${base}?lines=${range.startLine}`;
+		}
+		return `${base}?lines=${range.startLine}-${range.endLine}`;
+	}
+
+	function buildShareUrl(codexId: string, range?: LineRange | null): string {
+		const params = new URLSearchParams({ codex: codexId });
+		if (range) {
+			params.set(
+				'lines',
+				range.startLine === range.endLine
+					? String(range.startLine)
+					: `${range.startLine}-${range.endLine}`,
+			);
+		}
+		return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+	}
+
+	function buildFocusLabel(codex: Codex, range?: LineRange | null): string {
+		const name = codex.name || getCodexId(codex);
+		if (!range) return name;
+		if (range.startLine === range.endLine) return `${name}, line ${range.startLine}`;
+		return `${name}, lines ${range.startLine}–${range.endLine}`;
+	}
+
+	function publishFocus(codex: Codex, selection: SelectionInfo | null) {
+		const codexId = getCodexId(codex);
+		const range = selection
+			? { startLine: selection.startLine, endLine: selection.endLine }
+			: null;
+		ctx.host?.setFocus?.({
+			source: EXTENSION_ID,
+			uri: buildFocusUri(codexId, range),
+			label: buildFocusLabel(codex, range),
+			snapshot:
+				selection?.text?.trim()
+					? {
+							languageId: MONACO_LANGUAGE,
+							range: {
+								startLine: selection.startLine,
+								endLine: selection.endLine,
+							},
+							text: selection.text,
+						}
+					: undefined,
+		});
+	}
+
+	function syncUrlFromState(codex: Codex, selection: SelectionInfo | null) {
+		if (typeof window === 'undefined') return;
+		const codexId = getCodexId(codex);
+		const range = selection
+			? { startLine: selection.startLine, endLine: selection.endLine }
+			: null;
+		const next = buildShareUrl(codexId, range);
+		if (next !== window.location.href) {
+			history.replaceState(null, '', next);
+		}
+	}
+
+	function scheduleUrlSync() {
+		clearTimeout(urlSyncTimer);
+		urlSyncTimer = setTimeout(() => {
+			if (selectedCodex) {
+				syncUrlFromState(selectedCodex, currentSelection);
+			}
+		}, 300);
+	}
+
+	function handleSelectionChange(selection: SelectionInfo | null) {
+		currentSelection = selection;
+		if (selectedCodex) {
+			publishFocus(selectedCodex, selection);
+			scheduleUrlSync();
+		}
+	}
+
+	async function applyUrlState() {
+		if (typeof window === 'undefined') return;
+		const params = new URLSearchParams(window.location.search);
+		const codexParam = params.get('codex');
+		const linesParam = params.get('lines');
+		pendingExplainOnLoad = params.get('explain') === '1';
+		initialRange = parseLinesParam(linesParam);
+
+		if (!codexParam || codexes.length === 0) return;
+
+		const match =
+			codexes.find((c) => getCodexId(c) === codexParam) ??
+			codexes.find((c) => c.name === codexParam);
+		if (match) {
+			await selectCodex(match, { skipUrlSync: true });
+		}
 	}
 
 	async function loadCodexes() {
@@ -57,6 +186,7 @@
 		try {
 			const res = await callExt('get_all_codexes');
 			codexes = res?.codexes ?? res?.data ?? (Array.isArray(res) ? res : []);
+			await applyUrlState();
 			if (!selectedCodex && codexes.length > 0) {
 				await selectCodex(codexes[0]);
 			}
@@ -74,13 +204,28 @@
 		}
 	}
 
-	async function selectCodex(codex: Codex) {
+	async function selectCodex(
+		codex: Codex,
+		opts: { skipUrlSync?: boolean; preserveRange?: boolean } = {},
+	) {
 		if (selectedCodex && getCodexId(selectedCodex) === getCodexId(codex) && selectedCodex.code) {
+			if (!opts.preserveRange) {
+				currentSelection = null;
+				if (!opts.skipUrlSync) initialRange = null;
+			}
+			publishFocus(codex, currentSelection);
+			if (!opts.skipUrlSync) syncUrlFromState(codex, currentSelection);
 			return;
 		}
+
 		detailLoading = true;
 		error = '';
 		accessDeniedOp = '';
+		if (!opts.preserveRange) {
+			currentSelection = null;
+			if (!opts.skipUrlSync) initialRange = null;
+		}
+
 		try {
 			const codexId = getCodexId(codex);
 			const res = await callExt('get_codex_details', { codex_id: codexId });
@@ -94,7 +239,16 @@
 			selectedCodex = codex;
 		} finally {
 			detailLoading = false;
+			publishFocus(selectedCodex, currentSelection);
+			if (!opts.skipUrlSync) syncUrlFromState(selectedCodex, currentSelection);
+			maybeTriggerExplainOnLoad();
 		}
+	}
+
+	function maybeTriggerExplainOnLoad() {
+		if (!pendingExplainOnLoad || !aiAssistantEnabled) return;
+		pendingExplainOnLoad = false;
+		ctx.host?.dispatch?.({ type: 'assistant.prompt', autoSend: true });
 	}
 
 	function unescapeCode(code: string | undefined | null): string {
@@ -107,10 +261,6 @@
 			.replace(/^"""\s*\n?/, '')
 			.replace(/\n?"""$/, '')
 			.trim();
-	}
-
-	function getCodexId(codex: Codex): string {
-		return codex._id || codex.id || codex.name || '';
 	}
 
 	function isSelected(codex: Codex): boolean {
@@ -130,15 +280,40 @@
 		}
 	}
 
-	function explainWithAI() {
+	async function copyLink() {
 		if (!selectedCodex) return;
-		const codexId = getCodexId(selectedCodex);
-		const url = `/extensions/llm_chat?explain=codex:${encodeURIComponent(codexId)}`;
-		window.open(url, '_blank');
+		const url = buildShareUrl(
+			getCodexId(selectedCodex),
+			currentSelection
+				? {
+						startLine: currentSelection.startLine,
+						endLine: currentSelection.endLine,
+					}
+				: null,
+		);
+		try {
+			await navigator.clipboard.writeText(url);
+			linkCopied = true;
+			setTimeout(() => {
+				linkCopied = false;
+			}, 2000);
+		} catch {
+			ctx.host?.dispatch?.({ type: 'clipboard.write', text: url });
+		}
+	}
+
+	function explainWithAI() {
+		if (!selectedCodex || !aiAssistantEnabled) return;
+		ctx.host?.dispatch?.({ type: 'assistant.prompt', autoSend: true });
 	}
 
 	onMount(() => {
 		void loadCodexes();
+	});
+
+	onDestroy(() => {
+		clearTimeout(urlSyncTimer);
+		ctx.host?.setFocus?.(null);
 	});
 </script>
 
@@ -236,9 +411,14 @@
 						<button class="btn-action" onclick={copyCode}>
 							{copied ? 'Copied' : 'Copy'}
 						</button>
-						<button class="btn-action btn-explain" onclick={explainWithAI}>
-							Explain with AI
+						<button class="btn-action" onclick={copyLink} title="Copy link to this codex or selection">
+							{linkCopied ? 'Link copied' : 'Copy link'}
 						</button>
+						{#if aiAssistantEnabled}
+						<button class="btn-action btn-explain" onclick={explainWithAI}>
+							{explainButtonLabel}
+						</button>
+						{/if}
 					</div>
 				</div>
 
@@ -256,6 +436,8 @@
 								language={MONACO_LANGUAGE}
 								theme={MONACO_THEME}
 								readOnly={true}
+								initialRange={initialRange}
+								onSelectionChange={handleSelectionChange}
 							/>
 						{/key}
 					{:else}
@@ -571,19 +753,6 @@
 		height: 100%;
 		color: #9ca3af;
 		font-size: 0.875rem;
-	}
-
-	.code-fallback {
-		margin: 0;
-		padding: 16px;
-		height: 100%;
-		overflow: auto;
-		font-family: 'Consolas', 'Monaco', 'Menlo', monospace;
-		font-size: 0.8125rem;
-		line-height: 1.6;
-		background: #fff;
-		color: #1e1e1e;
-		white-space: pre;
 	}
 
 	.editor-empty {

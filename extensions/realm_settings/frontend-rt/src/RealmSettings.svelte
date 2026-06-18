@@ -24,6 +24,7 @@
 	let realmSettingsLogoUrl = $state('');
 	let realmSettingsBackgroundUrl = $state('');
 	let realmSettingsOpenRegistration = $state(false);
+	let realmSettingsAiAssistantEnabled = $state(true);
 	let realmSettingsFileRegistryId = $state('');
 	let realmSettingsMarketplaceId = $state('');
 
@@ -72,6 +73,7 @@
 		if (realmSettingsLogoUrl) lines.push(`realm.logo_url = ${JSON.stringify(realmSettingsLogoUrl)}`);
 		if (realmSettingsBackgroundUrl) lines.push(`realm.background_image_url = ${JSON.stringify(realmSettingsBackgroundUrl)}`);
 		lines.push(`realm.open_registration = ${realmSettingsOpenRegistration ? 'True' : 'False'}`);
+		lines.push(`realm.ai_assistant_enabled = ${realmSettingsAiAssistantEnabled ? 'True' : 'False'}`);
 		if (realmSettingsFileRegistryId) lines.push(`realm.file_registry_canister_id = ${JSON.stringify(realmSettingsFileRegistryId)}`);
 		if (realmSettingsMarketplaceId) lines.push(`realm.marketplace_canister_id = ${JSON.stringify(realmSettingsMarketplaceId)}`);
 		return lines.join('\n');
@@ -98,6 +100,7 @@
 				realmSettingsLogoUrl = s.logo_url || '';
 				realmSettingsBackgroundUrl = s.background_image_url || '';
 				realmSettingsOpenRegistration = !!s.open_registration;
+				realmSettingsAiAssistantEnabled = s.ai_assistant_enabled !== false;
 				realmSettingsFileRegistryId = s.file_registry_canister_id || '';
 				realmSettingsMarketplaceId = s.marketplace_canister_id || '';
 			}
@@ -120,6 +123,7 @@
 				logo_url: realmSettingsLogoUrl,
 				background_image_url: realmSettingsBackgroundUrl,
 				open_registration: realmSettingsOpenRegistration,
+				ai_assistant_enabled: realmSettingsAiAssistantEnabled,
 				file_registry_canister_id: realmSettingsFileRegistryId,
 				marketplace_canister_id: realmSettingsMarketplaceId,
 			};
@@ -128,6 +132,7 @@
 			if (result?.success) {
 				settingsMessage = 'Realm settings saved successfully.';
 				addToast('Realm settings updated');
+				await ctx.realmInfo?.fetch?.();
 			} else if (result?.denied_operation) {
 				openProposalForSettings(result.denied_operation);
 			} else {
@@ -459,6 +464,17 @@
 					<div>
 						<span class="text-sm font-medium text-gray-700">Open Registration</span>
 						<p class="text-xs text-gray-500">When enabled, anyone can join without an invite code.</p>
+					</div>
+				</div>
+
+				<div class="flex items-center gap-3">
+					<label for="rs-ai-assistant" class="relative inline-flex items-center cursor-pointer">
+						<input id="rs-ai-assistant" type="checkbox" bind:checked={realmSettingsAiAssistantEnabled} class="sr-only peer" />
+						<div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-focus:ring-2 peer-focus:ring-blue-300 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+					</label>
+					<div>
+						<span class="text-sm font-medium text-gray-700">AI Assistant</span>
+						<p class="text-xs text-gray-500">Show the sidebar assistant and Explain actions. The core llm_chat extension stays installed.</p>
 					</div>
 				</div>
 

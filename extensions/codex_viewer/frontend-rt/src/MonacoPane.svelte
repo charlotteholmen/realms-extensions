@@ -3,25 +3,76 @@
 	import loader from '@monaco-editor/loader';
 	import type * as Monaco from 'monaco-editor';
 
+	export interface LineRange {
+		startLine: number;
+		endLine: number;
+	}
+
+	export interface SelectionInfo {
+		startLine: number;
+		endLine: number;
+		text: string;
+	}
+
 	let {
 		code = '',
 		language = 'python',
 		readOnly = true,
 		theme = 'vs',
+		initialRange = null,
+		onSelectionChange = undefined,
 	}: {
 		code?: string;
 		language?: string;
 		readOnly?: boolean;
 		theme?: string;
+		initialRange?: LineRange | null;
+		onSelectionChange?: (selection: SelectionInfo | null) => void;
 	} = $props();
 
 	let container: HTMLDivElement | undefined = $state();
 	let editor: Monaco.editor.IStandaloneCodeEditor | undefined = $state();
 	let monacoApi: typeof Monaco | undefined = $state();
 	let loadError = $state('');
+	let selectionListener: Monaco.IDisposable | undefined = $state();
+	let appliedInitialRangeKey = $state('');
 
 	const MONACO_VERSION = '0.52.2';
-	const MONACO_VS = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs`;
+	const MONACO_VS = `https://unpkg.com/monaco-editor@${MONACO_VERSION}/min/vs`;
+
+	function formatLoadError(e: unknown): string {
+		if (e instanceof Error) return e.message;
+		if (e && typeof e === 'object' && 'type' in e) {
+			return 'Failed to load the code editor script (check Content Security Policy or network).';
+		}
+		return String(e);
+	}
+
+	function readSelection(model: Monaco.editor.ITextModel, selection: Monaco.Selection): SelectionInfo {
+		const startLine = selection.startLineNumber;
+		const endLine = selection.endLineNumber;
+		const text = model.getValueInRange(selection);
+		return { startLine, endLine, text };
+	}
+
+	function applyInitialRange(range: LineRange) {
+		if (!editor || !monacoApi) return;
+		const model = editor.getModel();
+		if (!model) return;
+
+		const startLine = Math.max(1, Math.min(range.startLine, model.getLineCount()));
+		const endLine = Math.max(startLine, Math.min(range.endLine, model.getLineCount()));
+		const monacoRange = new monacoApi.Range(
+			startLine,
+			1,
+			endLine,
+			model.getLineMaxColumn(endLine),
+		);
+		editor.setSelection(monacoRange);
+		editor.revealRangeInCenter(monacoRange);
+		editor.focus();
+		onSelectionChange?.(readSelection(model, monacoRange));
+	}
 
 	onMount(() => {
 		let disposed = false;
@@ -54,8 +105,18 @@
 						horizontalScrollbarSize: 10,
 					},
 				});
+
+				selectionListener = editor.onDidChangeCursorSelection(() => {
+					const model = editor?.getModel();
+					const selection = editor?.getSelection();
+					if (!model || !selection || selection.isEmpty()) {
+						onSelectionChange?.(null);
+						return;
+					}
+					onSelectionChange?.(readSelection(model, selection));
+				});
 			} catch (e: unknown) {
-				loadError = e instanceof Error ? e.message : String(e);
+				loadError = formatLoadError(e);
 			}
 		})();
 
@@ -75,7 +136,13 @@
 	$effect(() => {
 		if (!editor || !monacoApi) return;
 		const model = editor.getModel();
-		if (model && monacoApi.editor.getModelLanguage(model) !== language) {
+		if (!model) return;
+		const currentLanguage =
+			typeof model.getLanguageId === 'function'
+				? model.getLanguageId()
+				: (monacoApi.editor as { getModelLanguage?: (m: Monaco.editor.ITextModel) => string })
+						.getModelLanguage?.(model);
+		if (currentLanguage && currentLanguage !== language) {
 			monacoApi.editor.setModelLanguage(model, language);
 		}
 	});
@@ -88,7 +155,16 @@
 		monacoApi?.editor.setTheme(theme);
 	});
 
+	$effect(() => {
+		if (!editor || !initialRange) return;
+		const key = `${initialRange.startLine}-${initialRange.endLine}:${code.length}`;
+		if (key === appliedInitialRangeKey) return;
+		appliedInitialRangeKey = key;
+		applyInitialRange(initialRange);
+	});
+
 	onDestroy(() => {
+		selectionListener?.dispose();
 		editor?.dispose();
 		editor = undefined;
 	});

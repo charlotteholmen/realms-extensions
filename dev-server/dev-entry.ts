@@ -109,6 +109,15 @@ async function main() {
 			MonacoEditor: null as any,
 			MonacoDiffEditor: null as any,
 		},
+
+		host: {
+			focus: readableOf(null),
+			setFocus: () => {},
+			dispatch: (action: { type: string }) => {
+				console.log('[dev] host.dispatch:', action);
+			},
+			pendingPrompt: readableOf(null),
+		},
 	};
 
 	const mountModule = await import(/* @vite-ignore */ `/__ext_index__`);

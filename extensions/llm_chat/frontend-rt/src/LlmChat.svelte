@@ -6,6 +6,7 @@
 	interface ChatMessage {
 		text: string;
 		isUser: boolean;
+		thinking?: string;
 	}
 
 	interface AssistantPersona {
@@ -19,6 +20,12 @@
 	let messages: ChatMessage[] = $state([]);
 	let newMessage = $state('');
 	let isLoading = $state(false);
+	let loadingStatus = $state('');
+	let streamHasContent = $state(false);
+	let backendAwake = $state(
+		typeof sessionStorage !== 'undefined' &&
+			sessionStorage.getItem('llm-chat-backend-awake') === '1',
+	);
 	let error = $state('');
 	let messagesContainer: HTMLElement | undefined = $state();
 	let suggestions: string[] = $state([]);
@@ -33,6 +40,15 @@
 
 	let pendingExplainCodexId: string | null = $state(null);
 	let isExplainMode = $state(false);
+	let currentFocus: {
+		uri: string;
+		label?: string;
+		snapshot?: { languageId: string; range: { startLine: number; endLine: number }; text: string };
+	} | null = $state(null);
+	let lastPendingPromptId = $state(0);
+
+	let unsubPendingPrompt: (() => void) | undefined;
+	let unsubFocus: (() => void) | undefined;
 
 	// Conversation history
 	interface Conversation {
@@ -48,13 +64,60 @@
 	let isLoadingHistory = $state(false);
 
 	const PRODUCTION_API_HOST = 'https://geister-api.realmsgos.dev/';
-	const CHAT_REQUEST_TIMEOUT_MS = 90_000;
+	const CHAT_REQUEST_TIMEOUT_MS = 360_000;
 	let API_URL = `${PRODUCTION_API_HOST}api/ask`;
 	let SUGGESTIONS_API_URL = `${PRODUCTION_API_HOST}suggestions`;
 	let ASSISTANTS_API_URL = `${PRODUCTION_API_HOST}api/personas/assistants`;
 	let CONVERSATIONS_API_URL = `${PRODUCTION_API_HOST}api/conversations`;
 
+	function extractCodexIdFromUri(uri: string | undefined): string | null {
+		if (!uri) return null;
+		const match = uri.match(/^realms:\/\/codex_viewer\/codex\/([^?]+)/);
+		if (!match) return null;
+		try {
+			return decodeURIComponent(match[1]);
+		} catch {
+			return match[1];
+		}
+	}
+
+	function applyPendingPrompt(prompt: { message: string; autoSend: boolean; id: number } | null) {
+		if (!prompt || prompt.id === lastPendingPromptId) return;
+		lastPendingPromptId = prompt.id;
+		newMessage = prompt.message;
+		isExplainMode = true;
+		if (prompt.autoSend) {
+			setTimeout(() => void sendMessage(), 150);
+		} else {
+			void tick().then(autoResizeTextarea);
+		}
+	}
+
+	function explainCurrentFocus() {
+		ctx.host?.dispatch?.({ type: 'assistant.prompt', autoSend: true });
+	}
+
+	function subscribeHostBridge() {
+		unsubPendingPrompt = ctx.host?.pendingPrompt?.subscribe?.(applyPendingPrompt);
+		unsubFocus = ctx.host?.focus?.subscribe?.((focus: typeof currentFocus) => {
+			currentFocus = focus;
+		});
+	}
+
 	function classifyChatError(err: unknown, httpStatus?: number): string {
+		if (httpStatus === 503 && err instanceof Error && err.message) {
+			const msg = err.message.toLowerCase();
+			if (
+				msg.includes('pod') ||
+				msg.includes('llm backend') ||
+				msg.includes('ollama') ||
+				msg.includes('waking up') ||
+				msg.includes('still starting')
+			) {
+				return 'The AI assistant is still waking up. Please try again in a few minutes.';
+			}
+			return err.message;
+		}
 		if (httpStatus === 502 || httpStatus === 530) {
 			return 'The AI backend is temporarily offline. Please try again in a few minutes.';
 		}
@@ -86,6 +149,72 @@
 			normalized.includes('cannot reach ollama') ||
 			normalized.includes('ollama at')
 		);
+	}
+
+	function markBackendAwake() {
+		backendAwake = true;
+		try {
+			sessionStorage.setItem('llm-chat-backend-awake', '1');
+		} catch {}
+	}
+
+	function markBackendAsleep() {
+		backendAwake = false;
+		try {
+			sessionStorage.removeItem('llm-chat-backend-awake');
+		} catch {}
+	}
+
+	function isWakingUpError(message: string): boolean {
+		const normalized = message.toLowerCase();
+		return normalized.includes('waking up') || normalized.includes('still starting');
+	}
+
+	function resetStreamingState() {
+		loadingStatus = '';
+		streamHasContent = false;
+	}
+
+	function upsertStreamingAssistant(text: string, thinking: string) {
+		if (text.trim() || thinking.trim()) {
+			streamHasContent = true;
+		}
+		const payload: ChatMessage = {
+			text,
+			isUser: false,
+			...(thinking.trim() ? { thinking } : {}),
+		};
+		const last = messages[messages.length - 1];
+		if (!last || last.isUser) {
+			messages = [...messages, payload];
+		} else {
+			messages = messages.map((msg, index) =>
+				index === messages.length - 1 ? { ...msg, ...payload } : msg,
+			);
+		}
+		void tick().then(scrollToBottom);
+	}
+
+	function handleStreamEvent(parsed: Record<string, unknown>, state: { text: string; thinking: string }) {
+		const eventType = typeof parsed.type === 'string' ? parsed.type : parsed.text ? 'text' : '';
+		const chunk = typeof parsed.text === 'string' ? parsed.text : '';
+
+		if (eventType === 'status' && chunk) {
+			markBackendAwake();
+			loadingStatus = chunk;
+			return;
+		}
+		if (eventType === 'thinking' && chunk) {
+			markBackendAwake();
+			state.thinking += chunk;
+			upsertStreamingAssistant(state.text, state.thinking);
+			return;
+		}
+		if (chunk) {
+			markBackendAwake();
+			state.text += chunk;
+			upsertStreamingAssistant(state.text, state.thinking);
+		}
 	}
 
 	let REALM_CANISTER_ID = '';
@@ -148,10 +277,12 @@
 	}
 
 	onMount(async () => {
-		REALM_CANISTER_ID =
-			ctx.config?.canisterId ||
-			(globalThis as any).__CANISTER_IDS?.realm_backend ||
-			'';
+		const runtimeBackend =
+			(globalThis as { __CANISTER_IDS?: { realm_backend?: string } }).__CANISTER_IDS
+				?.realm_backend || '';
+		const configBackend = ctx.config?.canisterId || '';
+		// Prefer runtime canister_ids.js over build-time declarations passed by the host.
+		REALM_CANISTER_ID = runtimeBackend || configBackend;
 		unsubPrincipal = ctx.principal?.subscribe?.((v: string) => {
 			userPrincipal = v || '';
 		});
@@ -180,6 +311,7 @@
 		}
 
 		handleExplainParam();
+		subscribeHostBridge();
 		await fetchAssistants();
 		// Apply saved default assistant preference
 		if (prefDefaultAssistant && availableAssistants.length > 0) {
@@ -301,21 +433,41 @@
 		const messageToSend = newMessage;
 		newMessage = '';
 		isLoading = true;
+		resetStreamingState();
+		loadingStatus = backendAwake ? 'Thinking…' : '';
 
 		try {
 			await ensureConversation();
+			const geisterNetwork =
+				ctx.config?.network ||
+				(globalThis as { __CANISTER_IDS?: { network?: string } }).__CANISTER_IDS?.network ||
+				(window.location.hostname.includes('icp0.io') ? 'test' : 'staging');
+
 			const payload: Record<string, any> = {
 				question: messageToSend,
 				realm_principal: REALM_CANISTER_ID,
 				user_principal: userPrincipal,
 				stream: true,
+				verbosity: 1,
 				persona: selectedAssistant?.id || 'ashoka',
+				network: geisterNetwork,
 				...(conversationId ? { conversation_id: conversationId } : {}),
 			};
 
 			if (pendingExplainCodexId) {
 				payload.explain_codex_id = pendingExplainCodexId;
 				pendingExplainCodexId = null;
+			} else {
+				const codexId = extractCodexIdFromUri(currentFocus?.uri);
+				if (codexId) payload.explain_codex_id = codexId;
+			}
+
+			if (currentFocus) {
+				payload.focus = {
+					uri: currentFocus.uri,
+					label: currentFocus.label,
+					snapshot: currentFocus.snapshot,
+				};
 			}
 
 			const response = await fetch(API_URL, {
@@ -333,7 +485,7 @@
 				} catch {
 					// ignore non-JSON error bodies
 				}
-				if (detail && isLlmBackendError(detail)) {
+				if (detail) {
 					throw Object.assign(new Error(detail), { httpStatus: response.status });
 				}
 				throw Object.assign(new Error(`HTTP error! Status: ${response.status}`), {
@@ -345,7 +497,7 @@
 			if (!reader) throw new Error('Response body is not readable');
 
 			const decoder = new TextDecoder();
-			let accumulatedText = '';
+			const streamState = { text: '', thinking: '' };
 
 			try {
 				while (true) {
@@ -359,32 +511,23 @@
 							const pl = line.slice(6);
 							if (pl === '[DONE]') continue;
 							try {
-								const parsed = JSON.parse(pl);
-								if (parsed.text) accumulatedText += parsed.text;
+								handleStreamEvent(JSON.parse(pl), streamState);
 							} catch {
-								accumulatedText += pl;
+								streamState.text += pl;
+								upsertStreamingAssistant(streamState.text, streamState.thinking);
 							}
 						} else if (line.trim() && !line.startsWith(':')) {
-							accumulatedText += line;
+							streamState.text += line;
+							upsertStreamingAssistant(streamState.text, streamState.thinking);
 						}
-					}
-
-					if (
-						accumulatedText &&
-						(messages.length === 0 || messages[messages.length - 1].isUser)
-					) {
-						messages = [...messages, { text: accumulatedText, isUser: false }];
-					} else if (accumulatedText) {
-						messages = messages.map((msg, index) =>
-							index === messages.length - 1 && !msg.isUser
-								? { ...msg, text: accumulatedText }
-								: msg,
-						);
 					}
 				}
 			} finally {
 				reader.releaseLock();
 			}
+
+			const accumulatedText = streamState.text;
+			const accumulatedThinking = streamState.thinking;
 
 			if (!accumulatedText.trim()) {
 				if (messages.length > 0 && !messages[messages.length - 1].isUser) {
@@ -398,18 +541,28 @@
 				}
 			} else if (isLlmBackendError(accumulatedText)) {
 				error = 'The AI backend is temporarily offline. Please try again in a few minutes.';
+				markBackendAsleep();
+			} else if (accumulatedText.trim()) {
+				markBackendAwake();
 			}
 
 			isLoading = false;
+			resetStreamingState();
+			isExplainMode = false;
 			await fetchSuggestions();
 		} catch (err: any) {
 			console.error('Error calling LLM:', err);
 			error = classifyChatError(err, err?.httpStatus);
+			if (isWakingUpError(error)) {
+				markBackendAsleep();
+			}
 			if (messages.length > 0 && !messages[messages.length - 1].isUser) {
 				messages = messages.slice(0, -1);
 			}
 		} finally {
 			isLoading = false;
+			resetStreamingState();
+			isExplainMode = false;
 		}
 	}
 
@@ -443,7 +596,10 @@
 			const res = await fetch(`${CONVERSATIONS_API_URL}/${conv.conversation_id}/messages`, { headers: { 'Content-Type': 'application/json' } });
 			if (!res.ok) return;
 			const data = await res.json();
-			messages = (data.messages || []).map((m: any) => ({ text: m.content, isUser: m.role === 'user' }));
+			messages = normalizeHistoryMessages(data.messages || []);
+			if (messages.some((m) => !m.isUser)) {
+				markBackendAwake();
+			}
 			await tick();
 			scrollToBottom();
 		} catch {}
@@ -520,7 +676,32 @@
 		}
 	}
 
+	function normalizeHistoryMessages(raw: unknown[]): ChatMessage[] {
+		const out: ChatMessage[] = [];
+		for (const m of raw) {
+			if (!m || typeof m !== 'object') continue;
+			const row = m as Record<string, unknown>;
+			// New shape: { role, content }
+			if (row.role && row.content != null) {
+				out.push({
+					text: String(row.content),
+					isUser: row.role === 'user',
+				});
+				continue;
+			}
+			// Geister API shape: { question, response } per stored turn
+			if (row.question != null && String(row.question).trim()) {
+				out.push({ text: String(row.question), isUser: true });
+			}
+			if (row.response != null && String(row.response).trim()) {
+				out.push({ text: String(row.response), isUser: false });
+			}
+		}
+		return out;
+	}
+
 	function renderMarkdown(text: string): string {
+		if (!text) return '';
 		let html = text
 			.replace(/&/g, '&amp;')
 			.replace(/</g, '&lt;')
@@ -574,6 +755,8 @@
 		return () => {
 			unsubPrincipal?.();
 			unsubAuth?.();
+			unsubPendingPrompt?.();
+			unsubFocus?.();
 			(window as any).__chatVpCleanup?.();
 		};
 	});
@@ -685,6 +868,16 @@
 		</div>
 	{/if}
 
+	<!-- Document focus chip (sidebar) -->
+	{#if isSidebarPanel && currentFocus?.label}
+		<div class="focus-chip">
+			<span class="focus-chip-label" title={currentFocus.uri}>{currentFocus.label}</span>
+			<button class="focus-chip-btn" onclick={explainCurrentFocus} title="Explain current selection">
+				Explain this
+			</button>
+		</div>
+	{/if}
+
 	<!-- Assistant Selector -->
 	{#if availableAssistants.length > 1}
 		<div class="assistant-selector">
@@ -761,7 +954,15 @@
 				<div class="message-row assistant-row">
 					<div class="assistant-message-wrap">
 						<div class="assistant-content markdown-content">
-							{@html renderMarkdown(message.text)}
+							{#if message.thinking}
+								<details class="thinking-block">
+									<summary>Reasoning</summary>
+									<div class="thinking-text">{message.thinking}</div>
+								</details>
+							{/if}
+							{#if message.text}
+								{@html renderMarkdown(message.text)}
+							{/if}
 						</div>
 						<button class="copy-btn copy-btn--assistant" onclick={() => copyText(message.text, i)} title="Copy">
 							{#if copiedIndex === i}
@@ -775,14 +976,28 @@
 			{/if}
 		{/each}
 
-		{#if isLoading}
+		{#if isLoading && (!streamHasContent || loadingStatus)}
 			<div class="message-row assistant-row">
 				<div class="assistant-content">
-					<div class="typing-animation">
-						<span></span>
-						<span></span>
-						<span></span>
-					</div>
+					{#if !streamHasContent}
+						{#if isExplainMode}
+							<p class="explain-wait">
+								Analyzing codex… if the GPU was idle, the backend may need up to 5 minutes to start.
+							</p>
+						{:else if !backendAwake && !loadingStatus}
+							<p class="explain-wait">Awakening the AI assistant. This may take a few minutes.</p>
+						{/if}
+					{/if}
+					{#if loadingStatus}
+						<p class="stream-status">{loadingStatus}</p>
+					{/if}
+					{#if !streamHasContent && !loadingStatus && backendAwake && !isExplainMode}
+						<div class="typing-animation">
+							<span></span>
+							<span></span>
+							<span></span>
+						</div>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -985,6 +1200,43 @@
 	.history-delete:hover {
 		color: #ef4444;
 		background: #fef2f2;
+	}
+
+	/* Document focus chip */
+	.focus-chip {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 14px;
+		border-bottom: 1px solid #e5e7eb;
+		background: #f8fafc;
+		flex-shrink: 0;
+	}
+
+	.focus-chip-label {
+		flex: 1;
+		min-width: 0;
+		font-size: 12px;
+		color: #4b5563;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.focus-chip-btn {
+		flex-shrink: 0;
+		padding: 4px 10px;
+		font-size: 12px;
+		font-weight: 500;
+		border-radius: 9999px;
+		border: 1px solid #c7d2fe;
+		background: #eef2ff;
+		color: #4338ca;
+		cursor: pointer;
+	}
+
+	.focus-chip-btn:hover {
+		background: #e0e7ff;
 	}
 
 	/* Assistant selector */
@@ -1215,6 +1467,66 @@
 
 	.error-dismiss:hover {
 		opacity: 1;
+	}
+
+	.explain-wait {
+		margin: 0 0 6px;
+		font-size: 12px;
+		color: #6b7280;
+	}
+
+	.stream-status {
+		margin: 0;
+		font-size: 13px;
+		color: #4b5563;
+		font-style: italic;
+		animation: status-pulse 1.6s ease-in-out infinite;
+	}
+
+	@keyframes status-pulse {
+		0%, 100% { opacity: 0.55; }
+		50% { opacity: 1; }
+	}
+
+	.thinking-block {
+		margin: 0 0 10px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		background: #f5f3ff;
+		border: 1px solid #ddd6fe;
+		font-size: 12px;
+	}
+
+	.thinking-block summary {
+		cursor: pointer;
+		font-weight: 600;
+		color: #6d28d9;
+		user-select: none;
+		list-style: none;
+	}
+
+	.thinking-block summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.thinking-block summary::before {
+		content: '▸ ';
+		display: inline-block;
+		transition: transform 0.15s ease;
+	}
+
+	.thinking-block[open] summary::before {
+		transform: rotate(90deg);
+	}
+
+	.thinking-text {
+		margin-top: 8px;
+		color: #4c1d95;
+		line-height: 1.5;
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-height: 240px;
+		overflow-y: auto;
 	}
 
 	/* Typing animation */

@@ -3,10 +3,11 @@
 
 	const cn = ctx.theme?.cn ?? ((...classes: string[]) => classes.filter(Boolean).join(' '));
 
-	// ── Types ────────────────────────────────────────────────
-
 	type Kind = 'extension' | 'codex';
-	type TabId = 'installed' | 'browse' | 'upload';
+	type TabId = 'installed' | 'available' | 'advanced';
+	type KindFilter = 'all' | Kind;
+	type InstalledFilter = 'all' | 'updates';
+	type AvailableFilter = 'actionable' | 'all';
 
 	interface Registry {
 		canister_id: string;
@@ -49,9 +50,41 @@
 		text: string;
 	}
 
-	// ── File registry HTTP client ────────────────────────────
+	const PROTECTED_IDS = new Set([
+		'package_manager',
+		'member_dashboard',
+		'public_dashboard',
+		'welcome',
+	]);
 
 	const FILE_REGISTRY_FALLBACK = ctx.config?.fileRegistryCanisterId || '';
+
+	let authState = $state(false);
+	let userProfilesState = $state<string[]>([]);
+
+	$effect(() => {
+		const authStore = ctx.isAuthenticated;
+		if (authStore && typeof authStore.subscribe === 'function') {
+			return authStore.subscribe((v: boolean) => {
+				authState = v;
+			});
+		}
+		authState = authStore !== false;
+	});
+
+	$effect(() => {
+		const profileStore = ctx.userProfiles;
+		if (profileStore && typeof profileStore.subscribe === 'function') {
+			return profileStore.subscribe((v: string[]) => {
+				userProfilesState = v ?? [];
+			});
+		}
+		userProfilesState = Array.isArray(profileStore) ? profileStore : [];
+	});
+
+	let canManage = $derived(
+		authState && userProfilesState.some((p) => p === 'admin' || p === 'developer'),
+	);
 
 	function fileRegistryBaseUrlFor(canisterId: string): string {
 		const host = typeof window !== 'undefined' ? window.location.host : '';
@@ -96,14 +129,55 @@
 		return typeof raw === 'string' ? JSON.parse(raw) : raw;
 	}
 
-	// ── State ────────────────────────────────────────────────
+	function displayName(manifest: Record<string, any> | null | undefined, id: string): string {
+		const label = manifest?.sidebar_label;
+		if (typeof label === 'string' && label.trim()) return label;
+		if (label && typeof label === 'object') {
+			const en = label.en ?? label['en'];
+			if (typeof en === 'string' && en.trim()) return en;
+			const first = Object.values(label).find((v) => typeof v === 'string' && v.trim());
+			if (typeof first === 'string') return first;
+		}
+		if (typeof manifest?.name === 'string' && manifest.name !== id) return manifest.name;
+		return id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
+	function displayDescription(manifest: Record<string, any> | null | undefined): string {
+		const raw = (manifest?.short_description ?? manifest?.description ?? '').trim();
+		if (!raw) return '';
+		const dot = raw.indexOf('. ');
+		return dot > 0 && dot <= 90 ? raw.slice(0, dot) : raw.length > 90 ? `${raw.slice(0, 87)}…` : raw;
+	}
+
+	function dedupeCatalog(entries: CatalogEntry[]): CatalogEntry[] {
+		const byKey = new Map<string, CatalogEntry>();
+		for (const entry of entries) {
+			const key = `${entry.kind}:${entry.id.toLowerCase()}`;
+			const existing = byKey.get(key);
+			if (!existing) {
+				byKey.set(key, entry);
+				continue;
+			}
+			const preferNew =
+				compareVersions(entry.latest || '', existing.latest || '') > 0 ||
+				(entry.id === entry.id.toLowerCase() && existing.id !== existing.id.toLowerCase());
+			if (preferNew) byKey.set(key, entry);
+		}
+		return [...byKey.values()];
+	}
 
 	let activeTab = $state<TabId>('installed');
+	let searchQuery = $state('');
+	let kindFilter = $state<KindFilter>('all');
+	let installedFilter = $state<InstalledFilter>('all');
+	let availableFilter = $state<AvailableFilter>('actionable');
+	let showAdvancedUpload = $state(false);
+	let openMenuKey = $state<string | null>(null);
+	let selectedVersions = $state<Record<string, string>>({});
 
 	let registries = $state<Registry[]>([]);
 	let registriesLoading = $state(true);
 	let registriesError = $state('');
-	let marketplaceCanisterId = $state('');
 
 	let installed = $state<InstalledItem[]>([]);
 	let installedLoading = $state(true);
@@ -126,10 +200,20 @@
 
 	let uploadTotalBytes = $derived(uploadFiles.reduce((acc, f) => acc + f.size, 0));
 	let uploadOverIngressLimit = $derived(uploadTotalBytes > 1.8 * 1024 * 1024);
+	let showRegistryColumn = $derived(registries.length > 1);
 
-	let isAuth = $derived(ctx.isAuthenticated !== false);
-
-	// ── Helpers ──────────────────────────────────────────────
+	let updateCount = $derived(installed.filter((i) => statusFor(i) === 'outdated').length);
+	let actionableCount = $derived(
+		registryEntries.filter((e) => {
+			const inst = isInstalled(e);
+			if (!inst) return true;
+			return (
+				e.latest &&
+				inst.version &&
+				compareVersions(e.latest, inst.version) > 0
+			);
+		}).length,
+	);
 
 	function rowKey(kind: Kind, id: string): string {
 		return `${kind}:${id}`;
@@ -169,7 +253,25 @@
 		}
 	}
 
-	// ── Loading ──────────────────────────────────────────────
+	function selectedVersionFor(entry: CatalogEntry): string {
+		const key = rowKey(entry.kind, entry.id);
+		const picked = selectedVersions[key];
+		if (picked && entry.versions.includes(picked)) return picked;
+		return entry.latest || entry.versions[entry.versions.length - 1] || '';
+	}
+
+	function matchesSearch(item: { id: string; manifest: Record<string, any> | null }, kind: Kind): boolean {
+		const q = searchQuery.trim().toLowerCase();
+		if (!q) return true;
+		const name = displayName(item.manifest, item.id).toLowerCase();
+		const desc = displayDescription(item.manifest).toLowerCase();
+		return (
+			item.id.toLowerCase().includes(q) ||
+			name.includes(q) ||
+			desc.includes(q) ||
+			kind.includes(q)
+		);
+	}
 
 	async function loadRegistriesFromBackend() {
 		registriesLoading = true;
@@ -180,12 +282,9 @@
 			if (resp?.success && resp?.data?.status) {
 				const canisters: { canister_id: string; canister_type: string }[] =
 					resp.data.status.canisters ?? [];
-				const fileRegs = canisters
+				registries = canisters
 					.filter((c) => c.canister_type === 'file_registry')
 					.map((c) => ({ canister_id: c.canister_id, canister_type: c.canister_type }));
-				registries = fileRegs as Registry[];
-				const mp = canisters.find((c) => c.canister_type === 'marketplace');
-				marketplaceCanisterId = mp?.canister_id ?? '';
 			} else {
 				registries = [];
 				registriesError = 'status() did not return a success payload';
@@ -231,7 +330,7 @@
 			}
 
 			installed = items.sort((a, b) =>
-				a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind.localeCompare(b.kind),
+				displayName(a.manifest, a.id).localeCompare(displayName(b.manifest, b.id)),
 			);
 		} catch (e: any) {
 			installedError = e?.message ?? String(e);
@@ -245,44 +344,53 @@
 		registryErrors = [];
 		const out: CatalogEntry[] = [];
 
-		const regsToQuery = registries.length > 0
-			? registries
-			: FILE_REGISTRY_FALLBACK
-				? [{ canister_id: FILE_REGISTRY_FALLBACK, canister_type: 'file_registry' }]
-				: [];
+		const regsToQuery =
+			registries.length > 0
+				? registries
+				: FILE_REGISTRY_FALLBACK
+					? [{ canister_id: FILE_REGISTRY_FALLBACK, canister_type: 'file_registry' }]
+					: [];
 
-	for (const reg of regsToQuery) {
-		const errors: string[] = [];
-		const exts = await listRegistryExtensions(reg.canister_id).catch((e: any) => {
-			errors.push(`extensions: ${e?.message ?? String(e)}`);
-			return [] as RegistryExtension[];
-		});
-		const codices = await listRegistryCodices(reg.canister_id).catch((e: any) => {
-			errors.push(`codices: ${e?.message ?? String(e)}`);
-			return [] as RegistryCodex[];
-		});
-		for (const e of exts) {
-			out.push({
-				kind: 'extension', id: e.ext_id, versions: e.versions, latest: e.latest,
-				manifest: e.manifest as any, registryCanisterId: reg.canister_id,
+		for (const reg of regsToQuery) {
+			const errors: string[] = [];
+			const exts = await listRegistryExtensions(reg.canister_id).catch((e: any) => {
+				errors.push(`extensions: ${e?.message ?? String(e)}`);
+				return [] as RegistryExtension[];
 			});
-		}
-		for (const c of codices) {
-			out.push({
-				kind: 'codex', id: c.codex_id, versions: c.versions, latest: c.latest,
-				manifest: null, registryCanisterId: reg.canister_id,
+			const codices = await listRegistryCodices(reg.canister_id).catch((e: any) => {
+				errors.push(`codices: ${e?.message ?? String(e)}`);
+				return [] as RegistryCodex[];
 			});
+			for (const e of exts) {
+				out.push({
+					kind: 'extension',
+					id: e.ext_id,
+					versions: e.versions ?? [],
+					latest: e.latest,
+					manifest: e.manifest as any,
+					registryCanisterId: reg.canister_id,
+				});
+			}
+			for (const c of codices) {
+				out.push({
+					kind: 'codex',
+					id: c.codex_id,
+					versions: c.versions ?? [],
+					latest: c.latest,
+					manifest: null,
+					registryCanisterId: reg.canister_id,
+				});
+			}
+			if (errors.length > 0 && exts.length === 0 && codices.length === 0) {
+				registryErrors = [
+					...registryErrors,
+					`Failed to load from registry ${shortId(reg.canister_id)}: ${errors.join('; ')}`,
+				];
+			}
 		}
-		if (errors.length > 0 && exts.length === 0 && codices.length === 0) {
-			registryErrors = [
-				...registryErrors,
-				`Failed to load from registry ${shortId(reg.canister_id)}: ${errors.join('; ')}`,
-			];
-		}
-	}
 
-		registryEntries = out.sort((a, b) =>
-			a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind.localeCompare(b.kind),
+		registryEntries = dedupeCatalog(out).sort((a, b) =>
+			displayName(a.manifest, a.id).localeCompare(displayName(b.manifest, b.id)),
 		);
 		registryLoading = false;
 	}
@@ -292,24 +400,33 @@
 		await Promise.all([loadInstalled(), loadRegistryCatalog()]);
 	}
 
-	// ── Mutations: Installed ─────────────────────────────────
-
 	async function uninstall(item: InstalledItem) {
-		const ok = confirm(`Uninstall ${item.id}? Data written by the package will remain, but the package itself will be removed.`);
-		if (!ok) return;
+		if (PROTECTED_IDS.has(item.id)) {
+			pushToast('error', `${displayName(item.manifest, item.id)} is a core package and cannot be uninstalled from here.`);
+			return;
+		}
+
+		const label = displayName(item.manifest, item.id);
+		const typed = prompt(
+			`Uninstall ${label} (${item.id})?\n\nData written by this package may remain on the realm. Type the package ID to confirm:`,
+			'',
+		);
+		if (typed !== item.id) return;
 
 		setBusy(item.kind, item.id, `Uninstalling ${item.id}…`);
 		try {
 			const args = JSON.stringify(
 				item.kind === 'extension' ? { extension_id: item.id } : { codex_id: item.id },
 			);
-			const raw = item.kind === 'extension'
-				? await ctx.backend.uninstall_extension(args)
-				: await ctx.backend.uninstall_codex(args);
+			const raw =
+				item.kind === 'extension'
+					? await ctx.backend.uninstall_extension(args)
+					: await ctx.backend.uninstall_codex(args);
 			const parsed = parseRaw(raw);
 			if (!parsed?.success) throw new Error(parsed?.error ?? 'Unknown error');
-			pushToast('success', `Uninstalled ${item.id}`);
+			pushToast('success', `Uninstalled ${label}`);
 			notifySidebarRefresh();
+			openMenuKey = null;
 			await Promise.all([loadInstalled(), loadRegistryCatalog()]);
 		} catch (e: any) {
 			pushToast('error', e?.message ?? String(e));
@@ -320,12 +437,13 @@
 
 	async function reloadCodex(item: InstalledItem) {
 		setBusy(item.kind, item.id, `Reloading ${item.id}…`);
+		openMenuKey = null;
 		try {
 			const raw = await ctx.backend.reload_codex(JSON.stringify({ codex_id: item.id, run_init: false }));
 			const parsed = parseRaw(raw);
 			if (!parsed?.success) throw new Error(parsed?.error ?? 'Unknown error');
 			if (parsed.init_warning) pushToast('info', `Init warning: ${parsed.init_warning}`);
-			pushToast('success', `Reloaded ${item.id}`);
+			pushToast('success', `Reloaded ${displayName(item.manifest, item.id)}`);
 		} catch (e: any) {
 			pushToast('error', e?.message ?? String(e));
 		} finally {
@@ -334,15 +452,17 @@
 	}
 
 	async function updateInstalled(item: InstalledItem) {
-		const candidate = registryEntries.find((c) => c.kind === item.kind && c.id === item.id);
-		if (!candidate || !candidate.latest) return;
-		if (item.version && compareVersions(candidate.latest, item.version) <= 0) return;
-		const ok = confirm(`Update ${item.id} from v${item.version || '?'} to v${candidate.latest}?`);
+		const candidate = registryEntries.find((c) => c.kind === item.kind && c.id.toLowerCase() === item.id.toLowerCase());
+		if (!candidate) return;
+		const ver = selectedVersionFor(candidate);
+		if (!ver) return;
+		if (item.version && compareVersions(ver, item.version) <= 0) return;
+		const ok = confirm(
+			`Update ${displayName(item.manifest, item.id)} from v${item.version || '?'} to v${ver}?`,
+		);
 		if (!ok) return;
-		await installFromRegistry(candidate, candidate.latest);
+		await installFromRegistry(candidate, ver);
 	}
-
-	// ── Mutations: Browse ────────────────────────────────────
 
 	async function installFromRegistry(entry: CatalogEntry, ver: string) {
 		setBusy(entry.kind, entry.id, `Installing ${entry.id}…`);
@@ -354,23 +474,26 @@
 				);
 			} else {
 				raw = await ctx.backend.install_codex_from_registry(
-					JSON.stringify({ registry_canister_id: entry.registryCanisterId, codex_id: entry.id, version: ver, run_init: true }),
+					JSON.stringify({
+						registry_canister_id: entry.registryCanisterId,
+						codex_id: entry.id,
+						version: ver,
+						run_init: true,
+					}),
 				);
 			}
 			const parsed = parseRaw(raw);
 			if (!parsed?.success) throw new Error(parsed?.error ?? 'Unknown error');
 			if (parsed.init_warning) pushToast('info', `Init warning: ${parsed.init_warning}`);
-			pushToast('success', `Installed ${entry.id} (v${ver})`);
+			pushToast('success', `Installed ${displayName(entry.manifest, entry.id)} (v${ver})`);
 			notifySidebarRefresh();
-			await loadInstalled();
+			await Promise.all([loadInstalled(), loadRegistryCatalog()]);
 		} catch (e: any) {
 			pushToast('error', e?.message ?? String(e));
 		} finally {
 			clearBusy(entry.kind, entry.id);
 		}
 	}
-
-	// ── Upload ───────────────────────────────────────────────
 
 	async function readFileAsText(file: File): Promise<string> {
 		return await new Promise<string>((resolve, reject) => {
@@ -411,7 +534,9 @@
 			if (uploadKind === 'extension') {
 				raw = await ctx.backend.install_extension(JSON.stringify({ extension_id: uploadId, files: filesMap }));
 			} else {
-				raw = await ctx.backend.install_codex(JSON.stringify({ codex_id: uploadId, files: filesMap, run_init: uploadRunInit }));
+				raw = await ctx.backend.install_codex(
+					JSON.stringify({ codex_id: uploadId, files: filesMap, run_init: uploadRunInit }),
+				);
 			}
 			const parsed = parseRaw(raw);
 			if (!parsed?.success) throw new Error(parsed?.error ?? 'Unknown error');
@@ -428,10 +553,8 @@
 		}
 	}
 
-	// ── Derived helpers ──────────────────────────────────────
-
 	function findCatalogEntry(item: InstalledItem): CatalogEntry | undefined {
-		return registryEntries.find((c) => c.kind === item.kind && c.id === item.id);
+		return registryEntries.find((c) => c.kind === item.kind && c.id.toLowerCase() === item.id.toLowerCase());
 	}
 
 	function statusFor(item: InstalledItem): 'installed' | 'outdated' | 'unknown' {
@@ -441,10 +564,31 @@
 	}
 
 	function isInstalled(entry: CatalogEntry): InstalledItem | undefined {
-		return installed.find((i) => i.kind === entry.kind && i.id === entry.id);
+		return installed.find((i) => i.kind === entry.kind && i.id.toLowerCase() === entry.id.toLowerCase());
 	}
 
-	// Badge color helpers
+	let filteredInstalled = $derived(
+		installed.filter((item) => {
+			if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
+			if (installedFilter === 'updates' && statusFor(item) !== 'outdated') return false;
+			return matchesSearch(item, item.kind);
+		}),
+	);
+
+	let filteredAvailable = $derived(
+		registryEntries.filter((entry) => {
+			if (kindFilter !== 'all' && entry.kind !== kindFilter) return false;
+			if (!matchesSearch(entry, entry.kind)) return false;
+			const inst = isInstalled(entry);
+			const outdated =
+				inst && entry.latest && inst.version && compareVersions(entry.latest, inst.version) > 0;
+			if (availableFilter === 'actionable') {
+				return !inst || outdated;
+			}
+			return true;
+		}),
+	);
+
 	function kindBadge(kind: Kind): string {
 		return kind === 'extension'
 			? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300'
@@ -452,287 +596,334 @@
 	}
 
 	function statusBadge(st: string): { cls: string; label: string } {
-		if (st === 'outdated') return { cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300', label: 'update available' };
-		if (st === 'installed') return { cls: 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300', label: 'installed' };
+		if (st === 'outdated')
+			return {
+				cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300',
+				label: 'update available',
+			};
+		if (st === 'installed')
+			return {
+				cls: 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300',
+				label: 'installed',
+			};
 		return { cls: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400', label: 'unknown' };
 	}
 
 	const spinnerSvg = `<svg class="inline-block w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>`;
 
-	// ── Lifecycle ─────────────────────────────────────────────
-
 	$effect(() => {
-		void refreshAll();
+		if (canManage) void refreshAll();
 	});
 </script>
 
-<div class={cn('max-w-5xl mx-auto p-6')}>
-	<!-- Hero header -->
-	<div class={cn(
-		'flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4',
-		'bg-gradient-to-br from-indigo-50 to-blue-100 dark:from-indigo-900/30 dark:to-blue-900/20',
-		'border-2 border-indigo-200 dark:border-indigo-800 rounded-xl p-5 mb-5',
-	)}>
-		<div>
-			<h1 class={cn('text-xl font-bold text-indigo-900 dark:text-indigo-200 mb-1')}>
-				Package Manager
-				<span class={cn('text-xs font-normal text-indigo-600 dark:text-indigo-400 ml-2')}>
-					v{ctx.config?.version || ''}
-				</span>
-			</h1>
-			<p class={cn('text-sm text-indigo-700/80 dark:text-indigo-300/80')}>
-				Install, update, and uninstall extensions and codex packages from
-				connected file registries.
-			</p>
-		</div>
-		<button
-			onclick={refreshAll}
-			disabled={installedLoading || registryLoading || registriesLoading}
-			class={cn(
-				'px-4 py-2 text-sm font-medium border border-indigo-300 dark:border-indigo-700 rounded-lg',
-				'text-indigo-700 dark:text-indigo-300 bg-white/60 dark:bg-gray-800/40',
-				'hover:bg-white dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
-			)}
-		>
-			Refresh
-		</button>
-	</div>
-
-	<!-- Toasts -->
+<div class={cn('max-w-7xl mx-auto p-4 md:p-6')}>
 	{#if toasts.length > 0}
 		<div class={cn('fixed top-5 right-5 z-50 flex flex-col gap-2 w-80')}>
 			{#each toasts as toast (toast.id)}
-				<div class={cn(
-					'px-4 py-3 rounded-lg text-sm text-white shadow-lg',
-					toast.type === 'success' ? 'bg-green-700' : toast.type === 'error' ? 'bg-red-700' : 'bg-blue-700',
-				)}>
+				<div
+					class={cn(
+						'px-4 py-3 rounded-lg text-sm text-white shadow-lg',
+						toast.type === 'success'
+							? 'bg-green-700'
+							: toast.type === 'error'
+								? 'bg-red-700'
+								: 'bg-blue-700',
+					)}
+				>
 					{toast.text}
 				</div>
 			{/each}
 		</div>
 	{/if}
 
-	<!-- Tabs -->
-	<nav class={cn('flex border-b border-gray-200 dark:border-gray-700 mb-5')}>
-		<button
-			onclick={() => (activeTab = 'installed')}
-			class={cn(
-				'px-5 py-2.5 text-sm font-medium border-b-2 inline-flex items-center gap-2 transition-colors',
-				activeTab === 'installed'
-					? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
-					: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300',
-			)}
-		>
-			Installed
-			<span class={cn(
-				'text-xs px-2 py-0.5 rounded-full',
-				activeTab === 'installed'
-					? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300'
-					: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
-			)}>{installed.length}</span>
-		</button>
-		<button
-			onclick={() => (activeTab = 'browse')}
-			class={cn(
-				'px-5 py-2.5 text-sm font-medium border-b-2 inline-flex items-center gap-2 transition-colors',
-				activeTab === 'browse'
-					? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
-					: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300',
-			)}
-		>
-			Browse
-			<span class={cn(
-				'text-xs px-2 py-0.5 rounded-full',
-				activeTab === 'browse'
-					? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300'
-					: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
-			)}>{registryEntries.length}</span>
-		</button>
-		{#if isAuth}
+	{#if !authState}
+		<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center max-w-lg mx-auto mt-8')}>
+			<h1 class={cn('text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2')}>Package Manager</h1>
+			<p class={cn('text-sm text-gray-600 dark:text-gray-400 mb-6')}>
+				Sign in with an admin or developer account to install, update, and uninstall packages on this realm.
+			</p>
 			<button
-				onclick={() => (activeTab = 'upload')}
+				onclick={() => ctx.navigate?.('/join')}
+				class={cn('px-5 py-2.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800')}
+			>
+				Sign in
+			</button>
+		</div>
+	{:else if !canManage}
+		<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-8 text-center max-w-lg mx-auto mt-8')}>
+			<h1 class={cn('text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2')}>Package Manager</h1>
+			<p class={cn('text-sm text-gray-600 dark:text-gray-400')}>
+				You need the <strong>admin</strong> or <strong>developer</strong> profile to manage packages.
+				Contact a realm administrator if you need access.
+			</p>
+		</div>
+	{:else}
+		<div class={cn('mb-5 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4')}>
+			<div>
+				<h1 class={cn('text-2xl font-semibold text-gray-900 dark:text-gray-100')}>Package Manager</h1>
+				<p class={cn('text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl')}>
+					Operate this realm's extensions and codex packages. To discover and purchase new offerings, use
+					<button
+						type="button"
+						onclick={() => ctx.navigate?.('/extensions/market_place')}
+						class={cn('text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800')}
+					>
+						Marketplace
+					</button>
+					. Menu visibility and access control are managed under
+					<button
+						type="button"
+						onclick={() => ctx.navigate?.('/extensions/extensions_manager')}
+						class={cn('text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800')}
+					>
+						Menus
+					</button>
+					.
+				</p>
+			</div>
+			<button
+				onclick={refreshAll}
+				disabled={installedLoading || registryLoading || registriesLoading}
 				class={cn(
-					'px-5 py-2.5 text-sm font-medium border-b-2 transition-colors',
-					activeTab === 'upload'
-						? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
-						: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300',
+					'px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg shrink-0',
+					'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800',
+					'hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed',
 				)}
 			>
-				Upload
+				Refresh
 			</button>
-		{/if}
-	</nav>
-
-	<!-- ═══ Installed Tab ═══ -->
-	{#if activeTab === 'installed'}
-		<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5')}>
-			{#if installedLoading}
-				<p class={cn('text-sm text-gray-500 dark:text-gray-400 text-center py-12')}>Loading installed packages…</p>
-			{:else if installedError}
-				<div class={cn('p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-300')}>
-					{installedError}
-				</div>
-			{:else if installed.length === 0}
-				<p class={cn('text-sm text-gray-500 dark:text-gray-400 text-center py-12')}>
-					No packages installed yet. Browse a registry or upload files to install your first package.
-				</p>
-			{:else}
-				<div class={cn('overflow-x-auto')}>
-					<table class={cn('w-full text-sm')}>
-						<thead>
-							<tr class={cn('bg-gray-50 dark:bg-gray-700/50')}>
-								<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Type</th>
-								<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>ID</th>
-								<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Installed</th>
-								<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Latest</th>
-								<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Status</th>
-								<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Source</th>
-								<th class={cn('px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Actions</th>
-							</tr>
-						</thead>
-						<tbody class={cn('divide-y divide-gray-100 dark:divide-gray-700')}>
-							{#each installed as item (rowKey(item.kind, item.id))}
-								{@const st = statusFor(item)}
-								{@const cat = findCatalogEntry(item)}
-								{@const stBadge = statusBadge(st)}
-								{@const rowBusy = busy[rowKey(item.kind, item.id)]}
-								<tr class={cn('hover:bg-gray-50 dark:hover:bg-gray-700/30')}>
-									<td class={cn('px-4 py-3')}>
-										<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full', kindBadge(item.kind))}>{item.kind}</span>
-									</td>
-									<td class={cn('px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300')}>{item.id}</td>
-									<td class={cn('px-4 py-3 text-gray-700 dark:text-gray-300')}>{item.version || '—'}</td>
-									<td class={cn('px-4 py-3 text-gray-700 dark:text-gray-300')}>{cat?.latest ?? '—'}</td>
-									<td class={cn('px-4 py-3')}>
-										<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full', stBadge.cls)}>{stBadge.label}</span>
-									</td>
-									<td class={cn('px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400')}>
-										{item.source?.registry_canister_id ? shortId(item.source.registry_canister_id) : '—'}
-									</td>
-									<td class={cn('px-4 py-3 text-right whitespace-nowrap')}>
-										{#if rowBusy}
-											<span class={cn('inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400')}>
-												{@html spinnerSvg} {rowBusy}
-											</span>
-										{:else}
-											{#if st === 'outdated'}
-												<button onclick={() => updateInstalled(item)}
-													class={cn('text-xs font-medium px-3 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700 mr-1.5')}>
-													Update
-												</button>
-											{/if}
-											{#if item.kind === 'codex'}
-												<button onclick={() => reloadCodex(item)}
-													class={cn('text-xs font-medium px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 mr-1.5')}>
-													Reload
-												</button>
-											{/if}
-											<button onclick={() => uninstall(item)}
-												class={cn('text-xs font-medium px-3 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700')}>
-												Uninstall
-											</button>
-										{/if}
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/if}
 		</div>
-	{/if}
 
-	<!-- ═══ Browse Tab ═══ -->
-	{#if activeTab === 'browse'}
-		<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5')}>
-			{#if registriesLoading}
-				<p class={cn('text-sm text-gray-500 dark:text-gray-400 text-center py-12')}>Loading realm info…</p>
-			{:else if registriesError}
-				<div class={cn('p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-300 mb-4')}>
-					Could not read realm.registries: {registriesError}
+		<div class={cn('grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5')}>
+			<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3')}>
+				<div class={cn('text-xs text-gray-500 uppercase tracking-wide')}>Installed</div>
+				<div class={cn('text-2xl font-semibold text-gray-900 dark:text-gray-100')}>{installed.length}</div>
+			</div>
+			<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3')}>
+				<div class={cn('text-xs text-gray-500 uppercase tracking-wide')}>Updates</div>
+				<div class={cn('text-2xl font-semibold', updateCount > 0 ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100')}>
+					{updateCount}
 				</div>
-			{:else if registries.length === 0 && !FILE_REGISTRY_FALLBACK}
-				<p class={cn('text-sm text-gray-500 dark:text-gray-400 text-center py-12')}>
-					No file registry configured for this realm. Set <code class={cn('bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs')}>file_registry_canister_id</code> via <code class={cn('bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs')}>set_canister_config</code> or add it to the deploy descriptor's <code class={cn('bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs')}>infra</code> section.
-				</p>
-			{:else}
-				{#if registryErrors.length > 0}
-					<div class={cn('space-y-2 mb-4')}>
-						{#each registryErrors as err}
-							<div class={cn('p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-300')}>
-								{err}
-							</div>
-						{/each}
-					</div>
-				{/if}
+			</div>
+			<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3')}>
+				<div class={cn('text-xs text-gray-500 uppercase tracking-wide')}>Available</div>
+				<div class={cn('text-2xl font-semibold text-gray-900 dark:text-gray-100')}>{actionableCount}</div>
+			</div>
+			<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3')}>
+				<div class={cn('text-xs text-gray-500 uppercase tracking-wide')}>Registries</div>
+				<div class={cn('text-2xl font-semibold text-gray-900 dark:text-gray-100')}>
+					{registries.length || (FILE_REGISTRY_FALLBACK ? 1 : 0)}
+				</div>
+			</div>
+		</div>
 
-				{#if registryLoading}
-					<p class={cn('text-sm text-gray-500 dark:text-gray-400 text-center py-12')}>Loading registry catalog…</p>
-				{:else if registryEntries.length === 0}
-					<p class={cn('text-sm text-gray-500 dark:text-gray-400 text-center py-12')}>This registry has no published packages.</p>
+		<div class={cn('flex flex-col sm:flex-row gap-3 mb-4')}>
+			<input
+				type="search"
+				bind:value={searchQuery}
+				placeholder="Search by name or ID…"
+				class={cn(
+					'flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg',
+					'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100',
+				)}
+			/>
+			<select
+				bind:value={kindFilter}
+				class={cn(
+					'px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg',
+					'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100',
+				)}
+			>
+				<option value="all">All types</option>
+				<option value="extension">Extensions</option>
+				<option value="codex">Codices</option>
+			</select>
+		</div>
+
+		<nav class={cn('flex border-b border-gray-200 dark:border-gray-700 mb-5')} role="tablist">
+			<button
+				role="tab"
+				aria-selected={activeTab === 'installed'}
+				onclick={() => (activeTab = 'installed')}
+				class={cn(
+					'px-5 py-2.5 text-sm font-medium border-b-2 inline-flex items-center gap-2 transition-colors',
+					activeTab === 'installed'
+						? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+						: 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+				)}
+			>
+				Installed
+				<span class={cn('text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700')}>{installed.length}</span>
+			</button>
+			<button
+				role="tab"
+				aria-selected={activeTab === 'available'}
+				onclick={() => (activeTab = 'available')}
+				class={cn(
+					'px-5 py-2.5 text-sm font-medium border-b-2 inline-flex items-center gap-2 transition-colors',
+					activeTab === 'available'
+						? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+						: 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+				)}
+			>
+				Available
+				<span class={cn('text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700')}>{actionableCount}</span>
+			</button>
+			<button
+				role="tab"
+				aria-selected={activeTab === 'advanced'}
+				onclick={() => (activeTab = 'advanced')}
+				class={cn(
+					'px-5 py-2.5 text-sm font-medium border-b-2 transition-colors',
+					activeTab === 'advanced'
+						? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+						: 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+				)}
+			>
+				Advanced
+			</button>
+		</nav>
+
+		{#if activeTab === 'installed'}
+			<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 md:p-5')}>
+				<div class={cn('flex flex-wrap items-center gap-2 mb-4')}>
+					<button
+						onclick={() => (installedFilter = 'all')}
+						class={cn(
+							'px-3 py-1 text-xs font-medium rounded-full border',
+							installedFilter === 'all'
+								? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+								: 'border-gray-200 text-gray-600',
+						)}
+					>
+						All
+					</button>
+					<button
+						onclick={() => (installedFilter = 'updates')}
+						class={cn(
+							'px-3 py-1 text-xs font-medium rounded-full border',
+							installedFilter === 'updates'
+								? 'bg-amber-50 border-amber-200 text-amber-700'
+								: 'border-gray-200 text-gray-600',
+						)}
+					>
+						Updates only ({updateCount})
+					</button>
+				</div>
+
+				{#if installedLoading}
+					<p class={cn('text-sm text-gray-500 text-center py-12')}>Loading installed packages…</p>
+				{:else if installedError}
+					<div class={cn('p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800')}>{installedError}</div>
+				{:else if filteredInstalled.length === 0}
+					<p class={cn('text-sm text-gray-500 text-center py-12')}>
+						{installed.length === 0
+							? 'No packages installed yet. Check the Available tab to install from a registry.'
+							: 'No packages match your filters.'}
+					</p>
 				{:else}
 					<div class={cn('overflow-x-auto')}>
 						<table class={cn('w-full text-sm')}>
 							<thead>
 								<tr class={cn('bg-gray-50 dark:bg-gray-700/50')}>
-									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Type</th>
-									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>ID</th>
-									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Latest</th>
-									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Registry</th>
-									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Status</th>
-									<th class={cn('px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide')}>Actions</th>
+									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Package</th>
+									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Type</th>
+									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Installed</th>
+									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Latest</th>
+									<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Status</th>
+									{#if showRegistryColumn}
+										<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Source</th>
+									{/if}
+									<th class={cn('px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase')}>Actions</th>
 								</tr>
 							</thead>
 							<tbody class={cn('divide-y divide-gray-100 dark:divide-gray-700')}>
-								{#each registryEntries as entry (rowKey(entry.kind, entry.id) + ':' + entry.registryCanisterId)}
-									{@const installedItem = isInstalled(entry)}
-									{@const installedVersion = installedItem?.version ?? ''}
-									{@const isOutdated = installedItem && entry.latest && installedVersion && compareVersions(entry.latest, installedVersion) > 0}
-									{@const rowBusy = busy[rowKey(entry.kind, entry.id)]}
+								{#each filteredInstalled as item (rowKey(item.kind, item.id))}
+									{@const st = statusFor(item)}
+									{@const cat = findCatalogEntry(item)}
+									{@const stBadge = statusBadge(st)}
+									{@const rowBusy = busy[rowKey(item.kind, item.id)]}
+									{@const menuKey = rowKey(item.kind, item.id)}
 									<tr class={cn('hover:bg-gray-50 dark:hover:bg-gray-700/30')}>
 										<td class={cn('px-4 py-3')}>
-											<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full', kindBadge(entry.kind))}>{entry.kind}</span>
-										</td>
-										<td class={cn('px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300')}>{entry.id}</td>
-										<td class={cn('px-4 py-3 text-gray-700 dark:text-gray-300')}>{entry.latest || '—'}</td>
-										<td class={cn('px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400')}>{shortId(entry.registryCanisterId)}</td>
-										<td class={cn('px-4 py-3')}>
-											{#if installedItem && isOutdated}
-												<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300')}>
-													update available
-												</span>
-											{:else if installedItem}
-												<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300')}>
-													installed
-												</span>
-											{:else}
-												<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400')}>
-													not installed
-												</span>
+											<div class={cn('font-medium text-gray-900 dark:text-gray-100')}>
+												{displayName(item.manifest, item.id)}
+											</div>
+											<div class={cn('text-xs font-mono text-gray-500')}>{item.id}</div>
+											{#if displayDescription(item.manifest)}
+												<div class={cn('text-xs text-gray-500 mt-0.5 max-w-md')}>{displayDescription(item.manifest)}</div>
 											{/if}
 										</td>
-										<td class={cn('px-4 py-3 text-right whitespace-nowrap')}>
+										<td class={cn('px-4 py-3')}>
+											<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full', kindBadge(item.kind))}>
+												{item.kind}
+											</span>
+										</td>
+										<td class={cn('px-4 py-3')}>{item.version || '—'}</td>
+										<td class={cn('px-4 py-3')}>{cat?.latest ?? '—'}</td>
+										<td class={cn('px-4 py-3')}>
+											<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full', stBadge.cls)}>
+												{stBadge.label}
+											</span>
+										</td>
+										{#if showRegistryColumn}
+											<td class={cn('px-4 py-3 font-mono text-xs text-gray-500')} title={item.source?.registry_canister_id ?? ''}>
+												{item.source?.registry_canister_id ? shortId(item.source.registry_canister_id) : '—'}
+											</td>
+										{/if}
+										<td class={cn('px-4 py-3 text-right whitespace-nowrap relative')}>
 											{#if rowBusy}
-												<span class={cn('inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400')}>
-													{@html spinnerSvg} {rowBusy}
+												<span class={cn('inline-flex items-center gap-1.5 text-xs text-gray-500')}>
+													{@html spinnerSvg}
+													{rowBusy}
 												</span>
-											{:else if !installedItem}
-												<button
-													onclick={() => installFromRegistry(entry, entry.latest)}
-													disabled={!entry.latest}
-													class={cn('text-xs font-medium px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50')}
-												>
-													Install
-												</button>
-											{:else if isOutdated}
-												<button
-													onclick={() => installFromRegistry(entry, entry.latest)}
-													class={cn('text-xs font-medium px-3 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700')}
-												>
-													Update
-												</button>
 											{:else}
-												<span class={cn('text-xs text-gray-400 dark:text-gray-500')}>v{installedVersion}</span>
+												<div class={cn('inline-flex items-center gap-1.5 justify-end')}>
+													{#if st === 'outdated'}
+														<button
+															onclick={() => updateInstalled(item)}
+															class={cn('text-xs font-medium px-3 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700')}
+														>
+															Update
+														</button>
+													{/if}
+													<button
+														onclick={(e) => {
+															e.stopPropagation();
+															openMenuKey = openMenuKey === menuKey ? null : menuKey;
+														}}
+														class={cn('text-xs font-medium px-2 py-1 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50')}
+														aria-label="More actions"
+													>
+														⋯
+													</button>
+												</div>
+												{#if openMenuKey === menuKey}
+													<div
+														role="menu"
+														onclick={(e) => e.stopPropagation()}
+														class={cn(
+															'absolute right-4 top-full mt-1 z-20 min-w-[140px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1 text-left',
+														)}
+													>
+														{#if item.kind === 'codex'}
+															<button
+																onclick={() => reloadCodex(item)}
+																class={cn('block w-full px-3 py-2 text-xs text-left hover:bg-gray-50 dark:hover:bg-gray-700')}
+															>
+																Reload codex
+															</button>
+														{/if}
+														{#if !PROTECTED_IDS.has(item.id)}
+															<button
+																onclick={() => uninstall(item)}
+																class={cn('block w-full px-3 py-2 text-xs text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20')}
+															>
+																Uninstall…
+															</button>
+														{/if}
+													</div>
+												{/if}
 											{/if}
 										</td>
 									</tr>
@@ -741,107 +932,282 @@
 						</table>
 					</div>
 				{/if}
-			{/if}
-		</div>
-	{/if}
+			</div>
+		{/if}
 
-	<!-- ═══ Upload Tab ═══ -->
-	{#if activeTab === 'upload' && isAuth}
-		<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 max-w-2xl')}>
-			<!-- Kind selector -->
-			<div class={cn('mb-4')}>
-				<span class={cn('block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5')}>What are you installing?</span>
-				<div class={cn('inline-flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden')}>
+		{#if activeTab === 'available'}
+			<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 md:p-5')}>
+				<div class={cn('flex flex-wrap items-center gap-2 mb-4')}>
 					<button
-						onclick={() => (uploadKind = 'extension')}
+						onclick={() => (availableFilter = 'actionable')}
 						class={cn(
-							'px-4 py-1.5 text-xs font-medium transition-colors',
-							uploadKind === 'extension'
-								? 'bg-indigo-600 text-white'
-								: 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600',
+							'px-3 py-1 text-xs font-medium rounded-full border',
+							availableFilter === 'actionable'
+								? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+								: 'border-gray-200 text-gray-600',
 						)}
-					>extension</button>
+					>
+						Needs action ({actionableCount})
+					</button>
 					<button
-						onclick={() => (uploadKind = 'codex')}
+						onclick={() => (availableFilter = 'all')}
 						class={cn(
-							'px-4 py-1.5 text-xs font-medium transition-colors',
-							uploadKind === 'codex'
-								? 'bg-indigo-600 text-white'
-								: 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600',
+							'px-3 py-1 text-xs font-medium rounded-full border',
+							availableFilter === 'all'
+								? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+								: 'border-gray-200 text-gray-600',
 						)}
-					>codex</button>
-				</div>
-			</div>
-
-			<!-- ID -->
-			<div class={cn('mb-4')}>
-				<label for="pm-id" class={cn('block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5')}>
-					{uploadKind === 'extension' ? 'Extension ID' : 'Codex ID'}
-				</label>
-				<input
-					id="pm-id"
-					type="text"
-					bind:value={uploadId}
-					placeholder="my_extension"
-					class={cn('w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500/40')}
-				/>
-			</div>
-
-			<!-- File picker -->
-			<div class={cn('mb-4')}>
-				<span class={cn('block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5')}>Files (pick a folder)</span>
-				<input
-					bind:this={fileInput}
-					type="file"
-					multiple
-					webkitdirectory
-					onchange={onFilesSelected}
-					class={cn('block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 dark:file:bg-indigo-900/40 file:text-indigo-700 dark:file:text-indigo-300 hover:file:bg-indigo-100 dark:hover:file:bg-indigo-800/40')}
-				/>
-			</div>
-
-			{#if uploadFiles.length > 0}
-				<div class={cn('text-xs text-gray-500 dark:text-gray-400 mb-2')}>
-					{uploadFiles.length} files selected · {fmtSize(uploadTotalBytes)}
-					<button onclick={clearUpload} class={cn('ml-2 text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800')}>
-						clear
+					>
+						Show all registry ({registryEntries.length})
 					</button>
 				</div>
-				{#if uploadOverIngressLimit}
-					<div class={cn('p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300 mb-3')}>
-						Total payload {fmtSize(uploadTotalBytes)} exceeds the ~1.8 MB ingress safe limit.
-						The install call will likely be rejected; consider publishing through a file registry instead.
+
+				{#if registriesLoading}
+					<p class={cn('text-sm text-gray-500 text-center py-12')}>Loading realm info…</p>
+				{:else if registriesError}
+					<div class={cn('p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 mb-4')}>
+						Could not read realm registries: {registriesError}
 					</div>
-				{/if}
-				<ul class={cn('max-h-44 overflow-auto text-xs font-mono text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg p-2 mb-4 bg-gray-50 dark:bg-gray-900/30 list-none')}>
-					{#each uploadFiles as f}
-						<li class={cn('mb-0.5')}>{f.path} <span class={cn('text-gray-400 dark:text-gray-500')}>({fmtSize(f.size)})</span></li>
-					{/each}
-				</ul>
-			{/if}
-
-			{#if uploadKind === 'codex'}
-				<label class={cn('flex items-center gap-2 mb-4 text-sm text-gray-700 dark:text-gray-300')}>
-					<input type="checkbox" bind:checked={uploadRunInit}
-						class={cn('w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500')} />
-					Run <code class={cn('bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs')}>init.py</code> after install
-				</label>
-			{/if}
-
-			<button
-				onclick={performUpload}
-				disabled={!uploadId || uploadFiles.length === 0 || uploadBusy}
-				class={cn(
-					'px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg',
-					'hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2',
-				)}
-			>
-				{#if uploadBusy}
-					{@html spinnerSvg} Installing…
+				{:else if registries.length === 0 && !FILE_REGISTRY_FALLBACK}
+					<p class={cn('text-sm text-gray-500 text-center py-12')}>
+						No file registry configured for this realm.
+					</p>
 				{:else}
-					Install
+					{#if registryErrors.length > 0}
+						<div class={cn('space-y-2 mb-4')}>
+							{#each registryErrors as err}
+								<div class={cn('p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800')}>{err}</div>
+							{/each}
+						</div>
+					{/if}
+
+					{#if registryLoading}
+						<p class={cn('text-sm text-gray-500 text-center py-12')}>Loading registry catalog…</p>
+					{:else if filteredAvailable.length === 0}
+						<p class={cn('text-sm text-gray-500 text-center py-12')}>
+							{availableFilter === 'actionable'
+								? 'Everything from the registry is installed and up to date.'
+								: 'No packages match your filters.'}
+						</p>
+					{:else}
+						<div class={cn('overflow-x-auto')}>
+							<table class={cn('w-full text-sm')}>
+								<thead>
+									<tr class={cn('bg-gray-50 dark:bg-gray-700/50')}>
+										<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Package</th>
+										<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Type</th>
+										<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Version</th>
+										{#if showRegistryColumn}
+											<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Registry</th>
+										{/if}
+										<th class={cn('px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase')}>Status</th>
+										<th class={cn('px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase')}>Actions</th>
+									</tr>
+								</thead>
+								<tbody class={cn('divide-y divide-gray-100 dark:divide-gray-700')}>
+									{#each filteredAvailable as entry (rowKey(entry.kind, entry.id) + ':' + entry.registryCanisterId)}
+										{@const installedItem = isInstalled(entry)}
+										{@const installedVersion = installedItem?.version ?? ''}
+										{@const isOutdated =
+											installedItem &&
+											entry.latest &&
+											installedVersion &&
+											compareVersions(entry.latest, installedVersion) > 0}
+										{@const rowBusy = busy[rowKey(entry.kind, entry.id)]}
+										{@const verKey = rowKey(entry.kind, entry.id)}
+										<tr class={cn('hover:bg-gray-50 dark:hover:bg-gray-700/30')}>
+											<td class={cn('px-4 py-3')}>
+												<div class={cn('font-medium text-gray-900 dark:text-gray-100')}>
+													{displayName(entry.manifest, entry.id)}
+												</div>
+												<div class={cn('text-xs font-mono text-gray-500')}>{entry.id}</div>
+												{#if displayDescription(entry.manifest)}
+													<div class={cn('text-xs text-gray-500 mt-0.5 max-w-md')}>{displayDescription(entry.manifest)}</div>
+												{/if}
+											</td>
+											<td class={cn('px-4 py-3')}>
+												<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full', kindBadge(entry.kind))}>
+													{entry.kind}
+												</span>
+											</td>
+											<td class={cn('px-4 py-3')}>
+												{#if entry.versions.length > 1}
+													<select
+														class={cn('text-xs border border-gray-300 rounded px-2 py-1 bg-white dark:bg-gray-800')}
+														value={selectedVersionFor(entry)}
+														onchange={(e) => {
+															selectedVersions = {
+																...selectedVersions,
+																[verKey]: (e.currentTarget as HTMLSelectElement).value,
+															};
+														}}
+													>
+														{#each [...entry.versions].sort((a, b) => compareVersions(b, a)) as v}
+															<option value={v}>{v}{v === entry.latest ? ' (latest)' : ''}</option>
+														{/each}
+													</select>
+												{:else}
+													{entry.latest || '—'}
+												{/if}
+											</td>
+											{#if showRegistryColumn}
+												<td class={cn('px-4 py-3 font-mono text-xs text-gray-500')} title={entry.registryCanisterId}>
+													{shortId(entry.registryCanisterId)}
+												</td>
+											{/if}
+											<td class={cn('px-4 py-3')}>
+												{#if isOutdated}
+													<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800')}>
+														update available
+													</span>
+												{:else if installedItem}
+													<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-800')}>
+														installed
+													</span>
+												{:else}
+													<span class={cn('inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600')}>
+														not installed
+													</span>
+												{/if}
+											</td>
+											<td class={cn('px-4 py-3 text-right whitespace-nowrap')}>
+												{#if rowBusy}
+													<span class={cn('inline-flex items-center gap-1.5 text-xs text-gray-500')}>
+														{@html spinnerSvg}
+														{rowBusy}
+													</span>
+												{:else if !installedItem}
+													<button
+														onclick={() => installFromRegistry(entry, selectedVersionFor(entry))}
+														disabled={!selectedVersionFor(entry)}
+														class={cn('text-xs font-medium px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50')}
+													>
+														Install
+													</button>
+												{:else if isOutdated}
+													<button
+														onclick={() => installFromRegistry(entry, selectedVersionFor(entry))}
+														class={cn('text-xs font-medium px-3 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700')}
+													>
+														Update
+													</button>
+												{:else}
+													<span class={cn('text-xs text-gray-400')}>Up to date</span>
+												{/if}
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
 				{/if}
-			</button>
-		</div>
+			</div>
+		{/if}
+
+		{#if activeTab === 'advanced'}
+			<div class={cn('space-y-4 max-w-2xl')}>
+				<div class={cn('bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5')}>
+					<h2 class={cn('text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1')}>Manual folder upload</h2>
+					<p class={cn('text-xs text-gray-500 mb-4')}>
+						For local development only. Production installs should be published to a file registry first.
+						Payloads over ~1.8 MB will be rejected by the IC ingress limit.
+					</p>
+
+					<button
+						onclick={() => (showAdvancedUpload = !showAdvancedUpload)}
+						class={cn('text-sm font-medium text-indigo-600 hover:text-indigo-800 mb-4')}
+					>
+						{showAdvancedUpload ? 'Hide upload form' : 'Show upload form'}
+					</button>
+
+					{#if showAdvancedUpload}
+						<div class={cn('mb-4')}>
+							<span class={cn('block text-xs font-medium text-gray-500 mb-1.5')}>Package type</span>
+							<div class={cn('inline-flex border border-gray-300 rounded-lg overflow-hidden')}>
+								<button
+									onclick={() => (uploadKind = 'extension')}
+									class={cn(
+										'px-4 py-1.5 text-xs font-medium',
+										uploadKind === 'extension' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600',
+									)}
+								>
+									extension
+								</button>
+								<button
+									onclick={() => (uploadKind = 'codex')}
+									class={cn(
+										'px-4 py-1.5 text-xs font-medium',
+										uploadKind === 'codex' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600',
+									)}
+								>
+									codex
+								</button>
+							</div>
+						</div>
+
+						<div class={cn('mb-4')}>
+							<label for="pm-id" class={cn('block text-xs font-medium text-gray-500 mb-1.5')}>
+								{uploadKind === 'extension' ? 'Extension ID' : 'Codex ID'}
+							</label>
+							<input
+								id="pm-id"
+								type="text"
+								bind:value={uploadId}
+								placeholder="my_extension"
+								class={cn('w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white dark:bg-gray-800')}
+							/>
+						</div>
+
+						<div class={cn('mb-4')}>
+							<span class={cn('block text-xs font-medium text-gray-500 mb-1.5')}>Files (pick a folder)</span>
+							<input
+								bind:this={fileInput}
+								type="file"
+								multiple
+								webkitdirectory
+								onchange={onFilesSelected}
+								class={cn('block w-full text-sm text-gray-500')}
+							/>
+						</div>
+
+						{#if uploadFiles.length > 0}
+							<div class={cn('text-xs text-gray-500 mb-2')}>
+								{uploadFiles.length} files · {fmtSize(uploadTotalBytes)}
+								<button onclick={clearUpload} class={cn('ml-2 text-indigo-600 underline')}>clear</button>
+							</div>
+							{#if uploadOverIngressLimit}
+								<div class={cn('p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-3')}>
+									Payload exceeds the ~1.8 MB ingress safe limit. Publish via file registry instead.
+								</div>
+							{/if}
+						{/if}
+
+						{#if uploadKind === 'codex'}
+							<label class={cn('flex items-center gap-2 mb-4 text-sm text-gray-700')}>
+								<input type="checkbox" bind:checked={uploadRunInit} class={cn('w-4 h-4')} />
+								Run init.py after install
+							</label>
+						{/if}
+
+						<button
+							onclick={performUpload}
+							disabled={!uploadId || uploadFiles.length === 0 || uploadBusy}
+							class={cn(
+								'px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50',
+							)}
+						>
+							{#if uploadBusy}
+								{@html spinnerSvg} Installing…
+							{:else}
+								Install from folder
+							{/if}
+						</button>
+					{/if}
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>
+
+<svelte:window onclick={() => (openMenuKey = null)} />
