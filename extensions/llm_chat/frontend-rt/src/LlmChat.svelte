@@ -3,6 +3,26 @@
 
 	let { ctx }: { ctx: any } = $props();
 
+	const FILE_REGISTRY_NETWORK: Record<string, string> = {
+		'vi64l-3aaaa-aaaae-qj4va-cai': 'demo',
+		'uq2mu-kaaaa-aaaah-avqcq-cai': 'test',
+		'iebdk-kqaaa-aaaau-agoxq-cai': 'staging',
+	};
+
+	function resolveGeisterNetwork(): string {
+		const fromConfig = ctx.config?.network;
+		if (fromConfig && fromConfig !== 'ic') return fromConfig;
+		const ids = (globalThis as { __CANISTER_IDS?: { network?: string; file_registry?: string } })
+			.__CANISTER_IDS;
+		if (ids?.network && ids.network !== 'ic') return ids.network;
+		const fileRegistry =
+			ctx.config?.fileRegistryCanisterId || ids?.file_registry || '';
+		if (fileRegistry && FILE_REGISTRY_NETWORK[fileRegistry]) {
+			return FILE_REGISTRY_NETWORK[fileRegistry];
+		}
+		return window.location.hostname.includes('icp0.io') ? 'test' : 'staging';
+	}
+
 	interface ChatMessage {
 		text: string;
 		isUser: boolean;
@@ -81,6 +101,17 @@
 		}
 	}
 
+	function extractProposalIdFromUri(uri: string | undefined): string | null {
+		if (!uri) return null;
+		const match = uri.match(/^realms:\/\/voting\/proposal\/([^?#]+)/);
+		if (!match) return null;
+		try {
+			return decodeURIComponent(match[1]);
+		} catch {
+			return match[1];
+		}
+	}
+
 	function applyPendingPrompt(prompt: { message: string; autoSend: boolean; id: number } | null) {
 		if (!prompt || prompt.id === lastPendingPromptId) return;
 		lastPendingPromptId = prompt.id;
@@ -94,6 +125,16 @@
 	}
 
 	function explainCurrentFocus() {
+		const proposalId = extractProposalIdFromUri(currentFocus?.uri);
+		if (proposalId) {
+			ctx.host?.dispatch?.({
+				type: 'assistant.prompt',
+				message:
+					'Explain this proposal — its purpose, governance impact, and the main code or policy changes.',
+				autoSend: true,
+			});
+			return;
+		}
 		ctx.host?.dispatch?.({ type: 'assistant.prompt', autoSend: true });
 	}
 
@@ -438,10 +479,7 @@
 
 		try {
 			await ensureConversation();
-			const geisterNetwork =
-				ctx.config?.network ||
-				(globalThis as { __CANISTER_IDS?: { network?: string } }).__CANISTER_IDS?.network ||
-				(window.location.hostname.includes('icp0.io') ? 'test' : 'staging');
+			const geisterNetwork = resolveGeisterNetwork();
 
 			const payload: Record<string, any> = {
 				question: messageToSend,
@@ -462,11 +500,21 @@
 				if (codexId) payload.explain_codex_id = codexId;
 			}
 
+			const proposalId = extractProposalIdFromUri(currentFocus?.uri);
+			if (proposalId) {
+				payload.explain_proposal_id = proposalId;
+				payload.page_context = {
+					pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+					extensionId: 'voting',
+					title: currentFocus?.label || 'Proposal',
+					proposalId,
+				};
+			}
+
 			if (currentFocus) {
 				payload.focus = {
 					uri: currentFocus.uri,
 					label: currentFocus.label,
-					snapshot: currentFocus.snapshot,
 				};
 			}
 

@@ -5,6 +5,8 @@
 
 	let { ctx }: { ctx: any } = $props();
 
+	const EXTENSION_ID = 'voting';
+
 	type View = 'list' | 'form' | 'detail';
 
 	function getExtensionBasePath(): string {
@@ -240,9 +242,27 @@
 		}
 	}
 
+	function buildProposalFocusUri(proposalId: string): string {
+		return `realms://${EXTENSION_ID}/proposal/${encodeURIComponent(proposalId)}`;
+	}
+
+	function publishProposalFocus(proposal: any) {
+		if (!proposal?.id) return;
+		ctx.host?.setFocus?.({
+			source: EXTENSION_ID,
+			uri: buildProposalFocusUri(proposal.id),
+			label: proposal.title ?? proposal.id,
+		});
+	}
+
+	function clearProposalFocus() {
+		ctx.host?.setFocus?.(null);
+	}
+
 	function goBackToList(opts?: { skipUrlSync?: boolean }) {
 		view = 'list';
 		selectedProposal = null;
+		clearProposalFocus();
 		if (!opts?.skipUrlSync) syncProposalUrl(null);
 		if (proposals.length === 0 && !listLoading) {
 			void loadProposals();
@@ -309,6 +329,7 @@
 		if (!opts?.skipUrlSync && proposal?.id) {
 			syncProposalUrl(proposal.id);
 		}
+		publishProposalFocus(proposal);
 		await fetchCode(proposal);
 	}
 
@@ -637,6 +658,7 @@
 	onDestroy(() => {
 		clearInterval(countdownTimer);
 		window.removeEventListener('popstate', handlePopState);
+		clearProposalFocus();
 	});
 </script>
 
